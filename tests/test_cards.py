@@ -94,3 +94,44 @@ def test_ficha_do_item_tem_acoes(app, cli):
     it = _nb()
     h = cli.get(f'/item/{it.codigo}').get_data(as_text=True)
     assert 'acao=Entregar+agora' in h or 'acao=Entregar%20agora' in h
+
+
+def test_quadro_entregas_arrastar(app, cli):
+    it, p = _nb(), _p()
+    r, _, _ = gravar([{'acao': 'Reservar', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}], 'entrega', 'T')
+    m = r[0].movs[0]
+    h = cli.get('/acompanhar').get_data(as_text=True)
+    assert f'data-id="{m.id}"' in h
+    j = cli.post('/api/acompanhar/etapa', json={'id': m.id, 'para': 'Chamado aberto'}).json
+    assert j['ok'] and 'Nº do chamado' in j['pend']
+    assert cli.post('/api/acompanhar/etapa', json={'id': m.id, 'para': 'Entregue'}).json['ok']
+    db.session.expire_all()
+    assert db.session.get(Item, it.codigo).situacao == 'Em uso'
+    assert not cli.post('/api/acompanhar/etapa', json={'id': m.id, 'para': 'Termo assinado'}).json['ok']   # já entregue
+
+
+def test_quadro_preparacao_salva_a_cada_clique(app, cli):
+    it, p = _nb(), _p()
+    gravar([{'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}], 'entrega', 'T')
+    gravar([{'acao': 'Devolver', 'item': it.codigo}], 'entrega', 'T')
+    n0 = Movimentacao.query.filter_by(item=it.codigo).count()
+    assert cli.post('/api/acompanhar/preparo', json={'item': it.codigo, 'preventiva': 'Sim'}).json['situacao'] == 'Em preparação'
+    cli.post('/api/acompanhar/preparo', json={'item': it.codigo, 'preventiva': 'Sim', 'formatado': 'Sim', 'veio_fonte': 'Sim'})
+    assert Movimentacao.query.filter_by(item=it.codigo).count() == n0 + 1          # uma linha só de Preparação
+    assert 'Formatado ✓' in Movimentacao.query.filter_by(item=it.codigo, tipo='Preparação').one().obs
+    j = cli.post('/api/acompanhar/preparo', json={'item': it.codigo, 'preventiva': 'Sim', 'formatado': 'Sim', 'liberar': 'Sim'}).json
+    assert j['ok'] and j['situacao'] == 'Em estoque'
+    assert cli.get('/acompanhar').status_code == 200
+
+
+def test_quadro_manutencao(app, cli):
+    from app.models import Manutencao
+    it = Item.query.filter(Item.situacao == 'Em uso', Item.categoria == 'Notebook').first()
+    registrar({'acao': 'Abrir ocorrência', 'item': it.codigo, 'defeito': 'Tela'}, 'T')
+    os_ = Manutencao.query.filter_by(item=it.codigo).order_by(Manutencao.id.desc()).first()
+    assert cli.post('/api/manutencao/status', json={'id': os_.id, 'para': 'Aguardando peça'}).json['ok']
+    db.session.refresh(os_)
+    assert os_.status == 'Aguardando peça'
+    assert cli.post('/api/manutencao/status', json={'id': os_.id, 'para': 'Concluída'}).json['ok']
+    db.session.refresh(os_)
+    assert not os_.aberta and cli.get('/manutencao').status_code == 200

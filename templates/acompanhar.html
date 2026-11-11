@@ -1,80 +1,120 @@
 {% extends 'base.html' %}{% from '_macros.html' import sit, item_link, pessoa_link %}
 {% block title %}Acompanhar{% endblock %}
-{% set ETAPAS = ['Termo assinado','Chamado aberto','Entregue','Cancelado'] %}
+{% set n1 = quadro1['Reservado']|length + quadro1['Termo assinado']|length + quadro1['Chamado aberto']|length %}
+{% set n2 = prep_cols['Devolvido']|length + prep_cols['Em preparação']|length %}
+{% macro mover_menu(opcoes) %}<div class="dropdown"><button data-bs-toggle="dropdown" aria-label="Mover"><i class="fa fa-ellipsis"></i></button>
+ <ul class="dropdown-menu dropdown-menu-end">{% for o, rot in opcoes %}<li><a class="dropdown-item small" href="#" data-mover="{{ o }}">{{ rot }}</a></li>{% endfor %}</ul></div>{% endmacro %}
 {% block content %}
 <h1 class="z-titulo">Acompanhar</h1>
-<p class="z-sub">Entregas em andamento, notebooks voltando para o estoque, termos sem link e correções. Cada ação mexe no próprio lançamento.</p>
-<ul class="nav nav-pills mb-3 small">
- <li class="nav-item"><a class="nav-link" href="#entregas">1 · Entregas em andamento <span class="badge text-bg-secondary">{{ s1|length }}</span></a></li>
- <li class="nav-item"><a class="nav-link" href="#preparacao">2 · Devolvidos / preparação <span class="badge text-bg-secondary">{{ s2|length }}</span></a></li>
- <li class="nav-item"><a class="nav-link" href="#links">3 · Termos sem link <span class="badge text-bg-secondary">{{ s3|length }}</span></a></li>
- <li class="nav-item"><a class="nav-link" href="#corrigir">4 · Corrigir lançamento</a></li>
-</ul>
+<p class="z-sub">Arraste o cartão para a próxima etapa. Nada trava: o que ficar em branco aparece como pendência no cartão e na sua fila.</p>
+<div class="z-abas">
+ <a class="z-aba ativo" href="#entregas" data-aba="entregas">Entregas <span class="badge text-bg-secondary">{{ n1 }}</span></a>
+ <a class="z-aba" href="#preparacao" data-aba="preparacao">Preparação <span class="badge text-bg-secondary">{{ n2 }}</span></a>
+ <a class="z-aba" href="#links" data-aba="links">Termos sem link <span class="badge text-bg-secondary">{{ s3|length }}</span></a>
+ <form class="d-flex gap-1 ms-auto" method="get"><input class="form-control form-control-sm" style="width:150px" name="n" placeholder="Abrir lançamento Nº" value="{{ n4 }}"><button class="btn btn-sm btn-outline-secondary">Abrir</button></form>
+</div>
+{% if n4 %}<div class="alert alert-warning py-2">Lançamento Nº {{ n4 }} não encontrado.</div>{% endif %}
 
-<div class="z-card" id="entregas"><h2>1 · Entregas e empréstimos em andamento</h2>
-<p class="small text-muted">Reservas até a entrega e entregas com termo pendente. Nova etapa vazia = só corrige datas, chamado ou link. Cancelar devolve o item e o kit ao estoque.</p>
-{% if not s1 %}<p class="text-muted">Nada em andamento.</p>{% else %}
-<div class="table-responsive"><table class="table table-sm align-middle z-tab">
-<thead><tr><th>Nº</th><th>Item</th><th>Para</th><th>Tipo</th><th>Etapa</th><th>Termo</th><th>Desde</th><th style="min-width:430px">Avançar / corrigir</th></tr></thead><tbody>
-{% for it, m in s1 %}<tr>
- <td class="z-mono"><a href="{{ url_for('termo.inicio', n=m.id) }}" title="Ver termo">{{ m.id }}</a></td>
- <td>{% if it %}{{ item_link(it.codigo) }}<div class="small text-muted">{{ it.modelo or '' }}</div>{% else %}<span class="z-mono">{{ m.linha or '—' }}</span>{% endif %}</td>
- <td>{{ pessoa_link(m.matricula, m.nome) }}</td><td>{{ m.tipo }}</td><td>{{ sit(m.etapa or '—') }}</td><td>{{ sit(m.termo or '—') }}</td>
- <td class="small">{% if m.data %}{{ m.data|data }}<div class="text-muted">{{ dias_desde(m.data) }} dias</div>{% else %}<span class="text-muted">sem data</span>{% endif %}</td>
- <td>{% if pode('lancar') %}<form method="post" action="{{ url_for('acompanhar.corrigir_mov', num=m.id) }}" class="row g-1 align-items-center">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="volta" value="{{ url_for('acompanhar.inicio') }}#entregas">
-  <div class="col-5"><select class="form-select form-select-sm" name="etapa" title="Nova etapa"><option value="">(nova etapa)</option>{% for e in ETAPAS %}<option>{{ e }}</option>{% endfor %}</select></div>
-  <div class="col-3"><input type="date" class="form-control form-control-sm" name="data_ass" title="Data da assinatura"></div>
-  <div class="col-4"><input class="form-control form-control-sm" name="chamado" placeholder="Chamado" value="{{ m.chamado or '' }}"></div>
-  <div class="col-5"><select class="form-select form-select-sm" name="tecnico" title="Técnico"><option value="">(técnico)</option>{% for t in tecnicos %}<option {{ 'selected' if m.tecnico==t }}>{{ t }}</option>{% endfor %}</select></div>
-  <div class="col-5"><input class="form-control form-control-sm" name="link" placeholder="Link do termo"></div>
-  <div class="col-2"><button class="btn btn-sm btn-zelo w-100" title="Salvar"><i class="fa fa-check"></i></button></div>
- </form>{% endif %}</td></tr>{% endfor %}
-</tbody></table></div>{% endif %}</div>
+<section data-painel="entregas">
+<div class="z-quadro" id="q-entregas">
+ {% for c in colunas %}<div class="z-col" data-col="{{ c }}" {{ 'data-aceita=nao' if c == 'Reservado' }}>
+  <div class="z-col-topo"><span class="z-pt" style="background:{{ ['#8a94a0','#f0ad00','#3d8bfd','#7AC143'][loop.index0] }}"></span>{{ c }}<span class="z-col-n">0</span></div>
+  <div class="z-col-corpo">
+   {% for x in quadro1[c] %}{% set m = x.m %}{% set it = x.it %}{% set d = dias_desde(m.data) if m.data else none %}
+   <div class="z-kc" data-id="{{ m.id }}" draggable="{{ 'false' if c == 'Entregue' or not pode('lancar') else 'true' }}">
+    <div class="z-kc-tit"><a href="{{ url_for('lancar.lancamento', num=m.id) }}" title="Abrir o lançamento">{{ m.nome or m.local or '—' }}</a>
+     {% if c != 'Entregue' and pode('lancar') %}{{ mover_menu([('Termo assinado','Termo assinado'),('Chamado aberto','Chamado aberto'),('Entregue','Entregue'),('Cancelado','Cancelar reserva')]) }}{% endif %}</div>
+    <div class="z-kc-sub">{% if it %}{{ it.categoria }} {{ it.modelo or '' }} · <a class="z-mono" href="{{ url_for('consulta.item', codigo=it.codigo) }}">{{ it.codigo }}</a>{% else %}linha {{ m.linha }}{% endif %}</div>
+    <div class="z-kc-pe"><span class="z-dias {{ 'velho' if d is not none and d > 7 and c != 'Entregue' }}">{% if c == 'Entregue' %}{{ (m.data_ent or m.data)|data }}{% elif d is none %}sem data{% else %}{{ d }} dia{{ 's' if d != 1 }}{% endif %}</span>
+     {% if m.tecnico %}<span class="z-dias" title="Técnico"><i class="fa fa-user-gear me-1"></i>{{ m.tecnico.split(' ')[0] }}</span>{% endif %}
+     {% if m.chamado %}<span class="z-dias">#{{ m.chamado }}</span>{% endif %}
+     <span class="z-pends">{% for f in x.pend %}<span class="z-pend">falta {{ f }}</span> {% endfor %}</span></div>
+   </div>{% endfor %}
+   <div class="z-col-vazio" hidden>{{ 'Nenhuma reserva aberta' if c == 'Reservado' else 'Solte aqui' }}</div>
+  </div></div>{% endfor %}
+ <div class="z-col z-perigo z-so-arrasto" data-col="Cancelado"><div class="z-col-topo text-danger"><i class="fa fa-ban"></i>Cancelar reserva</div><div class="z-col-corpo"><div class="z-col-vazio">Solte aqui para cancelar: o item e o kit voltam ao estoque</div></div></div>
+</div></section>
 
-<div class="z-card" id="preparacao"><h2>2 · Devolvidos e em preparação</h2>
-<p class="small text-muted">Confira a chegada (o que veio junto e o estado) e marque a preparação. Salvar parcial grava "Preparação"; com as 6 marcas, grava "Liberação": o notebook volta ao estoque e o que não veio (fonte, mouse, teclado) sai do EC para completar o kit.</p>
-{% if not s2 %}<p class="text-muted">Nenhum notebook aguardando preparação.</p>{% else %}
-{% for r in s2 %}{% set it = r.it %}
-<form method="post" action="{{ url_for('acompanhar.preparar_item', codigo=it.codigo) }}" class="z-prep border rounded p-2 mb-2">
- <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
- <div class="d-flex flex-wrap gap-2 align-items-center mb-1">{{ item_link(it.codigo) }} <span class="small text-muted">{{ it.modelo or '' }} · {{ it.fabricante or '' }}</span> {{ sit(it.situacao) }}
-  <span class="small text-muted ms-auto">{% if r.dev %}devolvido {{ r.dev.data|data }} por {{ r.dev.nome or '—' }} (Nº {{ r.dev.id }}){% endif %}</span></div>
- <div class="row g-2 align-items-end small">
-  {% for k, rot in [('veio_fonte','Veio fonte?'),('veio_mouse','Veio mouse?'),('veio_teclado','Veio teclado?')] %}
-  <div class="col-6 col-md-1"><label class="form-label mb-0">{{ rot }}</label><select class="form-select form-select-sm" name="{{ k }}"><option></option>{% for o in ['Sim','Não'] %}<option {{ 'selected' if r[k]==o }}>{{ o }}</option>{% endfor %}</select></div>{% endfor %}
-  <div class="col-6 col-md-1"><label class="form-label mb-0">Estado</label><select class="form-select form-select-sm" name="estado"><option></option>{% for o in estados %}<option {{ 'selected' if r.estado==o }}>{{ o }}</option>{% endfor %}</select></div>
-  <div class="col-md-5 d-flex flex-wrap gap-3 pb-1">{% for k, rot in passos %}<label class="form-check"><input class="form-check-input" type="checkbox" name="{{ k }}" value="Sim" {{ 'checked' if r.marcas[k] }}> {{ rot }}</label>{% endfor %}</div>
-  <div class="col-md-2"><label class="form-label mb-0">Preparado por</label><select class="form-select form-select-sm" name="preparado_por"><option></option>{% for t in tecnicos + recebido %}<option>{{ t }}</option>{% endfor %}</select></div>
-  <div class="col-md-1 d-flex flex-column gap-1">{% if pode('lancar') %}<button class="btn btn-sm btn-zelo w-100">Salvar</button><button class="btn btn-sm btn-outline-secondary w-100 py-0" name="liberar" value="Sim" title="Volta ao estoque mesmo sem todas as marcas; o que faltou fica registrado">Liberar</button>{% endif %}</div>
- </div></form>{% endfor %}{% endif %}</div>
+<section data-painel="preparacao" hidden>
+<div class="z-quadro" id="q-prep">
+ {% for c in ['Devolvido', 'Em preparação', 'Liberado'] %}<div class="z-col" data-col="{{ c }}" {{ 'data-aceita=nao' if c == 'Devolvido' }}>
+  <div class="z-col-topo"><span class="z-pt" style="background:{{ ['#8a94a0','#f0ad00','#7AC143'][loop.index0] }}"></span>{{ 'Chegou (devolvido)' if c == 'Devolvido' else ('Liberado (últimos 7 dias)' if c == 'Liberado' else c) }}<span class="z-col-n">0</span></div>
+  <div class="z-col-corpo">
+   {% for r in prep_cols[c] %}{% set it = r.it %}
+   {% if c == 'Liberado' %}<div class="z-kc" data-id="L{{ r.lib.id }}" draggable="false"><div class="z-kc-tit"><a href="{{ url_for('consulta.item', codigo=it.codigo) if it else '#' }}">{{ it.modelo or it.categoria if it else r.lib.item }}</a></div>
+     <div class="z-kc-sub z-mono">{{ r.lib.item }}</div><div class="z-kc-pe"><span class="z-dias">{{ r.lib.data|data }}</span><span class="z-dias">{{ r.lib.receb_por or r.lib.resp or '' }}</span></div>
+     {% if 'liberado sem' in (r.lib.obs or '') %}<div class="small z-aviso mt-1">{{ r.lib.obs.split('liberado sem: ')[1] and 'sem: ' ~ r.lib.obs.split('liberado sem: ')[1] }}</div>{% endif %}</div>
+   {% else %}{% set d = dias_desde(r.dev.data) if r.dev and r.dev.data else none %}
+   <div class="z-kc z-prep" data-id="{{ it.codigo }}" draggable="{{ 'true' if pode('lancar') else 'false' }}">
+    <div class="z-kc-tit"><a href="{{ url_for('consulta.item', codigo=it.codigo) }}">{{ it.modelo or it.categoria }}</a>{% if pode('lancar') %}{{ mover_menu([('Em preparação','Em preparação'),('Liberado','Liberar para o estoque')]) }}{% endif %}</div>
+    <div class="z-kc-sub"><span class="z-mono">{{ it.codigo }}</span>{% if r.dev %} · devolvido por {{ r.dev.nome or '—' }}{% endif %}</div>
+    <div class="z-rot-mini">O que voltou junto</div>
+    <div class="d-flex flex-wrap gap-1">{% for k, rot in [('veio_fonte','Fonte'),('veio_mouse','Mouse'),('veio_teclado','Teclado')] %}<button type="button" class="z-tic z-veio {{ 'on' if r[k]=='Sim' else ('nao' if r[k]=='Não' else '') }}" data-k="{{ k }}" data-v="{{ r[k] or '' }}" title="Clique: veio / não veio / não informado">{{ rot }}</button>{% endfor %}
+     <button type="button" class="z-tic z-avaria {{ 'nao' if r.estado=='Com avaria' }}" data-v="{{ r.estado or '' }}">{{ 'Com avaria' if r.estado=='Com avaria' else 'Sem avaria' }}</button></div>
+    <div class="z-rot-mini">Preparação</div>
+    <div class="d-flex flex-wrap gap-1">{% for k, rot in passos %}<button type="button" class="z-tic z-marca {{ 'on' if r.marcas[k] }}" data-k="{{ k }}">{{ rot }}</button>{% endfor %}</div>
+    <div class="z-barra"><i style="width:0"></i></div>
+    <div class="z-kc-pe"><span class="z-dias {{ 'velho' if d is not none and d > 5 }}">{% if d is none %}sem data{% else %}há {{ d }} dia{{ 's' if d != 1 }}{% endif %}</span>
+     {% if pode('lancar') %}<button type="button" class="btn btn-sm btn-zelo py-0 ms-auto z-liberar">Liberar</button>{% endif %}</div>
+   </div>{% endif %}{% endfor %}
+   <div class="z-col-vazio" hidden>{{ 'Nenhum notebook aguardando' if c == 'Devolvido' else ('Solte aqui para liberar' if c == 'Liberado' else 'Solte aqui') }}</div>
+  </div></div>{% endfor %}
+</div>
+<p class="small text-muted mt-2">Cada clique salva na hora. "Liberar" devolve o notebook ao estoque: com as 6 marcas, o kit sai completo (o que não veio é baixado do EC); sem todas, o que faltou fica registrado.</p>
+</section>
 
-<div class="z-card" id="links"><h2>3 · Termos assinados sem link</h2>
-<p class="small text-muted">Desde o início do fluxo novo. Cole o link do termo digitalizado.</p>
-{% if not s3 %}<p class="text-muted">Todos os termos têm link.</p>{% else %}
+<section data-painel="links" hidden><div class="z-card">
+<p class="small text-muted">Termos assinados que ainda não têm o link do arquivo digitalizado.</p>
+{% if not s3 %}<div class="z-vazio"><i class="fa fa-circle-check"></i><div>Todos os termos têm link</div></div>{% else %}
 <div class="table-responsive"><table class="table table-sm align-middle z-tab"><thead><tr><th>Nº</th><th>Data</th><th>Tipo</th><th>Item / linha</th><th>Pessoa</th><th style="min-width:380px">Link</th></tr></thead><tbody>
-{% for m in s3 %}<tr><td class="z-mono">{{ m.id }}</td><td>{{ m.data|data }}</td><td>{{ m.tipo }}</td><td>{{ item_link(m.item) if m.item else (m.linha or '—') }}</td><td>{{ pessoa_link(m.matricula, m.nome) }}</td>
+{% for m in s3 %}<tr><td class="z-mono"><a class="z-link" href="{{ url_for('lancar.lancamento', num=m.id) }}">{{ m.id }}</a></td><td>{{ m.data|data }}</td><td>{{ m.tipo }}</td><td>{{ item_link(m.item) if m.item else (m.linha or '—') }}</td><td>{{ pessoa_link(m.matricula, m.nome) }}</td>
 <td>{% if pode('lancar') %}<form method="post" action="{{ url_for('acompanhar.corrigir_mov', num=m.id) }}" class="d-flex gap-1"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="volta" value="{{ url_for('acompanhar.inicio') }}#links">
 <input class="form-control form-control-sm" name="link" placeholder="https://..." required><button class="btn btn-sm btn-zelo"><i class="fa fa-link"></i></button></form>{% endif %}</td></tr>{% endfor %}
-</tbody></table></div>{% endif %}</div>
+</tbody></table></div>{% endif %}</div></section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='zelo-quadro.js') }}"></script>
+<script>
+// abas
+function aba(nome) { document.querySelectorAll('[data-painel]').forEach(s => s.hidden = s.dataset.painel !== nome);
+  document.querySelectorAll('.z-aba[data-aba]').forEach(a => a.classList.toggle('ativo', a.dataset.aba === nome)); }
+document.querySelectorAll('.z-aba[data-aba]').forEach(a => a.addEventListener('click', () => aba(a.dataset.aba)));
+if (['#preparacao', '#links'].includes(location.hash)) aba(location.hash.slice(1));
 
-<div class="z-card" id="corrigir"><h2>4 · Corrigir um lançamento</h2>
-<form class="d-flex gap-2 mb-3" method="get" action="{{ url_for('acompanhar.inicio') }}#corrigir"><input class="form-control form-control-sm" style="max-width:160px" name="n" placeholder="Nº do lançamento" value="{{ n4 }}"><button class="btn btn-sm btn-outline-secondary">Abrir</button></form>
-{% if n4 and not m4 %}<p class="z-erro">Nº {{ n4 }} não encontrado.</p>{% endif %}
-{% if m4 %}<dl class="z-def small"><dt>Nº</dt><dd>{{ m4.id }} · {{ m4.data|data }} · {{ m4.tipo }} {{ sit(m4.etapa) if m4.etapa }}</dd>
-<dt>Item</dt><dd>{{ item_link(m4.item) if m4.item else '—' }}</dd><dt>Pessoa</dt><dd>{{ pessoa_link(m4.matricula, m4.nome) or '—' }}</dd>
-<dt>Termo</dt><dd>{{ m4.termo or '—' }} {{ m4.data_ass|data if m4.data_ass }}</dd><dt>Chamado</dt><dd>{{ m4.chamado or '—' }}</dd><dt>Link</dt><dd class="text-break">{{ m4.link or '—' }}</dd></dl>
-{% if pode('lancar') %}<form method="post" action="{{ url_for('acompanhar.corrigir_mov', num=m4.id) }}" class="row g-2 align-items-end small">
- <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="volta" value="{{ url_for('acompanhar.inicio', n=m4.id) }}#corrigir">
- {% if m4.tipo in ('Entrega','Empréstimo') %}
- <div class="col-md-2"><label class="form-label mb-0">Nova etapa</label><select class="form-select form-select-sm" name="etapa"><option value="">(não mudar)</option>{% for e in ETAPAS %}<option>{{ e }}</option>{% endfor %}</select></div>
- <div class="col-md-2"><label class="form-label mb-0">Termo</label><select class="form-select form-select-sm" name="termo"><option value="">(não mudar)</option>{% for e in ['Pendente','Assinado','Dispensado'] %}<option>{{ e }}</option>{% endfor %}</select></div>
- <div class="col-md-2"><label class="form-label mb-0">Data assinatura</label><input type="date" class="form-control form-control-sm" name="data_ass"></div>
- <div class="col-md-2"><label class="form-label mb-0">Data entrega</label><input type="date" class="form-control form-control-sm" name="data_ent"></div>{% endif %}
- <div class="col-md-2"><label class="form-label mb-0">Chamado</label><input class="form-control form-control-sm" name="chamado"></div>
- <div class="col-md-2"><label class="form-label mb-0">Técnico</label><select class="form-select form-select-sm" name="tecnico"><option value=""></option>{% for t in tecnicos %}<option>{{ t }}</option>{% endfor %}</select></div>
- <div class="col-md-6"><label class="form-label mb-0">Link do termo</label><input class="form-control form-control-sm" name="link"></div>
- <div class="col-md-2"><button class="btn btn-sm btn-zelo w-100">Salvar correção</button></div>
-</form><p class="small text-muted mt-2">Item, pessoa ou ação errados: use "Desfazer último" em Lançamentos (se foi seu último clique) ou lance a ação inversa.</p>{% endif %}{% endif %}
-</div>
+// quadro das entregas
+const qe = document.getElementById('q-entregas');
+zQuadro(qe, async (card, para) => {
+  const r = await zPost('{{ url_for("acompanhar.api_etapa") }}', {id: card.dataset.id, para});
+  if (r.ok) { const p = card.querySelector('.z-pends'); if (p) p.innerHTML = (r.pend || []).map(f => `<span class="z-pend">falta ${f}</span>`).join(' ');
+    if (para === 'Cancelado') r.some = true; if (para === 'Entregue') { r.trava = true; card.querySelector('.dropdown')?.remove(); }
+    r.link = {href: '{{ url_for("lancar.lancamento", num=0) }}'.slice(0, -1) + card.dataset.id, texto: 'Abrir'}; }
+  return r; });
+
+// quadro da preparação
+const qp = document.getElementById('q-prep');
+function estadoPrep(card, liberar) {
+  const d = {item: card.dataset.id, liberar: liberar ? 'Sim' : ''};
+  card.querySelectorAll('.z-veio').forEach(b => d[b.dataset.k] = b.dataset.v);
+  d.estado = card.querySelector('.z-avaria').dataset.v;
+  card.querySelectorAll('.z-marca').forEach(b => d[b.dataset.k] = b.classList.contains('on') ? 'Sim' : '');
+  return d; }
+function barra(card) { const t = card.querySelectorAll('.z-marca').length, n = card.querySelectorAll('.z-marca.on').length; const i = card.querySelector('.z-barra > i'); if (i) i.style.width = (100 * n / t) + '%'; }
+const quadroPrep = zQuadro(qp, async (card, para) => {
+  const r = await zPost('{{ url_for("acompanhar.api_preparo") }}', estadoPrep(card, para === 'Liberado'));
+  if (r.ok && para === 'Liberado') { r.trava = true; card.querySelectorAll('button').forEach(b => b.disabled = true); card.querySelector('.dropdown')?.remove(); }
+  return r; });
+async function salvaPrep(card) {
+  try { const r = await zPost('{{ url_for("acompanhar.api_preparo") }}', estadoPrep(card, false));
+    if (!r.ok) { zAviso(r.msg, 'erro'); return; }
+    const col = qp.querySelector('.z-col[data-col="' + r.situacao + '"]');
+    if (col && card.closest('.z-col') !== col) { col.querySelector('.z-col-corpo').prepend(card); card.classList.add('z-pousou'); setTimeout(() => card.classList.remove('z-pousou'), 600); zContar(qp); }
+  } catch (e) { zAviso(e.message, 'erro'); } }
+qp.querySelectorAll('.z-prep').forEach(card => {
+  barra(card);
+  card.querySelectorAll('.z-veio').forEach(b => b.onclick = () => { const v = b.dataset.v === '' ? 'Sim' : b.dataset.v === 'Sim' ? 'Não' : ''; b.dataset.v = v; b.classList.toggle('on', v === 'Sim'); b.classList.toggle('nao', v === 'Não'); salvaPrep(card); });
+  const av = card.querySelector('.z-avaria'); av.onclick = () => { const c = av.dataset.v === 'Com avaria'; av.dataset.v = c ? 'Bom' : 'Com avaria'; av.classList.toggle('nao', !c); av.textContent = c ? 'Sem avaria' : 'Com avaria'; salvaPrep(card); };
+  card.querySelectorAll('.z-marca').forEach(b => b.onclick = () => { b.classList.toggle('on'); barra(card); salvaPrep(card); });
+  card.querySelector('.z-liberar')?.addEventListener('click', () => quadroPrep.mover(card, qp.querySelector('.z-col[data-col="Liberado"]')));
+});
+</script>
 {% endblock %}

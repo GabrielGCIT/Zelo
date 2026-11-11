@@ -12,7 +12,7 @@
 ## Descartado
 - API do AirWatch (controle do time global): fica o upload do relatório.
 
-## Etapa 1 — Lançamentos em cards + regras viram pendência
+## Etapa 1 — Lançamentos em cards + regras viram pendência (FEITA, v1.3.0)
 - Tela inicial de lançamento com cards: Notebook e desktop · Celular e linha · Empréstimo do pool ·
   Acessório · Estoque e baixa. Cada card abre só os campos do caso, com a conferência em tempo real.
 - Começar pelo item ou pela pessoa: digitar/bipar e ver só as ações possíveis para a situação.
@@ -25,12 +25,16 @@
   último lançamento de cada item.
 - Rever com o Gabriel os outros pontos "ao pé da letra da planilha" que ele ainda vai trazer.
 
-## Etapa 2 — Quadros de arrastar
+## Etapa 2 — Quadros de arrastar (FEITA, v1.4.0)
 - Acompanhar: Reservado → Termo assinado → Chamado aberto → Entregue (arrastar o card avança a etapa).
 - Preparação: Devolvido → Em preparação → Liberado, com as marcas salvando sozinhas.
 - Manutenção: quadro por status da OS.
 
 ## Etapa 3 — Painel e fichas
+- Pedido do Gabriel (11/11): o sistema tem de APONTAR o que está errado (cadastro, lançamento) e INDUZIR o
+  fluxo certo; aparência conta; seguir o melhor padrão de mercado. Incluir "Qualidade do cadastro":
+  pessoas duplicadas/sem CC/tipo "A confirmar", itens sem hostname/tag, em uso sem termo, desligado com item,
+  linha em uso sem aparelho, lançamentos sem data — cada achado com o botão que resolve.
 - Gráficos clicáveis: parque por situação e site, entregas/devoluções por semana, idade do parque,
   garantias vencendo, estoque EC × mínimo, tempo médio reserva → entrega.
 - Ficha do item com linha do tempo (pessoas, manutenções); ficha da pessoa em cards.

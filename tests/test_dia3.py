@@ -31,7 +31,7 @@ def _repor(nome, qtd=5):
 
 
 def test_telas(cli):
-    for u in ('/acompanhar', '/manutencao', '/consumiveis', '/itens/novo', '/linhas/analise', '/acompanhar?n=10'):
+    for u in ('/acompanhar', '/manutencao', '/consumiveis', '/itens/novo', '/linhas/analise', '/lancamento/10'):
         assert cli.get(u).status_code == 200, u
 
 

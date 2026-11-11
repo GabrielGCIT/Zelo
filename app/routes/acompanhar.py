@@ -1,4 +1,4 @@
-from flask import Blueprint, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
 from app import db
 from app.acompanhar import PASSOS, corrigir, marcas_de, preparar, ultima_preparacao
@@ -8,38 +8,100 @@ from app.models import ESTADOS_DEV, Item, Movimentacao, cfg, cfg_lista
 acompanhar_bp = Blueprint('acompanhar', __name__)
 
 
+COLUNAS_ENTREGA = ['Reservado', 'Termo assinado', 'Chamado aberto', 'Entregue']
+
+
+def _cartao_entrega(m, it):
+    from app.pendencias import texto
+    return dict(m=m, it=it, pend=texto(m, it), col=m.etapa if m.etapa in COLUNAS_ENTREGA else 'Reservado')
+
+
 @acompanhar_bp.route('/acompanhar')
 @exige('ver')
 def inicio():
+    from datetime import date, timedelta
     fluxo = cfg('fluxo_preparacao') or '2026-11-05'
-    # 1 · entregas em andamento e entregas/empréstimos com termo pendente
-    em_and = Item.query.filter(Item.situacao == 'Reservada').all()
+    semana = (date.today() - timedelta(days=7)).isoformat()
+    # 1 · quadro das entregas: reservas em andamento + entregues com termo pendente + entregues na última semana
+    vistos, cartoes = set(), []
+    andamento = Item.query.filter(Item.situacao == 'Reservada').all()
     pend = Item.query.filter(Item.situacao.in_(('Em uso', 'Emprestado')), Item.termo == 'Pendente').all()
-    s1 = []
-    for it in sorted(em_and + pend, key=lambda i: i.desde or ''):
+    for it in sorted(andamento + pend, key=lambda i: i.desde or ''):
         m = db.session.get(Movimentacao, it.ultima_mov_id) if it.ultima_mov_id else None
-        if m:
-            s1.append((it, m))
-    # linhas sem item com termo pendente (BYOD)
-    s1 += [(None, m) for m in Movimentacao.query.filter(Movimentacao.item.is_(None), Movimentacao.tipo == 'Entrega',
-                                                       Movimentacao.termo == 'Pendente', Movimentacao.data >= fluxo)]
-    # 2 · devolvidos e em preparação
-    s2 = []
+        if m and m.tipo in ('Entrega', 'Empréstimo') and m.id not in vistos:
+            vistos.add(m.id)
+            cartoes.append(_cartao_entrega(m, it))
+    recentes = (Movimentacao.query.filter(Movimentacao.tipo.in_(('Entrega', 'Empréstimo')), Movimentacao.etapa == 'Entregue',
+                                          Movimentacao.data_ent >= semana).order_by(Movimentacao.id.desc()).limit(40).all())
+    for m in recentes:
+        if m.id not in vistos:
+            vistos.add(m.id)
+            cartoes.append(_cartao_entrega(m, db.session.get(Item, m.item) if m.item else None))
+    quadro1 = {c: [x for x in cartoes if x['col'] == c] for c in COLUNAS_ENTREGA}
+    # 2 · quadro da preparação
+    hoje = date.today().isoformat()
+    prep_cols = {'Devolvido': [], 'Em preparação': [], 'Liberado': []}
     for it in Item.query.filter(Item.situacao.in_(('Devolvido', 'Em preparação'))).order_by(Item.desde).all():
         prep, dev = ultima_preparacao(it)
         base = prep or dev
-        s2.append(dict(it=it, dev=dev, prep=prep, marcas=marcas_de(prep),
-                       veio_fonte=(base.fonte_dev if base else None), veio_mouse=(base.mouse_dev if base else None),
-                       veio_teclado=(base.teclado_dev if base else None), estado=(base.estado if base else None)))
+        prep_cols[it.situacao].append(dict(
+            it=it, dev=dev, marcas=marcas_de(prep), preparado=(prep.receb_por if prep else ''),
+            veio_fonte=(base.fonte_dev if base else None), veio_mouse=(base.mouse_dev if base else None),
+            veio_teclado=(base.teclado_dev if base else None), estado=(base.estado if base else None)))
+    for m in Movimentacao.query.filter(Movimentacao.tipo == 'Liberação', Movimentacao.data >= semana).order_by(
+            Movimentacao.id.desc()).limit(30):
+        prep_cols['Liberado'].append(dict(it=db.session.get(Item, m.item), lib=m))
     # 3 · termos assinados sem link (desde a data do fluxo)
     s3 = (Movimentacao.query.filter(Movimentacao.tipo.in_(('Entrega', 'Empréstimo', 'Devolução')),
                                     Movimentacao.data >= fluxo, (Movimentacao.link.is_(None)) | (Movimentacao.link == ''),
                                     ((Movimentacao.termo == 'Assinado') | (Movimentacao.tipo == 'Devolução')))
           .order_by(Movimentacao.id.desc()).limit(200).all())
     n4 = request.args.get('n', '')
-    m4 = db.session.get(Movimentacao, int(n4)) if n4.isdigit() else None
-    return render_template('acompanhar.html', s1=s1, s2=s2, s3=s3, m4=m4, n4=n4, passos=PASSOS, estados=ESTADOS_DEV,
-                           tecnicos=cfg_lista('tecnicos'), recebido=cfg_lista('recebido_por'))
+    if n4.isdigit() and db.session.get(Movimentacao, int(n4)):
+        return redirect(url_for('lancar.lancamento', num=int(n4)))
+    return render_template('acompanhar.html', quadro1=quadro1, colunas=COLUNAS_ENTREGA, prep_cols=prep_cols, s3=s3, n4=n4,
+                           passos=PASSOS, hoje=hoje)
+
+
+@acompanhar_bp.route('/api/acompanhar/etapa', methods=['POST'])
+@exige('lancar')
+def api_etapa():
+    """Arrastar o cartão no quadro das entregas."""
+    j = request.get_json(silent=True) or {}
+    m = db.session.get(Movimentacao, int(j.get('id') or 0))
+    if not m:
+        return jsonify(ok=False, msg='Lançamento não encontrado')
+    para = j.get('para')
+    if para == m.etapa:
+        return jsonify(ok=True, msg='')
+    if para == 'Reservado':
+        return jsonify(ok=False, msg='Não dá para voltar a Reservado: abra o lançamento para corrigir')
+    ok, msg = corrigir(m, {'etapa': para}, g.usuario.nome)
+    if ok:
+        registrar_log('acompanhar', msg)
+        from flask import current_app
+        from app import servicedesk as sd
+        if para == 'Entregue' and sd.configurado():
+            sd.enfileirar_tudo(current_app._get_current_object(), [m])
+    from app.pendencias import texto
+    return jsonify(ok=ok, msg=msg, pend=texto(m) if ok and para != 'Cancelado' else [])
+
+
+@acompanhar_bp.route('/api/acompanhar/preparo', methods=['POST'])
+@exige('lancar')
+def api_preparo():
+    """Cada clique no cartão da preparação salva aqui; liberar = volta ao estoque."""
+    j = request.get_json(silent=True) or {}
+    it = db.session.get(Item, j.get('item') or '')
+    if not it:
+        return jsonify(ok=False, msg='Item não encontrado')
+    dados = {k: (str(j.get(k) or '')).strip() for k in ('veio_fonte', 'veio_mouse', 'veio_teclado', 'estado', 'liberar',
+                                                       *[p for p, _r in PASSOS])}
+    ok, msg = preparar(it, dados, g.usuario.nome)
+    if ok and dados['liberar'] == 'Sim':
+        registrar_log('preparação', f'{it.codigo}: {msg}')
+    db.session.refresh(it)
+    return jsonify(ok=ok, msg=msg, situacao=it.situacao)
 
 
 @acompanhar_bp.route('/acompanhar/corrigir/<int:num>', methods=['POST'])

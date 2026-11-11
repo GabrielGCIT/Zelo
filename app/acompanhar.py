@@ -96,15 +96,20 @@ def marcas_de(m):
 
 
 def preparar(item, dados, resp):
-    """Grava chegada + preparação. dados: veio_fonte/veio_mouse/veio_teclado (Sim/Não), estado, 6 marcas, preparado_por."""
+    """Grava a chegada e a preparação. dados: veio_fonte/veio_mouse/veio_teclado (Sim/Não), estado, as 6 marcas,
+    preparado_por e liberar ('Sim' = volta ao estoque mesmo sem todas as marcas).
+
+    Enquanto não libera, a mesma linha de Preparação é atualizada (o quadro salva a cada clique, sem criar uma
+    linha no Histórico por marcação). Nada aqui é obrigatório: o que não foi informado fica em branco."""
     if item.situacao not in ('Devolvido', 'Em preparação'):
         return False, f'O item está {item.situacao}: não está na preparação'
-    for k in ('veio_fonte', 'veio_mouse', 'veio_teclado', 'estado'):
+    prep, dev = ultima_preparacao(item)
+    base = prep or dev
+    for k, col in (('veio_fonte', 'fonte_dev'), ('veio_mouse', 'mouse_dev'), ('veio_teclado', 'teclado_dev'), ('estado', 'estado')):
         if not dados.get(k):
-            return False, 'Confira a chegada: veio fonte, mouse, teclado e estado'
+            dados[k] = (getattr(base, col) if base else None) or None
     dados['preparado_por'] = dados.get('preparado_por') or resp
     marcas = {k: dados.get(k) == 'Sim' for k, _r in PASSOS}
-    # "Liberar assim mesmo": volta ao estoque sem todas as marcas; o que ficou sem marcar vai na observação.
     tudo = all(marcas.values()) or dados.get('liberar') == 'Sim'
     pulou = [rot for k, rot in PASSOS if not marcas[k]] if tudo else []
     hoje = date.today().isoformat()
@@ -114,21 +119,27 @@ def preparar(item, dados, resp):
         ('liberado sem: ' + ', '.join(pulou)) if pulou else '']))
     kit = []
     if tudo:
+        # só completa do estoque o que foi dito que NÃO veio e que a pessoa marcou como conferido
         falta = []
-        if dados['veio_fonte'] != 'Sim' and marcas['fonte']:
+        if dados['veio_fonte'] == 'Não' and marcas['fonte']:
             n = f'Fonte de notebook – {item.fabricante or "Dell"}'
             if saldo(n) <= 0:
-                return False, f'Sem saldo de {n} no EC para completar o kit'
+                return False, f'Sem saldo de {n} no EC para completar o kit (desmarque Fonte para liberar sem)'
             falta.append(n)
-        km, erro = escolher_kit(item.fabricante, dados['veio_mouse'] != 'Sim' and marcas['mouse'],
-                                dados['veio_teclado'] != 'Sim' and marcas['teclado'], {})
+        km, erro = escolher_kit(item.fabricante, dados['veio_mouse'] == 'Não' and marcas['mouse'],
+                                dados['veio_teclado'] == 'Não' and marcas['teclado'], {})
         if erro:
-            return False, erro + ' para completar o kit'
+            return False, erro + ' para completar o kit (desmarque Mouse/Teclado para liberar sem)'
         kit = falta + km
-    m = Movimentacao(data=hoje, tipo='Liberação' if tudo else 'Preparação', item=item.codigo, obs=obs,
-                     fonte_dev=dados['veio_fonte'], mouse_dev=dados['veio_mouse'], teclado_dev=dados['veio_teclado'],
-                     estado=dados['estado'], receb_por=dados['preparado_por'], resp=resp,
-                     acess='; '.join(kit) if kit else None)
+    campos = dict(obs=obs, fonte_dev=dados['veio_fonte'], mouse_dev=dados['veio_mouse'], teclado_dev=dados['veio_teclado'],
+                  estado=dados['estado'], receb_por=dados['preparado_por'])
+    if not tudo and prep:
+        for k, v in campos.items():
+            setattr(prep, k, v)
+        db.session.commit()
+        return True, 'Em preparação (salvo)'
+    m = Movimentacao(data=hoje, tipo='Liberação' if tudo else 'Preparação', item=item.codigo, resp=resp,
+                     acess='; '.join(kit) if kit else None, **campos)
     db.session.add(m)
     db.session.flush()
     for k in kit:
@@ -139,4 +150,4 @@ def preparar(item, dados, resp):
     if tudo:
         return True, ('Volta ao estoque' + (' (sem: ' + ', '.join(pulou) + ')' if pulou else ' com kit completo')
                       + (f' · baixa EC: {"; ".join(kit)}' if kit else ''))
-    return True, 'Em preparação (salvo; continue depois)'
+    return True, 'Em preparação (salvo)'

@@ -33,6 +33,37 @@ def _ctx(d):
     abertas = [m for m in todas if m.aberta]
     itens = {i.codigo: i for i in Item.query.filter(Item.codigo.in_([m.item for m in todas[:300]])).all()}
     pool = [i.codigo for i in Item.query.filter_by(finalidade='Pool de empréstimo', situacao='Em estoque').order_by(Item.codigo)]
-    return dict(d=d, acoes=ACOES_MANUT, status=STATUS_MANUT, fornec=FORNEC_MANUT, tecnicos=cfg_lista('tecnicos'),
+    quadro = {st: [m for m in abertas if m.status == st] for st in STATUS_MANUT if st not in ('Concluída', 'Sem conserto')}
+    outros = [m for m in abertas if m.status not in quadro]
+    if outros:
+        quadro[STATUS_MANUT[0]] = outros + quadro[STATUS_MANUT[0]]
+    return dict(quadro=quadro, d=d, acoes=ACOES_MANUT, status=STATUS_MANUT, fornec=FORNEC_MANUT, tecnicos=cfg_lista('tecnicos'),
                 pecas=[c.nome for c in Consumivel.query.order_by(Consumivel.nome)], pool=pool, abertas=abertas,
                 fechadas=[m for m in todas if not m.aberta][:50], itens=itens)
+
+
+@manutencao_bp.route('/api/manutencao/status', methods=['POST'])
+@exige('lancar')
+def api_status():
+    """Arrastar a ocorrência no quadro: muda o status; soltar em Concluída fecha."""
+    from flask import jsonify
+    j = request.get_json(silent=True) or {}
+    os_ = db.session.get(Manutencao, int(j.get('id') or 0))
+    para = j.get('para')
+    if not os_ or not os_.aberta or para not in STATUS_MANUT:
+        return jsonify(ok=False, msg='Ocorrência não encontrada ou já fechada')
+    if para == os_.status:
+        return jsonify(ok=True, msg='')
+    if para in ('Concluída', 'Sem conserto'):
+        if os_.substituto:
+            sub = db.session.get(Item, os_.substituto)
+            if sub and sub.situacao == 'Emprestado':
+                return jsonify(ok=False, ir=url_for('manutencao.inicio', acao='Fechar ocorrência', item=os_.item),
+                               msg=f'O backup {sub.codigo} está com {sub.com_quem}: diga se ele volta ao fechar')
+        ok, msg = registrar({'acao': 'Fechar ocorrência', 'item': os_.item, 'status': para if para == 'Sem conserto' else ''},
+                            g.usuario.nome)
+    else:
+        ok, msg = registrar({'acao': 'Atualizar ocorrência', 'item': os_.item, 'status': para}, g.usuario.nome)
+    if ok:
+        registrar_log('manutenção', f'{os_.item}: {msg}')
+    return jsonify(ok=ok, msg=msg)

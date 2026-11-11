@@ -23,16 +23,30 @@
  <div class="col-md-5"><label class="form-label mb-0">Observação</label><input class="form-control form-control-sm" name="obs" value="{{ d.obs or '' }}"></div>
  <div class="col-md-2"><button class="btn btn-sm btn-zelo w-100"><i class="fa fa-check me-1"></i>Registrar</button></div>
 </form></div>{% endif %}
-<div class="z-card"><h2>Ocorrências abertas <span class="badge text-bg-secondary">{{ abertas|length }}</span></h2>
-{% if not abertas %}<p class="text-muted">Nenhuma ocorrência aberta.</p>{% else %}
-<div class="table-responsive"><table class="table table-sm align-middle z-tab"><thead><tr><th>OS</th><th>Item</th><th>Modelo</th><th>Status</th><th>Abertura</th><th>Dias</th><th>Com quem</th><th>Backup</th><th>Defeito</th><th>Fornecedor / caso</th><th></th></tr></thead><tbody>
-{% for m in abertas %}{% set it = itens.get(m.item) %}<tr><td class="z-mono">{{ m.id }}</td><td>{{ item_link(m.item) }}</td><td class="small">{{ it.modelo if it else '' }}</td><td>{{ sit(m.status) }}</td>
-<td>{{ m.abertura|data }}</td><td>{{ dias_desde(m.abertura) if m.abertura else '—' }}</td><td>{{ pessoa_link(it.matricula, it.com_quem) if it and it.matricula else '—' }}</td>
-<td>{{ item_link(m.substituto) if m.substituto else '—' }}</td><td class="small">{{ m.defeito or '' }}</td><td class="small">{{ m.fornecedor or '' }} {{ m.caso or '' }}{% if m.visita %}<div class="text-muted">visita {{ m.visita }}</div>{% endif %}</td>
-<td class="text-nowrap">{% if pode('lancar') %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('manutencao.inicio', acao='Atualizar ocorrência', item=m.item) }}">Atualizar</a> <a class="btn btn-sm btn-outline-success" href="{{ url_for('manutencao.inicio', acao='Fechar ocorrência', item=m.item) }}">Fechar</a>{% endif %}</td></tr>{% endfor %}
-</tbody></table></div>{% endif %}</div>
+<h2 class="h6 fw-bold mt-2 mb-2">Ocorrências abertas <span class="badge text-bg-secondary">{{ abertas|length }}</span> <span class="fw-normal small text-muted ms-2">Arraste para mudar o status; solte em "Concluída" para fechar.</span></h2>
+<div class="z-quadro mb-3" id="q-manut">
+ {% for st, lista in quadro.items() %}<div class="z-col" data-col="{{ st }}"><div class="z-col-topo"><span class="z-pt"></span>{{ st }}<span class="z-col-n">0</span></div><div class="z-col-corpo">
+  {% for m in lista %}{% set it = itens.get(m.item) %}{% set d = dias_desde(m.abertura) if m.abertura else none %}
+  <div class="z-kc" data-id="{{ m.id }}" draggable="{{ 'true' if pode('lancar') else 'false' }}">
+   <div class="z-kc-tit"><a href="{{ url_for('consulta.item', codigo=m.item) }}">{{ (it.modelo or it.categoria) if it else m.item }}</a>
+    {% if pode('lancar') %}<div class="dropdown"><button data-bs-toggle="dropdown" aria-label="Mover"><i class="fa fa-ellipsis"></i></button><ul class="dropdown-menu dropdown-menu-end">
+     {% for o in status %}<li><a class="dropdown-item small" href="#" data-mover="{{ o }}">{{ o }}</a></li>{% endfor %}
+     <li><hr class="dropdown-divider"></li><li><a class="dropdown-item small" href="{{ url_for('manutencao.inicio', acao='Atualizar ocorrência', item=m.item) }}">Atualizar com detalhes...</a></li></ul></div>{% endif %}</div>
+   <div class="z-kc-sub"><span class="z-mono">{{ m.item }}</span> · OS {{ m.id }}{% if it and it.com_quem %} · {{ it.com_quem }}{% endif %}</div>
+   <div class="small mt-1">{{ m.defeito or '' }}</div>
+   <div class="z-kc-pe"><span class="z-dias {{ 'velho' if d is not none and d > 15 }}">{% if d is none %}sem data{% else %}{{ d }} dia{{ 's' if d != 1 }}{% endif %}</span>
+    {% if m.fornecedor %}<span class="z-dias">{{ m.fornecedor }}{{ ' ' ~ m.caso if m.caso }}</span>{% endif %}
+    {% if m.substituto %}<span class="z-dias" title="Backup emprestado"><i class="fa fa-rotate me-1"></i>{{ m.substituto }}</span>{% endif %}
+    {% if m.visita %}<span class="z-dias"><i class="fa fa-calendar me-1"></i>{{ m.visita }}</span>{% endif %}</div>
+  </div>{% endfor %}
+  <div class="z-col-vazio" hidden>Solte aqui</div></div></div>{% endfor %}
+ {% for st in ['Concluída', 'Sem conserto'] %}<div class="z-col {{ 'z-perigo' if st == 'Sem conserto' }}" data-col="{{ st }}"><div class="z-col-topo"><span class="z-pt" style="background:{{ '#7AC143' if st == 'Concluída' else '#dc3545' }}"></span>{{ st }}</div><div class="z-col-corpo"><div class="z-col-vazio">Solte aqui para fechar</div></div></div>{% endfor %}
+</div>
 <div class="z-card"><h2>Fechadas recentes</h2>{% if not fechadas %}<p class="text-muted">Nenhuma.</p>{% else %}
 <div class="table-responsive"><table class="table table-sm z-tab"><thead><tr><th>OS</th><th>Item</th><th>Status</th><th>Abertura</th><th>Retorno</th><th>O que foi feito</th><th>Peças</th></tr></thead><tbody>
 {% for m in fechadas %}<tr><td class="z-mono">{{ m.id }}</td><td>{{ item_link(m.item) }}</td><td>{{ sit(m.status) }}</td><td>{{ m.abertura|data }}</td><td>{{ m.retorno|data }}</td><td class="small">{{ m.solucao or '' }}</td><td class="small">{{ m.pecas or '' }}</td></tr>{% endfor %}
 </tbody></table></div>{% endif %}</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='zelo-quadro.js') }}"></script>
+<script>zQuadro(document.getElementById('q-manut'), async (card, para) => { const r = await zPost('{{ url_for("manutencao.api_status") }}', {id: card.dataset.id, para}); if (r.ok && (para === 'Concluída' || para === 'Sem conserto')) r.some = true; return r; });</script>
 {% endblock %}
