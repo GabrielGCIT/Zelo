@@ -127,3 +127,15 @@ def inicio():
     num = request.args.get('n', '')
     dados, erro = montar(num, request.args.get('tipo') or None)
     return render_template('termo.html', num=num, d=dados, erro=erro, tipos=list(TIPOS_TERMO))
+
+
+@termo_bp.route('/termo/<num>.pdf')
+@exige('ver')
+def pdf(num):
+    from flask import Response, abort
+    from app.termo_pdf import gerar_pdf
+    dados, erro = montar(num, request.args.get('tipo') or None)
+    if not dados:
+        abort(404)
+    return Response(gerar_pdf(dados), mimetype='application/pdf',
+                    headers={'Content-Disposition': f'inline; filename="Termo_Zelo_{num}.pdf"'})

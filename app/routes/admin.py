@@ -88,3 +88,38 @@ def auditoria():
         qy = qy.filter(LogAuditoria.detalhe.ilike(f'%{q}%') | LogAuditoria.acao.ilike(f'%{q}%') | LogAuditoria.usuario.ilike(f'%{q}%'))
     logs = qy.order_by(LogAuditoria.id.desc()).limit(500).all()
     return render_template('admin_auditoria.html', logs=logs, q=q)
+
+
+@admin_bp.route('/servicedesk', methods=['GET', 'POST'])
+@exige('admin')
+def servicedesk():
+    from app import servicedesk as sd
+    from app.models import EnvioSD
+    if request.method == 'POST':
+        acao = request.form.get('acao')
+        if acao == 'salvar':
+            v = {'sd_url': (request.form.get('sd_url') or '').strip().rstrip('/'),
+                 'sd_ssl': request.form.get('sd_ssl') or 'Verificar', 'sd_ativo': request.form.get('sd_ativo') or 'Não'}
+            if (request.form.get('sd_chave') or '').strip():
+                v['sd_chave'] = request.form['sd_chave'].strip()
+            sd.salvar_conf(v)
+            registrar_log('service desk', f'configuração salva: {v["sd_url"]}, ativo={v["sd_ativo"]}'
+                          + (', chave trocada' if 'sd_chave' in v else ''))
+            flash('Configuração salva.', 'success')
+        elif acao == 'testar':
+            try:
+                sd.testar()
+                flash('Conexão OK: o Service Desk respondeu com a chave configurada.', 'success')
+            except sd.ErroSD as e:
+                flash(str(e), 'danger')
+        elif acao == 'reenviar':
+            ids = [int(i) for i in request.form.getlist('ids') if i.isdigit()] or \
+                  [e.id for e in EnvioSD.query.filter(EnvioSD.status != 'Enviado')]
+            ok = sum(sd.enviar(e) for e in EnvioSD.query.filter(EnvioSD.id.in_(ids)))
+            registrar_log('service desk', f'reenvio: {ok} de {len(ids)} enviado(s)')
+            flash(f'{ok} de {len(ids)} envio(s) concluído(s).', 'success' if ok == len(ids) else 'warning')
+        return redirect(url_for('admin.servicedesk'))
+    envios = EnvioSD.query.order_by(EnvioSD.id.desc()).limit(150).all()
+    return render_template('admin_servicedesk.html', url=sd.conf('sd_url'), tem_chave=bool(sd.conf('sd_chave')),
+                           ssl=sd.conf('sd_ssl') or 'Verificar', ativo=sd.conf('sd_ativo') or 'Não', envios=envios,
+                           pendentes=sum(1 for e in envios if e.status != 'Enviado'))

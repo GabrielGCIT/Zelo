@@ -61,7 +61,7 @@ def espelho(d, hoje=None):
     tipo = ACOES[acao][0] if acao in ACOES else ''
     precisa = ACOES[acao][3] if acao in ACOES else False
     at = []
-    out = {'item': None, 'pessoa': None, 'linha': None, 'nova': None, 'resumo': '', 'atencao': at}
+    out = {'item': None, 'pessoa': None, 'linha': None, 'nova': None, 'chamado': None, 'resumo': '', 'atencao': at}
 
     it = achar_item(d['item']) if d.get('item') else None
     if it:
@@ -121,6 +121,27 @@ def espelho(d, hoje=None):
             at.append(f'A linha {ln.numero} está registrada no aparelho {ln.aparelho}, não no {it.codigo}')
         if it.kit == 'A conferir' and tipo in SAIDA and it.categoria == 'Notebook':
             at.append('Notebook sem preparação registrada (kit a conferir): confira fonte, mouse e teclado antes de entregar')
+
+    # ------------------------------------------------ chamado no Service Desk
+    from app import servicedesk as sd
+    if d.get('chamado') and sd.configurado():
+        c = sd.chamado(d['chamado'])
+        out['chamado'] = c
+        if c and c.get('inexistente'):
+            at.append(f'O chamado {d["chamado"]} não existe no Service Desk')
+        elif c and c.get('erro'):
+            at.append('Não consegui consultar o chamado no Service Desk agora (o lançamento grava mesmo assim)')
+        elif c:
+            if c['status'].lower() in ('closed', 'fechado', 'cancelled', 'cancelado'):
+                at.append(f'O chamado {c["id"]} está {c["status"]}')
+            alvo = p if (p and precisa) else None
+            if alvo and c['solicitante']:
+                mesmo = (alvo.email and c['email'] and alvo.email.lower() == c['email'].lower()) or \
+                        (alvo.user and c['login'] and alvo.user.lower() == c['login'].lower()) or \
+                        len(set(_palavras(alvo.nome)) & set(_palavras(c['solicitante']))) >= 2
+                if not mesmo:
+                    at.append(f'O chamado {c["id"]} foi aberto por {c["solicitante"]}, e quem recebe é {alvo.nome}. '
+                              'Confira (pode ter sido aberto pelo gestor)')
 
     # ------------------------------------------------ chamado e data
     if d.get('chamado'):

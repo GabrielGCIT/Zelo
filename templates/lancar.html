@@ -89,10 +89,11 @@ function mostraEspelho() {
   const item = it ? `<div class="fw-bold">${esc(it.categoria)} ${esc(it.modelo || '')}</div><div class="z-mono small">${esc(it.codigo)}${it.tag ? ' · tag ' + esc(it.tag) : ''}${it.imei && it.imei !== it.codigo ? ' · IMEI ' + esc(it.imei) : ''}</div>
      <div class="small">${esc(it.situacao)}${it.com_quem ? ' com ' + esc(it.com_quem) : ''} · site ${esc(it.site || '—')}</div>${it.finalidade === 'Pool de empréstimo' ? '<div class="small">Pool de empréstimo</div>' : ''}`
    : ln ? '' : '<div class="text-muted small">—</div>';
+  const ch = e.chamado && !e.chamado.erro && !e.chamado.inexistente ? `<div class="mt-2 small border-top pt-1"><b>Chamado ${esc(e.chamado.id)}</b> · ${esc(e.chamado.status)}<br>aberto por ${esc(e.chamado.solicitante)}<div class="text-muted">${esc(e.chamado.assunto)}</div></div>` : '';
   const linha = ln ? `<div class="mt-1 small"><b>Linha ${esc(ln.numero)}</b> ${esc(ln.operadora || '')} · ${esc(ln.situacao)}${ln.com_quem ? ' com ' + esc(ln.com_quem) : ''}${ln.aparelho ? ' · aparelho ' + esc(ln.aparelho) : ''}</div>` : '';
   const at = e.atencao.length ? '<ul class="mb-0 ps-3 small">' + e.atencao.map(a => `<li>${esc(a)}</li>`).join('') + '</ul>' : '<div class="small z-ok"><i class="fa fa-check me-1"></i>Nada fora do comum</div>';
   box.innerHTML = `<div class="small text-muted mb-1">Linha ${ATUAL + 1}${e.resumo ? ' · <b class="text-body">' + esc(e.resumo) + '</b>' : ''}</div><div class="row g-2">`
-    + cartao('Quem', 'fa-user', pess) + cartao('O quê', 'fa-laptop', item + linha) + cartao('Conferir', 'fa-triangle-exclamation', at) + '</div>'; }
+    + cartao('Quem', 'fa-user', pess + ch) + cartao('O quê', 'fa-laptop', item + linha) + cartao('Conferir', 'fa-triangle-exclamation', at) + '</div>'; }
 document.querySelectorAll('#grade tbody tr').forEach((tr, i) => tr.addEventListener('focusin', () => { ATUAL = i; mostraEspelho(); }));
 let tConf; function agendaConferir() { clearTimeout(tConf); tConf = setTimeout(async () => { try { pinta(await post('{{ url_for("lancar.api_conferir") }}', {aba: ABA, linhas: linhas()})); } catch (e) {} }, 350); }
 document.querySelectorAll('#grade [data-c]').forEach(e => { e.addEventListener('change', agendaConferir); e.addEventListener('input', agendaConferir); });

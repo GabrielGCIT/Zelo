@@ -336,6 +336,20 @@ class AnaliseLinha(db.Model):
     retorno = db.Column(db.String(300))
 
 
+class EnvioSD(db.Model):
+    """Fila de envios ao Service Desk (termo anexado + nota). Falha não desfaz o lançamento: fica para reenviar."""
+    __tablename__ = 'envios_sd'
+    id = db.Column(db.Integer, primary_key=True)
+    mov_id = db.Column(db.Integer, index=True)
+    chamado = db.Column(db.String(30), index=True)
+    status = db.Column(db.String(15), index=True)      # Pendente | Enviado | Erro
+    anexo_ok = db.Column(db.Boolean, default=False)
+    tentativas = db.Column(db.Integer, default=0)
+    erro = db.Column(db.String(300))
+    criado = db.Column(db.String(25))
+    enviado = db.Column(db.String(25))
+
+
 class Config(db.Model):
     """Parâmetros (chave/valor): prazo padrão de empréstimo, data do fluxo de preparação etc."""
     __tablename__ = 'config'

@@ -13,3 +13,5 @@ blinker==1.7.0
 # por vez e um aviso em letras garrafais no console. O balcao tem varios postos.
 waitress==3.0.0
 openpyxl==3.1.2
+# PDF do termo (anexado no chamado do Service Desk). Puro Python; puxa pillow e chardet.
+reportlab==4.2.5

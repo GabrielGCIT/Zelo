@@ -50,9 +50,17 @@ def corrigir_mov(num):
         flash(f'Nº {num} não encontrado.', 'danger')
         return redirect(url_for('acompanhar.inicio'))
     dados = {k: (request.form.get(k) or '').strip() for k in ('etapa', 'data_ass', 'chamado', 'data_ent', 'tecnico', 'link', 'termo')}
+    chamado_antes = m.chamado
     ok, msg = corrigir(m, dados, g.usuario.nome)
     if ok:
         registrar_log('acompanhar', msg)
+        from flask import current_app
+        from app import servicedesk as sd
+        if sd.configurado() and m.chamado and (dados['etapa'] == 'Entregue' or not chamado_antes):
+            ids = sd.enfileirar([m])
+            if ids:
+                sd.processar(current_app._get_current_object(), ids)
+                msg += ' · enviado ao Service Desk'
     flash(msg, 'success' if ok else 'danger')
     volta = request.form.get('volta') or url_for('acompanhar.inicio')
     return redirect(volta if volta.startswith('/') else url_for('acompanhar.inicio'))

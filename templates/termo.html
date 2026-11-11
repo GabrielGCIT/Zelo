@@ -18,7 +18,7 @@
 <form class="z-card row g-2 align-items-end" method="get">
  <div class="col-md-3"><label class="form-label small">Nº do lançamento</label><input class="form-control" name="n" value="{{ num }}" autofocus></div>
  <div class="col-md-4"><label class="form-label small">Trocar o tipo (opcional)</label><select class="form-select" name="tipo"><option value="">Automático{% if d %} ({{ d.tipo_auto }}){% endif %}</option>{% for t in tipos %}<option {{ 'selected' if request.args.get('tipo')==t }}>{{ t }}</option>{% endfor %}</select></div>
- <div class="col-auto"><button class="btn btn-zelo">Gerar</button> {% if d %}<button type="button" class="btn btn-outline-secondary" onclick="window.print()"><i class="fa fa-print me-1"></i>Imprimir / PDF</button>{% endif %}</div>
+ <div class="col-auto"><button class="btn btn-zelo">Gerar</button> {% if d %}<button type="button" class="btn btn-outline-secondary" onclick="window.print()"><i class="fa fa-print me-1"></i>Imprimir</button> <a class="btn btn-outline-secondary" href="{{ url_for('termo.pdf', num=num, tipo=request.args.get('tipo') or None) }}" target="_blank"><i class="fa fa-file-pdf me-1"></i>PDF</a>{% endif %}</div>
 </form>
 {% if erro %}<div class="alert alert-danger">{{ erro }}</div>{% endif %}
 </div>
