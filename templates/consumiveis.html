@@ -3,7 +3,7 @@
 {% block content %}
 <div class="d-flex flex-wrap align-items-center gap-2"><div><h1 class="z-titulo">Consumíveis e estoque</h1>
 <p class="z-sub">Saldo por site calculado dos movimentos. Contagem de inventário grava o ajuste da diferença.</p></div>
-{% if pode('lancar') %}<div class="ms-auto"><a class="btn btn-sm btn-zelo" href="{{ url_for('estoque.item_novo') }}"><i class="fa fa-plus me-1"></i>Cadastrar item novo</a></div>{% endif %}</div>
+<div class="ms-auto small text-muted">Equipamento (notebook, celular, monitor...) é ativo: cadastre em <a href="{{ url_for('consulta.itens') }}">Itens</a>.</div></div>
 {% if pode('lancar') %}
 <div class="row g-3"><div class="col-lg-8"><div class="z-card"><h2>Movimentar</h2>
 <form method="post" class="row g-2 align-items-end small"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="mover">

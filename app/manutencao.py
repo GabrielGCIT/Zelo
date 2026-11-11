@@ -35,7 +35,7 @@ def registrar(d, resp):
         return False, 'Escolha a Ação'
     it = achar_item(d.get('item'))
     if not it:
-        return False, 'Item não encontrado (item novo: cadastre em Consumíveis → Cadastrar item)'
+        return False, 'Item não encontrado (ativo novo: Itens → Cadastrar ativo)'
     if it.situacao == 'Baixada':
         return False, 'Item baixado'
     os_ = aberta_do_item(it.codigo)

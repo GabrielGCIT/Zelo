@@ -1,8 +1,8 @@
 {% extends 'base.html' %}
-{% block title %}Item novo{% endblock %}
+{% block title %}Cadastrar ativo{% endblock %}
 {% block content %}
-<h1 class="z-titulo">Cadastrar item novo</h1>
-<p class="z-sub">Cadastra em Itens e lança a Entrada no estoque. Celular: o código é o IMEI 1 (com dígito verificador conferido).</p>
+<h1 class="z-titulo">Cadastrar ativo</h1>
+<p class="z-sub">Notebook, desktop, celular, monitor... Cadastra em Itens e lança a Entrada no estoque. Celular: o código é o IMEI 1 (com dígito verificador conferido).</p>
 <div class="z-card"><form method="post" id="f-item" class="row g-2 small"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 {% for k, rot in campos %}<div class="{{ 'col-12' if k=='obs' else 'col-md-3' }}"><label class="form-label mb-0">{{ rot }}</label>
 {% if k in opcoes %}<select class="form-select form-select-sm" name="{{ k }}"><option value=""></option>{% for o in opcoes[k] %}<option {{ 'selected' if d[k]==o }}>{{ o }}</option>{% endfor %}</select>

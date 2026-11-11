@@ -1,8 +1,8 @@
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
 from app.auth import exige, pode, registrar_log
-from app.estoque import CAMPOS_ITEM, MOVIMENTOS, cadastrar_consumivel, cadastrar_item, conferir_item, mover, saldos
-from app.models import (CATEGORIAS, FABRICANTES, FINALIDADES, PROPRIEDADES, SITES, Compra, Consumivel, MovConsumivel)
+from app.estoque import MOVIMENTOS, cadastrar_consumivel, conferir_item, mover, saldos
+from app.models import SITES, Compra, Consumivel, MovConsumivel
 
 estoque_bp = Blueprint('estoque', __name__)
 
@@ -34,23 +34,6 @@ def consumiveis():
     return render_template('consumiveis.html', cat=cat, sal=sal, sites=sites, todos_sites=SITES, movimentos=MOVIMENTOS,
                            movs=movs, filtro=filtro,
                            compras=[c.compra for c in Compra.query.filter(Compra.status.notin_(('Recebido', 'Cancelado')))])
-
-
-@estoque_bp.route('/item-novo', methods=['GET', 'POST'])
-@exige('lancar')
-def item_novo():
-    d = {k: (request.form.get(k) or '').strip() for k, _r in CAMPOS_ITEM}
-    if request.method == 'POST':
-        ok, msg = cadastrar_item(d, g.usuario.nome)
-        if ok:
-            registrar_log('item cadastrado', msg)
-            flash(msg, 'success')
-            return redirect(url_for('consulta.item', codigo=d['codigo'].strip()))
-        flash(msg, 'danger')
-    return render_template('item_novo.html', d=d, campos=CAMPOS_ITEM, opcoes={
-        'categoria': CATEGORIAS, 'fabricante': FABRICANTES, 'propriedade': PROPRIEDADES, 'finalidade': FINALIDADES,
-        'site': SITES, 'compativel': ['Dell', 'Lenovo', 'Ambos'],
-        'pedido': [c.compra for c in Compra.query.filter(Compra.status != 'Cancelado').order_by(Compra.id.desc())]})
 
 
 @estoque_bp.route('/api/item-novo/conferir', methods=['POST'])

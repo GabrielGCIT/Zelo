@@ -225,3 +225,25 @@ def contratos():
     garantias = (Item.query.filter(Item.garantia.isnot(None), Item.garantia <= em90, Item.garantia >= hoje.isoformat(),
                                    Item.situacao != 'Baixada').order_by(Item.garantia).all())
     return render_template('contratos.html', cts=cts, locados=locados, garantias=garantias, hoje=hoje.isoformat())
+
+@consulta_bp.route('/itens/novo', methods=['GET', 'POST'])
+@exige('lancar')
+def item_novo():
+    """Cadastro de ATIVO (notebook, celular, monitor...): cria o item e lança a Entrada no estoque."""
+    from flask import g
+    from app.estoque import CAMPOS_ITEM, cadastrar_item
+    from app.models import Compra
+    d = {k: (request.form.get(k) or '').strip() for k, _r in CAMPOS_ITEM}
+    if request.method == 'POST':
+        ok, msg = cadastrar_item(d, g.usuario.nome)
+        if ok:
+            registrar_log('item cadastrado', msg)
+            flash(msg, 'success')
+            return redirect(url_for('consulta.item', codigo=d['codigo'].strip()))
+        flash(msg, 'danger')
+    return render_template('item_novo.html', d=d, campos=CAMPOS_ITEM, opcoes={
+        'categoria': CATEGORIAS, 'fabricante': FABRICANTES, 'propriedade': PROPRIEDADES, 'finalidade': FINALIDADES,
+        'site': SITES, 'compativel': ['Dell', 'Lenovo', 'Ambos'],
+        'pedido': [c.compra for c in Compra.query.filter(Compra.status != 'Cancelado').order_by(Compra.id.desc())]})
+
+
