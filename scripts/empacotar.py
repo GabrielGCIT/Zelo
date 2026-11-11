@@ -33,8 +33,8 @@ RAIZ = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # O que vai para o pacote. Lista explícita, não "tudo menos": é mais fácil
 # esquecer de EXCLUIR um arquivo novo e vazar algo do que esquecer de incluir —
 # o que falta aparece no primeiro boot, o que vaza não aparece nunca.
-PASTAS = ['app', 'templates', 'static', 'translations']
-ARQUIVOS = ['run.py', 'requirements.txt', 'VERSAO']
+PASTAS = ['app', 'templates', 'static']
+ARQUIVOS = ['run.py', 'manage.py', 'requirements.txt', 'VERSAO']
 
 # Nunca entram, mesmo dentro das pastas acima.
 LIXO = {'__pycache__', '.pytest_cache', '.git', '.claude', 'venv',
@@ -334,7 +334,7 @@ if "%~1"=="" (
     echo Uso:  atualizar.bat "C:\\caminho\\da\\instalacao\\atual"
     echo.
     echo    Este arquivo copia APENAS o programa para a instalacao indicada.
-    echo    O banco de dados, as fotos e os backups de la nao sao tocados.
+    echo    O banco de dados e os backups de la nao sao tocados.
     pause
     exit /b 1
 )
@@ -351,18 +351,20 @@ echo Guardando a versao atual para poder voltar atras...
 set "GUARDA=%ALVO%\\versao-anterior"
 if exist "%GUARDA%" rmdir /s /q "%GUARDA%"
 mkdir "%GUARDA%"
-for %%P in (app templates static translations) do (
+for %%P in (app templates static) do (
     if exist "%ALVO%\\%%P" xcopy /e /i /q /y "%ALVO%\\%%P" "%GUARDA%\\%%P" >nul
 )
 if exist "%ALVO%\\run.py" copy /y "%ALVO%\\run.py" "%GUARDA%\\" >nul
+if exist "%ALVO%\\manage.py" copy /y "%ALVO%\\manage.py" "%GUARDA%\\" >nul
 if exist "%ALVO%\\VERSAO" copy /y "%ALVO%\\VERSAO" "%GUARDA%\\" >nul
 
 echo Aplicando a versao {versao}...
-for %%P in (app templates static translations) do (
+for %%P in (app templates static) do (
     if exist "%ALVO%\\%%P" rmdir /s /q "%ALVO%\\%%P"
     xcopy /e /i /q /y "%~dp0%%P" "%ALVO%\\%%P" >nul
 )
 copy /y "%~dp0run.py" "%ALVO%\\" >nul
+copy /y "%~dp0manage.py" "%ALVO%\\" >nul
 copy /y "%~dp0VERSAO" "%ALVO%\\" >nul
 copy /y "%~dp0requirements.txt" "%ALVO%\\" >nul
 xcopy /e /i /q /y "%~dp0dependencias" "%ALVO%\\dependencias" >nul
@@ -378,7 +380,7 @@ echo.
 echo   Reinicie o sistema:  schtasks /End /TN "Zelo"
 echo                        schtasks /Run /TN "Zelo"
 echo.
-echo   Confira a versao na tela "Saude do sistema".
+echo   Confira a versao no rodape do menu.
 echo   Deu errado? A versao anterior esta em:
 echo     %GUARDA%
 echo ==========================================================
@@ -388,11 +390,29 @@ pause
     _gravar(os.path.join(destino, 'atualizar.bat'), conteudo)
 
 
+def _escrever_importar(destino):
+    """Arrastar a planilha para cima do .bat importa os dados (só na primeira vez)."""
+    conteudo = '''@echo off
+setlocal
+chcp 65001 >nul
+title Zelo - importar a planilha de ativos
+if "%~1"=="" (
+    echo Arraste o arquivo da planilha ^(.xlsx^) para cima deste arquivo.
+    pause
+    exit /b 1
+)
+cd /d "%~dp0"
+"%~dp0venv\\Scripts\\python.exe" manage.py importar "%~1" %2
+pause
+'''
+    _gravar(os.path.join(destino, 'importar-planilha.bat'), conteudo)
+
+
 def _escrever_leiame(destino, versao):
     # rf-string: o texto tem caminhos do Windows, e `C:\caminho` sem o `r`
     # vira sequência de escape inválida — hoje é só um aviso, amanhã é erro.
     conteudo = rf'''Zelo {versao}
-Controle de coletores do CD
+Controle de ativos de TI e linhas moveis
 
 COMO INSTALAR
   1. Copie esta pasta inteira para o servidor.
@@ -420,29 +440,32 @@ COMO ACESSAR DE OUTRAS MAQUINAS
     1. o aparelho esta na mesma rede? (Wi-Fi da empresa, nao dados moveis)
     2. a porta esta liberada no firewall? O instalar-servico.bat faz isso.
     3. ha antivirus com firewall proprio? Precisa liberar nele tambem.
-  A tela "Saude do sistema", dentro do proprio Zelo, verifica os itens 2 e 3.
 
 TROCAR A PORTA
   Edite  instance\configuracao.txt  e reinicie o sistema.
-  Ao trocar, libere a porta nova no firewall. A tela "Saude do sistema"
+  Ao trocar, libere a porta nova no firewall. A janela do sistema
   mostra qual porta esta valendo.
   Este arquivo nao e substituido quando o sistema e atualizado.
 
 ONDE FICAM AS COISAS
   instance\\zelo.db   o banco de dados
   backups\\               copias automaticas, feitas todo dia as 3h
-  uploads\\               fotos
   logs\\                  registro de eventos
   Nenhuma dessas pastas e tocada por uma atualizacao.
 
+TRAZER OS DADOS DA PLANILHA (uma vez, antes de comecar a usar)
+  Feche o sistema e arraste o arquivo da planilha de ativos (.xlsx) para
+  cima do  importar-planilha.bat . Ele confere e mostra os numeros.
+  Para importar de novo por cima (apaga o que foi lancado no Zelo!),
+  rode pelo prompt:  importar-planilha.bat "planilha.xlsx" --substituir
+
 SE ALGO PARECER ERRADO
-  Entre no sistema e abra "Saude do sistema", no menu de administracao.
-  Ela diz em portugues o que esta acontecendo e o que fazer.
+  Veja o arquivo mais recente em  logs\\  e a tela Administracao > Auditoria.
 
 ATUALIZAR DEPOIS
   Receba a pasta da versao nova e, de dentro dela, execute:
     atualizar.bat "C:\\caminho\\da\\instalacao\\atual"
-  O banco, as fotos e os backups nao sao tocados. A versao anterior fica
+  O banco e os backups nao sao tocados. A versao anterior fica
   guardada em "versao-anterior", caso precise voltar.
 '''
     conteudo = conteudo.replace('VERSOES_SUPORTADAS',
@@ -488,6 +511,7 @@ def main():
     _escrever_servico_run(pasta)
     _escrever_servico(pasta, versao)
     _escrever_atualizar(pasta, versao)
+    _escrever_importar(pasta)
     _escrever_leiame(pasta, versao)
 
     if args.sem_zip:

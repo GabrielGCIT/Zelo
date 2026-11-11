@@ -77,7 +77,62 @@ def nova():
     return redirect(url_for('linhas.ficha', numero=n))
 
 
-@linhas_bp.route('/linhas/analise')
+@linhas_bp.route('/linhas/analise', methods=['GET', 'POST'])
 @exige('lancar')
 def analise():
-    return render_template('erro.html', titulo='Em construção', texto='Esta tela chega no próximo passo.')
+    from app.analise_linhas import CRITERIO, ORDEM, analisar, gravar_rodada, ler_airwatch, ler_easy
+    from app.models import AnaliseLinha
+    if request.method == 'POST':
+        fe, fa = request.files.get('easy'), request.files.get('airwatch')
+        if not fe or not fe.filename or not fa or not fa.filename:
+            flash('Envie os dois arquivos: o controle da Easy e o relatório do AirWatch.', 'danger')
+            return redirect(url_for('linhas.analise'))
+        try:
+            res = analisar(ler_easy(fe.stream), ler_airwatch(fa.stream))
+        except Exception as e:  # arquivo fora do formato
+            flash(f'Não consegui ler os arquivos: {e}', 'danger')
+            return redirect(url_for('linhas.analise'))
+        rodada, cnt = gravar_rodada(res)
+        registrar_log('análise de linhas', f'rodada {rodada}: ' + ', '.join(f'{k} {v}' for k, v in cnt.items()))
+        flash(f'Análise feita: {len(res)} linhas.', 'success')
+        return redirect(url_for('linhas.analise', rodada=rodada))
+    rodadas = [r for (r,) in db.session.query(AnaliseLinha.rodada).distinct().order_by(AnaliseLinha.rodada.desc()).limit(20)]
+    rodada = request.args.get('rodada') or (rodadas[0] if rodadas else None)
+    dec, q = request.args.get('decisao', ''), request.args.get('q', '')
+    qy = AnaliseLinha.query.filter_by(rodada=rodada)
+    todos = qy.all()
+    cnt = {d: sum(1 for r in todos if r.decisao == d) for d in ORDEM}
+    if dec:
+        qy = qy.filter_by(decisao=dec)
+    if q:
+        like = f'%{q}%'
+        qy = qy.filter(or_(AnaliseLinha.numero.ilike(like), AnaliseLinha.usuario_easy.ilike(like), AnaliseLinha.com_quem.ilike(like),
+                           AnaliseLinha.aw_usuario.ilike(like)))
+    return render_template('linhas_analise.html', rodadas=rodadas, rodada=rodada, linhas=qy.order_by(AnaliseLinha.id).all(),
+                           cnt=cnt, total=len(todos), ordem=ORDEM, criterio=CRITERIO, dec=dec, q=q)
+
+
+@linhas_bp.route('/linhas/analise/retorno/<int:aid>', methods=['POST'])
+@exige('lancar')
+def analise_retorno(aid):
+    from app.models import AnaliseLinha
+    a = db.session.get(AnaliseLinha, aid) or abort(404)
+    a.quem_atendeu = (request.form.get('quem_atendeu') or '').strip() or None
+    a.retorno = (request.form.get('retorno') or '').strip() or None
+    db.session.commit()
+    registrar_log('retorno Easy', f'{a.numero}: {a.quem_atendeu or ""} / {a.retorno or ""}')
+    flash(f'{a.numero}: retorno salvo.', 'success')
+    return redirect(url_for('linhas.analise', rodada=a.rodada, decisao=request.form.get('decisao', ''), q=request.form.get('q', '')))
+
+
+@linhas_bp.route('/linhas/analise/<rodada>.xlsx')
+@exige('ver')
+def analise_xlsx(rodada):
+    import os
+    import tempfile
+    from flask import send_file
+    from app.analise_linhas import exportar
+    fd, caminho = tempfile.mkstemp(suffix='.xlsx')
+    os.close(fd)
+    exportar(rodada, caminho)
+    return send_file(caminho, as_attachment=True, download_name=f'Analise linhas {rodada[:10]}.xlsx')

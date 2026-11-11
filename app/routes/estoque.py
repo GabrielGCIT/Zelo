@@ -1,9 +1,60 @@
-from flask import Blueprint, render_template
-from app.auth import exige
+from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
+
+from app.auth import exige, pode, registrar_log
+from app.estoque import CAMPOS_ITEM, MOVIMENTOS, cadastrar_consumivel, cadastrar_item, conferir_item, mover, saldos
+from app.models import (CATEGORIAS, FABRICANTES, FINALIDADES, PROPRIEDADES, SITES, Compra, Consumivel, MovConsumivel)
+
 estoque_bp = Blueprint('estoque', __name__)
 
 
-@estoque_bp.route('/consumiveis')
+@estoque_bp.route('/consumiveis', methods=['GET', 'POST'])
 @exige('ver')
 def consumiveis():
-    return render_template('erro.html', titulo='Em construção', texto='Esta tela chega no próximo passo.')
+    if request.method == 'POST':
+        if not pode('lancar'):
+            flash('Seu perfil é só de consulta.', 'danger')
+            return redirect(url_for('estoque.consumiveis'))
+        f = {k: (request.form.get(k) or '').strip() for k in request.form}
+        if f.get('acao') == 'catalogo':
+            ok, msg = cadastrar_consumivel(f.get('item_c'), f.get('marca_c'), f.get('compat_c'), f.get('minimo_c'))
+        else:
+            ok, msg = mover(f, g.usuario.nome)
+        if ok:
+            registrar_log('consumível', msg)
+        flash(msg, 'success' if ok else 'danger')
+        return redirect(url_for('estoque.consumiveis', c=f.get('consumivel', '')))
+    sal = saldos()
+    cat = Consumivel.query.order_by(Consumivel.nome).all()
+    sites = [s for s in SITES if any(sal[c.nome].get(s) for c in cat)] or ['EC']
+    filtro = request.args.get('c', '')
+    movs = MovConsumivel.query
+    if filtro:
+        movs = movs.filter_by(consumivel=filtro)
+    movs = movs.order_by(MovConsumivel.id.desc()).limit(80).all()
+    return render_template('consumiveis.html', cat=cat, sal=sal, sites=sites, todos_sites=SITES, movimentos=MOVIMENTOS,
+                           movs=movs, filtro=filtro,
+                           compras=[c.compra for c in Compra.query.filter(Compra.status.notin_(('Recebido', 'Cancelado')))])
+
+
+@estoque_bp.route('/item-novo', methods=['GET', 'POST'])
+@exige('lancar')
+def item_novo():
+    d = {k: (request.form.get(k) or '').strip() for k, _r in CAMPOS_ITEM}
+    if request.method == 'POST':
+        ok, msg = cadastrar_item(d, g.usuario.nome)
+        if ok:
+            registrar_log('item cadastrado', msg)
+            flash(msg, 'success')
+            return redirect(url_for('consulta.item', codigo=d['codigo'].strip()))
+        flash(msg, 'danger')
+    return render_template('item_novo.html', d=d, campos=CAMPOS_ITEM, opcoes={
+        'categoria': CATEGORIAS, 'fabricante': FABRICANTES, 'propriedade': PROPRIEDADES, 'finalidade': FINALIDADES,
+        'site': SITES, 'compativel': ['Dell', 'Lenovo', 'Ambos'],
+        'pedido': [c.compra for c in Compra.query.filter(Compra.status != 'Cancelado').order_by(Compra.id.desc())]})
+
+
+@estoque_bp.route('/api/item-novo/conferir', methods=['POST'])
+@exige('lancar')
+def api_conferir_item():
+    st, msg = conferir_item(request.get_json(silent=True) or {})
+    return jsonify({'status': st, 'msg': msg})

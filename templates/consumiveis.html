@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Consumíveis{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center gap-2"><div><h1 class="z-titulo">Consumíveis e estoque</h1>
+<p class="z-sub">Saldo por site calculado dos movimentos. Contagem de inventário grava o ajuste da diferença.</p></div>
+{% if pode('lancar') %}<div class="ms-auto"><a class="btn btn-sm btn-zelo" href="{{ url_for('estoque.item_novo') }}"><i class="fa fa-plus me-1"></i>Cadastrar item novo</a></div>{% endif %}</div>
+{% if pode('lancar') %}
+<div class="row g-3"><div class="col-lg-8"><div class="z-card"><h2>Movimentar</h2>
+<form method="post" class="row g-2 align-items-end small"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="mover">
+ <div class="col-md-5"><label class="form-label mb-0">Consumível</label><select class="form-select form-select-sm" name="consumivel" required><option></option>{% for c in cat %}<option {{ 'selected' if filtro==c.nome }}>{{ c.nome }}</option>{% endfor %}</select></div>
+ <div class="col-md-3"><label class="form-label mb-0">Movimento</label><select class="form-select form-select-sm" name="movimento" required><option></option>{% for m in movimentos %}<option>{{ m }}</option>{% endfor %}</select></div>
+ <div class="col-md-2"><label class="form-label mb-0">Site</label><select class="form-select form-select-sm" name="site">{% for s in todos_sites %}<option>{{ s }}</option>{% endfor %}</select></div>
+ <div class="col-md-2"><label class="form-label mb-0">Qtd (ou contada)</label><input class="form-control form-control-sm" name="qtd" required></div>
+ <div class="col-md-2"><label class="form-label mb-0">Data</label><input type="date" class="form-control form-control-sm" name="data"></div>
+ <div class="col-md-3"><label class="form-label mb-0">Destino / origem</label><input class="form-control form-control-sm" name="destino"></div>
+ <div class="col-md-2"><label class="form-label mb-0">Nº chamado</label><input class="form-control form-control-sm" name="chamado"></div>
+ <div class="col-md-2"><label class="form-label mb-0">Compra CP-</label><select class="form-select form-select-sm" name="compra"><option value=""></option>{% for c in compras %}<option>{{ c }}</option>{% endfor %}</select></div>
+ <div class="col-md-3"><label class="form-label mb-0">Observação</label><input class="form-control form-control-sm" name="obs"></div>
+ <div class="col-md-2"><button class="btn btn-sm btn-zelo w-100">Gravar</button></div>
+</form></div></div>
+<div class="col-lg-4"><div class="z-card"><h2>Novo no catálogo</h2>
+<form method="post" class="row g-2 align-items-end small"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="catalogo">
+ <div class="col-7"><label class="form-label mb-0">Item</label><input class="form-control form-control-sm" name="item_c" placeholder="Mouse sem fio" required></div>
+ <div class="col-5"><label class="form-label mb-0">Marca</label><input class="form-control form-control-sm" name="marca_c" placeholder="Dell" required></div>
+ <div class="col-5"><label class="form-label mb-0">Compatível</label><input class="form-control form-control-sm" name="compat_c"></div>
+ <div class="col-3"><label class="form-label mb-0">Mínimo</label><input class="form-control form-control-sm" name="minimo_c"></div>
+ <div class="col-4"><button class="btn btn-sm btn-outline-secondary w-100">Cadastrar</button></div>
+</form></div></div></div>{% endif %}
+<div class="z-card"><h2>Saldo por site</h2><div class="table-responsive"><table class="table table-sm z-tab align-middle">
+<thead><tr><th>Consumível</th>{% for s in sites %}<th class="text-end">{{ s }}</th>{% endfor %}<th class="text-end">Total</th><th class="text-end">Mínimo</th><th></th></tr></thead><tbody>
+{% for c in cat %}{% set t = sal[c.nome].values()|sum %}<tr class="{{ 'table-warning' if c.minimo and (sal[c.nome].get('EC', 0)) < c.minimo }}">
+<td>{{ c.nome }}</td>{% for s in sites %}<td class="text-end">{{ sal[c.nome].get(s, 0) or '' }}</td>{% endfor %}<td class="text-end fw-bold">{{ t }}</td><td class="text-end text-muted">{{ c.minimo or '' }}</td>
+<td><a class="small" href="{{ url_for('estoque.consumiveis', c=c.nome) }}#movs">movimentos</a></td></tr>{% endfor %}
+</tbody></table></div></div>
+<div class="z-card" id="movs"><h2>Movimentos {% if filtro %}de {{ filtro }} <a class="small ms-2" href="{{ url_for('estoque.consumiveis') }}">(todos)</a>{% else %}recentes{% endif %}</h2>
+<div class="table-responsive"><table class="table table-sm z-tab"><thead><tr><th>Data</th><th>Consumível</th><th>Site</th><th>Movimento</th><th class="text-end">Qtd</th><th>Destino</th><th>Chamado</th><th>Resp.</th><th>Obs</th></tr></thead><tbody>
+{% for m in movs %}<tr><td>{{ m.data|data }}</td><td>{{ m.consumivel }}</td><td>{{ m.site }}</td><td>{{ m.movimento }}</td><td class="text-end">{{ m.qtd }}</td><td class="small">{{ m.destino or '' }}</td><td>{{ m.chamado or '' }}</td><td class="small">{{ m.resp or '' }}</td><td class="small">{{ m.obs or '' }}</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}

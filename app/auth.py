@@ -90,6 +90,15 @@ def criar_usuario(nome, email, senha, perfil='Operador', provisoria=False):
 
 
 # --------------------------------------------------------------------------- hooks
+def _versao():
+    import os
+    try:
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'VERSAO'), encoding='utf-8') as fh:
+            return fh.read().strip()
+    except OSError:
+        return ''
+
+
 def registrar_hooks(app):
     @app.before_request
     def _carregar_usuario():
@@ -108,7 +117,7 @@ def registrar_hooks(app):
     @app.context_processor
     def _globais():
         from app.models import cfg
-        return dict(usuario=getattr(g, 'usuario', None), pode=pode, empresa=cfg('empresa'))
+        return dict(usuario=getattr(g, 'usuario', None), pode=pode, empresa=cfg('empresa'), versao=_versao())
 
     @app.errorhandler(403)
     def _proibido(_e):

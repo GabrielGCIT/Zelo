@@ -51,7 +51,7 @@
   {{ link('lancar.grade', 'fa-pen-to-square', 'Lançamentos', 'lancar.') }}
   {{ link('acompanhar.inicio', 'fa-route', 'Acompanhar', 'acompanhar.') }}
   {{ link('manutencao.inicio', 'fa-screwdriver-wrench', 'Manutenção', 'manutencao.') }}
-  {{ link('estoque.consumiveis', 'fa-boxes-stacked', 'Consumíveis', 'estoque.consumiveis') }}
+  {{ link('estoque.consumiveis', 'fa-boxes-stacked', 'Consumíveis', 'estoque.') }}
   {% endif %}
   <div class="z-grupo">Consultar</div>
   {{ link('consulta.itens', 'fa-laptop', 'Itens', 'consulta.item') }}
@@ -67,6 +67,7 @@
   {{ link('admin.config', 'fa-sliders', 'Configurações') }}
   {{ link('admin.auditoria', 'fa-shoe-prints', 'Auditoria') }}
   {% endif %}
+  <div class="small text-muted px-3 pt-3 opacity-75">Zelo {{ versao }}</div>
 </aside>
 {% endif %}
 <main class="{{ 'z-main' if usuario else 'z-main-solo' }}">

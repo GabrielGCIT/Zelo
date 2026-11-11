@@ -1,0 +1,38 @@
+{% extends 'base.html' %}{% from '_macros.html' import sit, item_link, pessoa_link %}
+{% block title %}Manutenção{% endblock %}
+{% block content %}
+<h1 class="z-titulo">Manutenção</h1>
+<p class="z-sub">Abrir, atualizar e fechar ocorrências. Atualizar e Fechar acham sozinhos a OS aberta do item. Com Backup, o empréstimo sai junto; ao fechar, diga se o backup volta. Peça usada sai do estoque do EC.</p>
+{% if pode('lancar') %}
+<div class="z-card"><h2>Lançar</h2>
+<form method="post" class="row g-2 align-items-end small"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+ <div class="col-md-2"><label class="form-label mb-0">Ação</label><select class="form-select form-select-sm" name="acao" id="m-acao" required><option></option>{% for a in acoes %}<option {{ 'selected' if d.acao==a }}>{{ a }}</option>{% endfor %}</select></div>
+ <div class="col-md-3"><label class="form-label mb-0">Item (plaqueta, tag ou IMEI)</label><input class="form-control form-control-sm z-mono" name="item" value="{{ d.item or '' }}" required></div>
+ <div class="col-md-4"><label class="form-label mb-0">Defeito</label><input class="form-control form-control-sm" name="defeito" value="{{ d.defeito or '' }}"></div>
+ <div class="col-md-3"><label class="form-label mb-0">Status (vazio = automático)</label><select class="form-select form-select-sm" name="status"><option value=""></option>{% for s in status %}<option {{ 'selected' if d.status==s }}>{{ s }}</option>{% endfor %}</select></div>
+ <div class="col-md-2"><label class="form-label mb-0">Fornecedor</label><select class="form-select form-select-sm" name="fornecedor"><option value=""></option>{% for s in fornec %}<option {{ 'selected' if d.fornecedor==s }}>{{ s }}</option>{% endfor %}</select></div>
+ <div class="col-md-2"><label class="form-label mb-0">Nº caso fornecedor</label><input class="form-control form-control-sm" name="caso" value="{{ d.caso or '' }}"></div>
+ <div class="col-md-2"><label class="form-label mb-0">Visita agendada</label><input type="datetime-local" class="form-control form-control-sm" name="visita" value="{{ d.visita or '' }}"></div>
+ <div class="col-md-2"><label class="form-label mb-0">Técnico MB</label><select class="form-select form-select-sm" name="tecnico"><option value=""></option>{% for s in tecnicos %}<option {{ 'selected' if d.tecnico==s }}>{{ s }}</option>{% endfor %}</select></div>
+ <div class="col-md-2"><label class="form-label mb-0">Nº chamado</label><input class="form-control form-control-sm" name="chamado" value="{{ d.chamado or '' }}"></div>
+ <div class="col-md-2"><label class="form-label mb-0">Backup (pool livre)</label><input class="form-control form-control-sm z-mono" name="backup" list="dl-pool" value="{{ d.backup or '' }}"><datalist id="dl-pool">{% for p in pool %}<option value="{{ p }}">{% endfor %}</datalist></div>
+ <div class="col-md-4"><label class="form-label mb-0">Peça usada (estoque EC)</label><select class="form-select form-select-sm" name="peca"><option value=""></option>{% for s in pecas %}<option {{ 'selected' if d.peca==s }}>{{ s }}</option>{% endfor %}</select></div>
+ <div class="col-md-1"><label class="form-label mb-0">Qtd</label><input class="form-control form-control-sm" name="qtd" value="{{ d.qtd or '' }}"></div>
+ <div class="col-md-4"><label class="form-label mb-0">O que foi feito (ao fechar)</label><input class="form-control form-control-sm" name="feito" value="{{ d.feito or '' }}"></div>
+ <div class="col-md-1"><label class="form-label mb-0">Backup volta?</label><select class="form-select form-select-sm" name="backup_volta"><option value=""></option><option {{ 'selected' if d.backup_volta=='Sim' }}>Sim</option><option {{ 'selected' if d.backup_volta=='Não' }}>Não</option></select></div>
+ <div class="col-md-5"><label class="form-label mb-0">Observação</label><input class="form-control form-control-sm" name="obs" value="{{ d.obs or '' }}"></div>
+ <div class="col-md-2"><button class="btn btn-sm btn-zelo w-100"><i class="fa fa-check me-1"></i>Registrar</button></div>
+</form></div>{% endif %}
+<div class="z-card"><h2>Ocorrências abertas <span class="badge text-bg-secondary">{{ abertas|length }}</span></h2>
+{% if not abertas %}<p class="text-muted">Nenhuma ocorrência aberta.</p>{% else %}
+<div class="table-responsive"><table class="table table-sm align-middle z-tab"><thead><tr><th>OS</th><th>Item</th><th>Modelo</th><th>Status</th><th>Abertura</th><th>Dias</th><th>Com quem</th><th>Backup</th><th>Defeito</th><th>Fornecedor / caso</th><th></th></tr></thead><tbody>
+{% for m in abertas %}{% set it = itens.get(m.item) %}<tr><td class="z-mono">{{ m.id }}</td><td>{{ item_link(m.item) }}</td><td class="small">{{ it.modelo if it else '' }}</td><td>{{ sit(m.status) }}</td>
+<td>{{ m.abertura|data }}</td><td>{{ dias_desde(m.abertura) if m.abertura else '—' }}</td><td>{{ pessoa_link(it.matricula, it.com_quem) if it and it.matricula else '—' }}</td>
+<td>{{ item_link(m.substituto) if m.substituto else '—' }}</td><td class="small">{{ m.defeito or '' }}</td><td class="small">{{ m.fornecedor or '' }} {{ m.caso or '' }}{% if m.visita %}<div class="text-muted">visita {{ m.visita }}</div>{% endif %}</td>
+<td class="text-nowrap">{% if pode('lancar') %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('manutencao.inicio', acao='Atualizar ocorrência', item=m.item) }}">Atualizar</a> <a class="btn btn-sm btn-outline-success" href="{{ url_for('manutencao.inicio', acao='Fechar ocorrência', item=m.item) }}">Fechar</a>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>{% endif %}</div>
+<div class="z-card"><h2>Fechadas recentes</h2>{% if not fechadas %}<p class="text-muted">Nenhuma.</p>{% else %}
+<div class="table-responsive"><table class="table table-sm z-tab"><thead><tr><th>OS</th><th>Item</th><th>Status</th><th>Abertura</th><th>Retorno</th><th>O que foi feito</th><th>Peças</th></tr></thead><tbody>
+{% for m in fechadas %}<tr><td class="z-mono">{{ m.id }}</td><td>{{ item_link(m.item) }}</td><td>{{ sit(m.status) }}</td><td>{{ m.abertura|data }}</td><td>{{ m.retorno|data }}</td><td class="small">{{ m.solucao or '' }}</td><td class="small">{{ m.pecas or '' }}</td></tr>{% endfor %}
+</tbody></table></div>{% endif %}</div>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends 'base.html' %}{% from '_macros.html' import sit, linha_link %}
+{% block title %}Conferência de linhas{% endblock %}
+{% set COR = {'Bloquear':'danger','Validar com a Easy (ligar)':'warning','OK – ajustar cadastro':'success','OK':'primary'} %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center gap-2"><div><h1 class="z-titulo">Conferência Easy × Zelo × AirWatch</h1>
+<p class="z-sub">Envie o controle que a Easy Team mandou e o relatório de aparelhos do AirWatch. Cada linha recebe uma decisão; o retorno da ligação fica registrado aqui.</p></div></div>
+<div class="z-card"><form method="post" enctype="multipart/form-data" class="row g-2 align-items-end small"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+ <div class="col-md-4"><label class="form-label mb-0">Controle da Easy (.xlsx)</label><input type="file" class="form-control form-control-sm" name="easy" accept=".xlsx" required></div>
+ <div class="col-md-4"><label class="form-label mb-0">Relatório do AirWatch (.xlsx)</label><input type="file" class="form-control form-control-sm" name="airwatch" accept=".xlsx" required></div>
+ <div class="col-md-2"><button class="btn btn-sm btn-zelo w-100"><i class="fa fa-play me-1"></i>Rodar análise</button></div>
+</form></div>
+{% if rodada %}
+<div class="z-card"><div class="d-flex flex-wrap gap-2 align-items-center mb-2"><h2 class="m-0">Rodada {{ rodada }}</h2>
+ <form method="get" class="d-flex gap-1 ms-3"><select class="form-select form-select-sm" name="rodada" onchange="this.form.submit()">{% for r in rodadas %}<option {{ 'selected' if r==rodada }}>{{ r }}</option>{% endfor %}</select></form>
+ <a class="btn btn-sm btn-outline-secondary ms-auto" href="{{ url_for('linhas.analise_xlsx', rodada=rodada) }}"><i class="fa fa-file-excel me-1"></i>Baixar Excel</a></div>
+<div class="row g-2 mb-2">{% for d in ordem %}<div class="col-md-3"><a class="text-decoration-none" href="{{ url_for('linhas.analise', rodada=rodada, decisao=d) }}">
+ <div class="border rounded p-2 h-100 {{ 'border-2 border-' ~ COR[d] if dec==d }}"><div class="d-flex align-items-baseline gap-2"><span class="fs-4 fw-bold text-{{ COR[d] }}">{{ cnt[d] }}</span><span class="fw-bold text-{{ COR[d] }}">{{ d }}</span></div>
+ <div class="small text-muted">{{ criterio[d] }}</div></div></a></div>{% endfor %}</div>
+<form method="get" class="d-flex gap-2 mb-2"><input type="hidden" name="rodada" value="{{ rodada }}"><input type="hidden" name="decisao" value="{{ dec }}">
+ <input class="form-control form-control-sm" style="max-width:280px" name="q" value="{{ q }}" placeholder="Linha ou nome"><button class="btn btn-sm btn-outline-secondary">Filtrar</button>
+ {% if dec or q %}<a class="btn btn-sm btn-link" href="{{ url_for('linhas.analise', rodada=rodada) }}">limpar ({{ total }} linhas)</a>{% endif %}</form>
+<div class="table-responsive"><table class="table table-sm align-middle z-tab small">
+<thead><tr><th>Linha</th><th>Usuário (Easy)</th><th>Zelo</th><th>AirWatch</th><th>Decisão</th><th>Motivo / ação</th><th style="min-width:300px">Retorno da ligação</th></tr></thead><tbody>
+{% for a in linhas %}<tr><td>{{ linha_link(a.numero) }}<div class="text-muted">{{ a.operadora }} {{ a.conta }}</div></td>
+<td>{{ a.usuario_easy }}{% if a.sem_consumo %}<div><span class="badge text-bg-light border">sem consumo 2 meses</span></div>{% endif %}<div class="text-muted">{{ a.easy_x_mb }}</div></td>
+<td>{{ sit(a.sit_mb) }}<div>{{ a.com_quem or '' }}</div></td>
+<td>{{ a.aw_visto }}<div class="text-muted">{{ a.aw_aparelho }}</div>{% if a.aw_usuario %}<div class="text-muted">{{ a.aw_usuario }} · {{ a.aw_modelo }}</div>{% endif %}</td>
+<td><span class="badge text-bg-{{ COR[a.decisao] }}">{{ a.decisao }}</span></td>
+<td>{{ a.motivo }}<div class="fw-semibold">{{ a.acao }}</div></td>
+<td>{% if a.decisao.startswith('Validar') or a.quem_atendeu or a.retorno %}<form method="post" action="{{ url_for('linhas.analise_retorno', aid=a.id) }}" class="d-flex gap-1">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="decisao" value="{{ dec }}"><input type="hidden" name="q" value="{{ q }}">
+ <input class="form-control form-control-sm" name="quem_atendeu" placeholder="Quem atendeu" value="{{ a.quem_atendeu or '' }}"><input class="form-control form-control-sm" name="retorno" placeholder="Retorno Easy" value="{{ a.retorno or '' }}">
+ <button class="btn btn-sm btn-outline-secondary"><i class="fa fa-check"></i></button></form>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endif %}
+{% endblock %}

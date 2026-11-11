@@ -311,6 +311,31 @@ class Contrato(db.Model):
     obs = db.Column(db.Text)
 
 
+class AnaliseLinha(db.Model):
+    """Uma linha de uma rodada da conferência Easy × Zelo × AirWatch. 'quem_atendeu' e 'retorno' a equipe preenche."""
+    __tablename__ = 'analise_linhas'
+    id = db.Column(db.Integer, primary_key=True)
+    rodada = db.Column(db.String(25), index=True)
+    numero = db.Column(db.String(11), index=True)
+    operadora = db.Column(db.String(20))
+    conta = db.Column(db.String(30))
+    usuario_easy = db.Column(db.String(150))
+    cc_easy = db.Column(db.String(60))
+    sem_consumo = db.Column(db.Boolean, default=False)
+    sit_mb = db.Column(db.String(30))
+    com_quem = db.Column(db.String(150))
+    easy_x_mb = db.Column(db.String(60))
+    aw_visto = db.Column(db.String(60))
+    aw_aparelho = db.Column(db.String(120))
+    aw_usuario = db.Column(db.String(150))
+    aw_modelo = db.Column(db.String(80))
+    decisao = db.Column(db.String(40), index=True)
+    motivo = db.Column(db.String(300))
+    acao = db.Column(db.String(300))
+    quem_atendeu = db.Column(db.String(150))
+    retorno = db.Column(db.String(300))
+
+
 class Config(db.Model):
     """Parâmetros (chave/valor): prazo padrão de empréstimo, data do fluxo de preparação etc."""
     __tablename__ = 'config'

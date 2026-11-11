@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}Item novo{% endblock %}
+{% block content %}
+<h1 class="z-titulo">Cadastrar item novo</h1>
+<p class="z-sub">Cadastra em Itens e lança a Entrada no estoque. Celular: o código é o IMEI 1 (com dígito verificador conferido).</p>
+<div class="z-card"><form method="post" id="f-item" class="row g-2 small"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{% for k, rot in campos %}<div class="{{ 'col-12' if k=='obs' else 'col-md-3' }}"><label class="form-label mb-0">{{ rot }}</label>
+{% if k in opcoes %}<select class="form-select form-select-sm" name="{{ k }}"><option value=""></option>{% for o in opcoes[k] %}<option {{ 'selected' if d[k]==o }}>{{ o }}</option>{% endfor %}</select>
+{% elif k in ('data_nf','garantia') %}<input type="date" class="form-control form-control-sm" name="{{ k }}" value="{{ d[k] }}">
+{% else %}<input class="form-control form-control-sm {{ 'z-mono' if k in ('codigo','plaqueta','tag','imei1','imei2','eid') }}" name="{{ k }}" value="{{ d[k] }}">{% endif %}</div>{% endfor %}
+<div class="col-12 d-flex gap-3 align-items-center mt-2"><button class="btn btn-zelo"><i class="fa fa-check me-1"></i>Cadastrar</button><span id="conf" class="fw-bold"></span></div>
+</form></div>
+{% endblock %}
+{% block scripts %}<script>
+const f = document.getElementById('f-item'); let t;
+f.addEventListener('input', () => { clearTimeout(t); t = setTimeout(async () => {
+  const d = Object.fromEntries(new FormData(f)); delete d.csrf_token;
+  if (!Object.values(d).some(v => v)) return;
+  const r = await (await fetch('{{ url_for("estoque.api_conferir_item") }}', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': zCsrf()}, body: JSON.stringify(d)})).json();
+  const c = document.getElementById('conf'); c.textContent = r.msg; c.className = 'fw-bold z-' + (r.status === 'erro' ? 'erro' : r.status === 'aviso' ? 'aviso' : 'ok'); }, 300); });
+f.addEventListener('change', () => f.dispatchEvent(new Event('input')));
+</script>{% endblock %}
