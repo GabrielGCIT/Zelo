@@ -259,7 +259,7 @@ def conferir_linha(d, aba, hoje=None, contexto=None):
         prazo_dias = prazo_dias or int(cfg('prazo_emprestimo') or 30)
 
     # kit de mouse/teclado
-    kit, acess_txt = [], None
+    kit, acess_txt, sem_kit_adm = [], None, False
     if kitok:
         nbq = Item.query.filter(Item.matricula == pid, Item.categoria == 'Notebook',
                                 Item.situacao.in_(('Em uso', 'Reservada'))).count() if pid else 0
@@ -267,13 +267,13 @@ def conferir_linha(d, aba, hoje=None, contexto=None):
         acess = d['acess'] or ('Mouse + teclado' if adm and it.kit != 'Completo' else 'Nenhum')
         if acess not in KIT_OPCOES:
             return erro('Acessórios: escolha Mouse + teclado, Só mouse, Só teclado ou Nenhum')
-        if adm and it.kit != 'Completo' and acess == 'Nenhum':
-            return erro('Admissão (a pessoa não tem notebook): leva mouse + teclado')
+        # Kit é sugestão, não trava: tem notebook que sai sem kit. Vazio = automático; "Nenhum" = sai sem (com aviso).
+        sem_kit_adm = adm and it.kit != 'Completo' and acess == 'Nenhum'
         if it.kit != 'Completo':
             kit, falta = escolher_kit(it.fabricante, acess in ('Mouse + teclado', 'Só mouse'),
                                       acess in ('Mouse + teclado', 'Só teclado'), ctx['kit'])
             if falta:
-                return erro(falta + ('' if adm else ' ou escolha Nenhum'))
+                return erro(falta + ': dê entrada em Consumíveis ou escolha Nenhum em Acessórios')
         acess_txt = '; '.join(kit) if kit else (acess if acess != 'Nenhum' else None)
 
     # monta os lançamentos
@@ -321,6 +321,8 @@ def conferir_linha(d, aba, hoje=None, contexto=None):
 
     # mensagem de resultado (igual à coluna Conferência)
     avisos = []
+    if kitok and sem_kit_adm:
+        avisos.append('primeiro notebook da pessoa saindo sem mouse/teclado')
     if nova:
         avisos.append(f'{nova["nome"]} será cadastrado(a) em Pessoas')
     if data_mov < (date.fromisoformat(hoje) - timedelta(days=365)).isoformat():

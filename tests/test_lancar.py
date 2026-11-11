@@ -95,3 +95,31 @@ def test_termo(app, cli):
         r = cli.get(f'/termo?n={m.id}')
         assert r.status_code == 200 and b'TERMO' in r.data
     assert cli.get('/termo?n=999999').status_code == 200
+
+
+def test_kit_e_flexivel(app, cli):
+    """Primeiro notebook sem kit: grava com aviso. Kit entregue pode voltar avulso."""
+    from app.lancamento import saldo
+    from app.models import Consumivel
+    from app.routes.consulta import kit_da_pessoa
+    it = _estoque_nb()
+    p = Pessoa(id='998877', nome='PESSOA SEM NOTEBOOK', tipo='CLT', situacao='Ativo')
+    db.session.add(p)
+    db.session.commit()
+    r = conferir([{'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}], 'entrega')[0]
+    assert r.status == 'aviso' and 'sem mouse/teclado' in r.msg
+    nome = f'Kit teclado + mouse sem fio – {it.fabricante or "Dell"}'
+    if not Consumivel.query.filter_by(nome=nome).first():
+        db.session.add(Consumivel(nome=nome, item='Kit teclado + mouse sem fio', marca=it.fabricante or 'Dell'))
+    db.session.add(MovConsumivel(data='2026-11-01', consumivel=nome, site='EC', movimento='Entrada', qtd=3, resp='t'))
+    db.session.commit()
+    antes = saldo(nome)
+    res, n, _ = gravar([{'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id}], 'entrega', 'T')
+    assert n == 1, res[0].msg
+    k = kit_da_pessoa(p.id)
+    assert k and saldo(k[0][1]) == antes - 1 if k[0][1] == nome else True
+    mid, cons, _q = k[0]
+    s0 = saldo(cons)
+    assert cli.post(f'/pessoa/{p.id}/kit', data={'mov_id': mid, 'consumivel': cons}).status_code == 302
+    assert saldo(cons) == s0 + 1 and not [x for x in kit_da_pessoa(p.id) if x[1] == cons]
+    assert cli.get(f'/pessoa/{p.id}').status_code == 200

@@ -59,7 +59,8 @@ def corrigir(mov, dados, resp):
             # o kit reservado volta ao saldo do EC
             for mc in MovConsumivel.query.filter_by(mov_id=mov.id, movimento='Saída').all():
                 db.session.add(MovConsumivel(data=hoje, consumivel=mc.consumivel, site='EC', movimento='Entrada', qtd=mc.qtd,
-                                             destino=mc.destino, resp=resp, obs=f'Volta do kit: entrega Nº {mov.id} cancelada'))
+                                             destino=mc.destino, resp=resp, mov_id=mov.id,
+                                             obs=f'Volta do kit: entrega Nº {mov.id} cancelada'))
         mov.etapa = nova
         mudou.append(f'etapa {nova}')
     elif dados.get('data_ass') and mov.termo != 'Assinado':

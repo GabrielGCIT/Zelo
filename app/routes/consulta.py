@@ -175,8 +175,45 @@ def pessoa(pid):
     linhas = Linha.query.filter_by(matricula=pid, situacao='Em uso').all()
     acess = EmprestimoAcessorio.query.filter_by(matricula=pid).order_by(EmprestimoAcessorio.id.desc()).all()
     movs = Movimentacao.query.filter_by(matricula=pid).order_by(Movimentacao.id.desc()).limit(300).all()
-    return render_template('pessoa.html', p=p, itens=itens, linhas=linhas, acess=acess, movs=movs,
+    kit = kit_da_pessoa(pid)
+    return render_template('pessoa.html', p=p, itens=itens, linhas=linhas, acess=acess, movs=movs, kit=kit,
                            campos=CAMPOS_PESSOA, opcoes=OPCOES)
+
+
+def kit_da_pessoa(pid):
+    """Mouse/teclado/fonte que saíram do EC em entregas para a pessoa e ainda não voltaram: [(mov, consumível, qtd)]."""
+    from app.models import MovConsumivel
+    ids = [i for (i,) in db.session.query(Movimentacao.id).filter(Movimentacao.matricula == pid,
+                                                                 Movimentacao.tipo.in_(('Entrega', 'Empréstimo')))]
+    if not ids:
+        return []
+    saldo = {}
+    for mc in MovConsumivel.query.filter(MovConsumivel.mov_id.in_(ids)):
+        k = (mc.mov_id, mc.consumivel)
+        saldo[k] = saldo.get(k, 0) + ((mc.qtd or 0) if mc.movimento == 'Saída' else -(mc.qtd or 0))
+    return [(m, c, q) for (m, c), q in sorted(saldo.items(), reverse=True) if q > 0]
+
+
+@consulta_bp.route('/pessoa/<path:pid>/kit', methods=['POST'])
+@exige('lancar')
+def devolver_kit(pid):
+    """A pessoa devolveu só o mouse ou o teclado (não usa): volta ao saldo do EC, sem mexer no notebook."""
+    from datetime import date as _d
+    from flask import g
+    from app.models import MovConsumivel
+    p = db.session.get(Pessoa, pid) or abort(404)
+    mov_id, cons = request.form.get('mov_id', ''), request.form.get('consumivel', '')
+    alvo = [x for x in kit_da_pessoa(pid) if str(x[0]) == mov_id and x[1] == cons]
+    if not alvo:
+        flash('Esse acessório não consta mais com a pessoa.', 'danger')
+    else:
+        db.session.add(MovConsumivel(data=_d.today().isoformat(), consumivel=cons, site='EC', movimento='Entrada', qtd=1,
+                                     destino=p.nome, resp=g.usuario.nome, mov_id=int(mov_id),
+                                     obs=f'Devolução avulsa do kit por {p.nome} (entrega Nº {mov_id})'))
+        db.session.commit()
+        registrar_log('kit devolvido', f'{p.id} {p.nome}: {cons} (Nº {mov_id})')
+        flash(f'{cons} voltou ao estoque do EC.', 'success')
+    return redirect(url_for('consulta.pessoa', pid=pid))
 
 
 @consulta_bp.route('/historico')
