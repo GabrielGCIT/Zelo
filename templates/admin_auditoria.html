@@ -1,0 +1,7 @@
+{% extends 'base.html' %}{% block title %}Auditoria{% endblock %}
+{% block content %}
+<h1 class="z-titulo">Auditoria</h1><p class="z-sub">Quem fez o quê (últimos 500 registros).</p>
+<form class="mb-2" method="get"><input class="form-control form-control-sm" style="max-width:320px" name="q" value="{{ q }}" placeholder="Filtrar"></form>
+<div class="z-card"><table class="table table-sm"><thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Detalhe</th></tr></thead>
+{% for l in logs %}<tr><td class="text-nowrap">{{ l.data_hora.strftime('%d/%m/%Y %H:%M') }}</td><td>{{ l.usuario }}</td><td>{{ l.acao }}</td><td class="small">{{ l.detalhe }}</td></tr>{% endfor %}</table></div>
+{% endblock %}

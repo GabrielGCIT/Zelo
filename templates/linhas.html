@@ -1,0 +1,15 @@
+{% extends 'base.html' %}{% from '_macros.html' import sit, item_link, pessoa_link, linha_link, paginacao %}
+{% block title %}Linhas{% endblock %}
+{% block content %}
+<div class="d-flex align-items-start flex-wrap gap-2"><div><h1 class="z-titulo">Linhas</h1><p class="z-sub">Linhas móveis. Situação e aparelho saem do Histórico.</p></div>
+{% if pode('lancar') %}<div class="ms-auto d-flex gap-2"><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('linhas.analise') }}"><i class="fa fa-magnifying-glass-chart me-1"></i>Conferência Easy × AirWatch</a>
+<form class="d-flex gap-1" method="post" action="{{ url_for('linhas.nova') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input class="form-control form-control-sm" name="numero" placeholder="Nova linha (11 dígitos)" style="width:170px"><select class="form-select form-select-sm" name="operadora" style="width:100px">{% for o in operadoras %}<option>{{ o }}</option>{% endfor %}</select><button class="btn btn-sm btn-zelo">Cadastrar</button></form></div>{% endif %}</div>
+<form class="z-card row g-2 align-items-end" method="get">
+ <div class="col-md-4"><label class="form-label small">Buscar</label><input class="form-control form-control-sm" name="q" value="{{ f.q }}" placeholder="número, pessoa, aparelho, CC"></div>
+ <div class="col-md-2"><label class="form-label small">Situação</label><select class="form-select form-select-sm" name="situacao" onchange="this.form.submit()"><option value="">Todas</option>{% for o in ['Em uso','Livre','Cancelada'] %}<option {{ 'selected' if f.situacao==o }}>{{ o }}</option>{% endfor %}</select></div>
+ <div class="col-md-2"><label class="form-label small">Operadora</label><select class="form-select form-select-sm" name="operadora" onchange="this.form.submit()"><option value="">Todas</option>{% for o in operadoras %}<option {{ 'selected' if f.operadora==o }}>{{ o }}</option>{% endfor %}</select></div>
+ <div class="col-auto"><button class="btn btn-sm btn-zelo">Filtrar</button></div>
+</form>
+<div class="z-card"><div class="table-responsive"><table class="table table-sm table-hover"><thead><tr><th>Linha</th><th>Operadora</th><th>Situação</th><th>Com quem</th><th>Aparelho</th><th>Modelo</th><th>Desde</th><th>CC</th></tr></thead>
+{% for l in pag.items %}<tr><td>{{ linha_link(l.numero) }}</td><td>{{ l.operadora or '' }}</td><td>{{ sit(l.situacao) }}</td><td>{{ pessoa_link(l.matricula, l.com_quem) }}</td><td>{{ item_link(l.aparelho) }}</td><td>{{ modelos.get(l.aparelho, '') }}</td><td>{{ l.desde|data }}</td><td class="small">{{ l.cc or '' }}</td></tr>{% else %}<tr><td colspan="8" class="z-vazio">Nenhuma linha.</td></tr>{% endfor %}</table></div>{{ paginacao(pag, 'linhas.lista') }}</div>
+{% endblock %}

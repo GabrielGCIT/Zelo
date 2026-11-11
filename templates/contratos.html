@@ -1,0 +1,10 @@
+{% extends 'base.html' %}{% from '_macros.html' import sit, item_link, pessoa_link %}
+{% block title %}Contratos e garantias{% endblock %}
+{% block content %}
+<h1 class="z-titulo">Contratos e garantias</h1><p class="z-sub">Locações por contrato e garantias vencendo em 90 dias.</p>
+<div class="z-card"><h2>Contratos</h2><table class="table table-sm"><thead><tr><th>Contrato</th><th>Locadora</th><th>Descrição</th><th>Início</th><th>Fim</th><th>Padrão</th><th>Itens locados da locadora</th></tr></thead>
+{% for c in cts %}<tr><td>{{ c.contrato }}</td><td>{{ c.locadora }}</td><td>{{ c.descricao or '' }}</td><td>{{ c.inicio|data }}</td><td class="{{ 'z-erro' if c.fim and c.fim < hoje else '' }}">{{ c.fim|data }}</td><td>{{ c.padrao or '' }}</td><td>{{ locados.get(c.locadora, 0) }}</td></tr>{% else %}<tr><td colspan="7" class="text-muted">Nenhum contrato.</td></tr>{% endfor %}</table>
+<div class="small text-muted mt-2">Itens locados por locadora: {% for k, v in locados.items() %}{{ k or '(sem locadora)' }}: {{ v }}{{ ' · ' if not loop.last }}{% endfor %}</div></div>
+<div class="z-card"><h2>Garantias vencendo em 90 dias ({{ garantias|length }})</h2><table class="table table-sm"><thead><tr><th>Item</th><th>Categoria</th><th>Modelo</th><th>Situação</th><th>Com quem</th><th>Fim da garantia</th></tr></thead>
+{% for i in garantias %}<tr><td>{{ item_link(i.codigo) }}</td><td>{{ i.categoria }}</td><td>{{ i.modelo or '' }}</td><td>{{ sit(i.situacao) }}</td><td>{{ pessoa_link(i.matricula, i.com_quem) }}</td><td>{{ i.garantia|data }}</td></tr>{% else %}<tr><td colspan="6" class="text-muted">Nenhuma.</td></tr>{% endfor %}</table></div>
+{% endblock %}

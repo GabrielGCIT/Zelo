@@ -1,0 +1,16 @@
+{% extends 'base.html' %}{% from '_macros.html' import sit, item_link, pessoa_link, mov_tabela %}
+{% block title %}Linha {{ ln.numero }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-2 mb-1"><h1 class="z-titulo m-0 z-mono">{{ ln.numero }}</h1>{{ sit(ln.situacao) }}
+{% if pode('lancar') %}<a class="btn btn-sm btn-zelo ms-auto" href="{{ url_for('lancar.grade', linha=ln.numero, aba='mobile') }}"><i class="fa fa-pen-to-square me-1"></i>Lançar para esta linha</a>{% endif %}</div>
+<p class="z-sub">{{ ln.operadora or '' }} {{ ln.plano or '' }}</p>
+<div class="row g-3"><div class="col-lg-5"><div class="z-card"><h2>Situação atual</h2><dl class="z-def">
+ <dt>Situação</dt><dd>{{ sit(ln.situacao) }}</dd><dt>Com quem</dt><dd>{{ pessoa_link(ln.matricula, ln.com_quem) or '—' }}</dd>
+ <dt>Aparelho</dt><dd>{% if ap %}{{ item_link(ap.codigo) }} · {{ ap.modelo or '' }}{% else %}—{% endif %}</dd><dt>Desde</dt><dd>{{ ln.desde|data or '—' }}</dd></dl></div></div>
+<div class="col-lg-7"><div class="z-card"><h2>Cadastro</h2><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="row g-2">
+{% for k, rot in campos %}<div class="{{ 'col-12' if k=='obs' else 'col-md-4' }}"><label class="form-label small text-muted mb-0">{{ rot }}</label>
+{% if k in opcoes %}<select class="form-select form-select-sm" name="{{ k }}" {{ '' if pode('lancar') else 'disabled' }}><option value=""></option>{% for o in opcoes[k] %}<option {{ 'selected' if ln[k]==o }}>{{ o }}</option>{% endfor %}</select>
+{% else %}<input class="form-control form-control-sm" name="{{ k }}" value="{{ ln[k] or '' }}" {{ '' if pode('lancar') else 'readonly' }}>{% endif %}</div>{% endfor %}
+</div>{% if pode('lancar') %}<button class="btn btn-sm btn-zelo mt-3">Salvar</button>{% endif %}</form></div></div></div>
+<div class="z-card"><h2>Histórico da linha</h2>{{ mov_tabela(movs) }}</div>
+{% endblock %}

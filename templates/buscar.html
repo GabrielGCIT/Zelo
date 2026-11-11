@@ -1,0 +1,9 @@
+{% extends 'base.html' %}{% from '_macros.html' import sit, item_link, pessoa_link, linha_link %}
+{% block title %}Busca{% endblock %}
+{% block content %}
+<h1 class="z-titulo">Busca: “{{ q }}”</h1><p class="z-sub">{{ itens|length }} itens · {{ pessoas|length }} pessoas · {{ linhas|length }} linhas</p>
+{% if itens %}<div class="z-card"><h2>Itens</h2><table class="table table-sm">{% for i in itens %}<tr><td>{{ item_link(i.codigo) }}</td><td>{{ i.categoria }}</td><td>{{ i.modelo or '' }}</td><td>{{ sit(i.situacao) }}</td><td>{{ pessoa_link(i.matricula, i.com_quem) }}</td></tr>{% endfor %}</table></div>{% endif %}
+{% if pessoas %}<div class="z-card"><h2>Pessoas</h2><table class="table table-sm">{% for p in pessoas %}<tr><td class="z-mono">{{ p.id }}</td><td>{{ pessoa_link(p.id, p.nome) }}</td><td>{{ p.tipo or '' }}</td><td>{{ sit(p.situacao) }}</td></tr>{% endfor %}</table></div>{% endif %}
+{% if linhas %}<div class="z-card"><h2>Linhas</h2><table class="table table-sm">{% for l in linhas %}<tr><td>{{ linha_link(l.numero) }}</td><td>{{ sit(l.situacao) }}</td><td>{{ pessoa_link(l.matricula, l.com_quem) }}</td></tr>{% endfor %}</table></div>{% endif %}
+{% if not (itens or pessoas or linhas) %}<div class="z-card z-vazio">Nada encontrado.</div>{% endif %}
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends 'base.html' %}{% from '_macros.html' import sit, pessoa_link, paginacao %}
+{% block title %}Pessoas{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center"><div><h1 class="z-titulo">Pessoas</h1><p class="z-sub">Colaboradores, terceiros e postos que recebem ativos.</p></div>
+{% if pode('lancar') %}<a class="btn btn-sm btn-zelo ms-auto" href="{{ url_for('lancar.pessoa') }}"><i class="fa fa-user-plus me-1"></i>Cadastrar / desligar</a>{% endif %}</div>
+<form class="z-card row g-2 align-items-end" method="get">
+  <div class="col-md-4"><label class="form-label small">Buscar</label><input class="form-control form-control-sm" name="q" value="{{ f.q }}" placeholder="nome, matrícula, e-mail, CPF"></div>
+  <div class="col-md"><label class="form-label small">Tipo</label><select class="form-select form-select-sm" name="tipo" onchange="this.form.submit()"><option value="">Todos</option>{% for o in tipos %}<option {{ 'selected' if f.tipo==o }}>{{ o }}</option>{% endfor %}</select></div>
+  <div class="col-md"><label class="form-label small">Situação</label><select class="form-select form-select-sm" name="situacao" onchange="this.form.submit()"><option value="">Todas</option>{% for o in ['Ativo','Desligado'] %}<option {{ 'selected' if f.situacao==o }}>{{ o }}</option>{% endfor %}</select></div>
+  <div class="col-md"><label class="form-label small">Site</label><select class="form-select form-select-sm" name="site" onchange="this.form.submit()"><option value="">Todos</option>{% for o in sites %}<option {{ 'selected' if f.site==o }}>{{ o }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><button class="btn btn-sm btn-zelo">Filtrar</button></div>
+</form>
+<div class="z-card"><div class="table-responsive"><table class="table table-sm table-hover"><thead><tr><th>ID</th><th>Nome</th><th>Tipo</th><th>Empresa</th><th>CC</th><th>Site</th><th>Situação</th><th>Itens</th><th>Linhas</th></tr></thead>
+<tbody>{% for p in pag.items %}<tr><td class="z-mono">{{ p.id }}</td><td>{{ pessoa_link(p.id, p.nome) }}</td><td>{{ p.tipo or '' }}</td><td>{{ p.empresa or '' }}</td><td class="small">{{ p.cc or '' }}</td><td>{{ p.site or '' }}</td><td>{{ sit(p.situacao) }}</td><td>{{ n_itens.get(p.id, '') }}</td><td>{{ n_linhas.get(p.id, '') }}</td></tr>
+{% else %}<tr><td colspan="9" class="z-vazio">Ninguém encontrado.</td></tr>{% endfor %}</tbody></table></div>{{ paginacao(pag, 'consulta.pessoas') }}</div>
+{% endblock %}

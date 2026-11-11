@@ -1,0 +1,24 @@
+{% extends 'base.html' %}{% from '_macros.html' import sit, item_link, pessoa_link %}
+{% block title %}Minha fila{% endblock %}
+{% block content %}
+<h1 class="z-titulo">Minha fila</h1><p class="z-sub">O que precisa de ação hoje.</p>
+{% for s in secoes %}
+<div class="z-card"><div class="d-flex justify-content-between align-items-baseline"><h2>{{ s.titulo }} <span class="badge {{ 'text-bg-danger' if s.linhas else 'text-bg-light' }}">{{ s.linhas|length }}</span></h2><span class="small text-muted">{{ s.dica }}</span></div>
+{% if not s.linhas %}<div class="text-muted small">Nada pendente.</div>
+{% elif s.colunas == 'item' %}
+<div class="table-responsive"><table class="table table-sm table-hover"><thead><tr><th>Item</th><th>Categoria</th><th>Modelo</th><th>Situação</th><th>Com quem</th><th>Desde</th><th>Dias</th><th>Prazo</th><th>Etapa</th><th>Termo</th></tr></thead><tbody>
+{% for i in s.linhas[:200] %}<tr><td>{{ item_link(i.codigo) }}</td><td>{{ i.categoria }}</td><td>{{ i.modelo or '' }}</td><td>{{ sit(i.situacao) }}</td><td>{{ pessoa_link(i.matricula, i.com_quem) }}</td><td>{{ i.desde|data }}</td><td>{{ dias_desde(i.desde) if i.desde else '' }}</td><td class="{{ 'z-erro' if i.prazo and i.prazo < hoje else '' }}">{{ i.prazo|data }}</td><td>{{ i.etapa or '' }}</td><td>{{ i.termo or '' }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% elif s.colunas == 'acessorio' %}
+<table class="table table-sm"><thead><tr><th>Nº</th><th>Acessório</th><th>Qtd</th><th>Com quem</th><th>Desde</th><th>Prazo</th></tr></thead><tbody>
+{% for a in s.linhas %}<tr><td>EA-{{ '%04d'|format(a.id) }}</td><td>{{ a.consumivel }}</td><td>{{ a.qtd }}</td><td>{{ pessoa_link(a.matricula, a.nome) }}</td><td>{{ a.data|data }}</td><td class="z-erro">{{ a.prazo|data }}</td></tr>{% endfor %}</tbody></table>
+{% elif s.colunas == 'pessoa' %}
+<table class="table table-sm"><thead><tr><th>Pessoa</th><th>ID</th><th>Itens com ela</th></tr></thead><tbody>
+{% for p, n in s.linhas %}<tr><td>{{ pessoa_link(p.id, p.nome) }}</td><td class="z-mono">{{ p.id }}</td><td>{{ n }}</td></tr>{% endfor %}</tbody></table>
+{% elif s.colunas == 'contrato' %}
+<table class="table table-sm"><thead><tr><th>Contrato</th><th>Locadora</th><th>Fim</th></tr></thead><tbody>
+{% for c in s.linhas %}<tr><td>{{ c.contrato }}</td><td>{{ c.locadora }}</td><td>{{ c.fim|data }}</td></tr>{% endfor %}</tbody></table>
+{% endif %}
+</div>
+{% endfor %}
+{% endblock %}

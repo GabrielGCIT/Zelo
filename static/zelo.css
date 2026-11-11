@@ -1,0 +1,74 @@
+/* Zelo — mesma identidade do Lastro: marinho da marca + verde MB como acento */
+:root {
+  --mb-blue: #0d1628; --accent: #7AC143; --accent-dark: #5a9e2f; --accent-fg: #4d8a26;
+  --loaner: #6f42c1; --sidebar-w: 232px; --topbar-h: 52px;
+  --surface-0: #ffffff; --surface-1: #f5f6f7; --surface-2: #e9ecef; --borda: #dfe3e8; --texto-2: #5f6b76;
+}
+[data-bs-theme=dark] {
+  --surface-0: #1e1f22; --surface-1: #2b2d31; --surface-2: #313338; --borda: #3f4147; --texto-2: #a5adb5; --accent-fg: #9bd96a;
+}
+body { background: var(--surface-1); font-size: .9rem; }
+.z-topbar { position: fixed; inset: 0 0 auto 0; height: var(--topbar-h); background: var(--mb-blue); color: #fff;
+  display: flex; align-items: center; gap: 14px; padding: 0 14px; z-index: 1030; }
+.z-marca { color: #fff; text-decoration: none; font-weight: 700; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.z-marca small { font-weight: 400; color: #aab4c0; font-size: .72rem; }
+.z-logo { width: 28px; height: 28px; border-radius: 7px; background: var(--accent); color: var(--mb-blue);
+  display: inline-flex; align-items: center; justify-content: center; font-weight: 800; }
+.z-busca { flex: 0 1 480px; display: flex; align-items: center; background: rgba(255,255,255,.1); border-radius: 6px; padding: 0 10px; }
+.z-busca i { color: #aab4c0; }
+.z-busca input { flex: 1; background: transparent; border: 0; color: #fff; padding: 7px 8px; outline: none; font-size: .85rem; }
+.z-busca input::placeholder { color: #aab4c0; }
+.z-ico, .z-user { color: #dfe6ee !important; border: 0; }
+.z-user small { color: #aab4c0 !important; }
+.z-ico:hover, .z-user:hover { background: rgba(255,255,255,.12); }
+.z-sidebar { position: fixed; top: var(--topbar-h); bottom: 0; left: 0; width: var(--sidebar-w); overflow-y: auto;
+  background: var(--surface-0); border-right: 1px solid var(--borda); padding: 10px 8px 20px; z-index: 1020; }
+.z-sidebar .z-grupo { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--texto-2); margin: 14px 10px 4px; }
+.z-sidebar a { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; color: inherit; text-decoration: none; }
+.z-sidebar a i { width: 18px; text-align: center; color: var(--texto-2); }
+.z-sidebar a:hover { background: var(--surface-1); }
+.z-sidebar a.ativo { background: color-mix(in srgb, var(--accent) 18%, transparent); font-weight: 600; }
+.z-sidebar a.ativo i { color: var(--accent-fg); }
+.z-main { margin-left: var(--sidebar-w); padding: calc(var(--topbar-h) + 18px) 22px 40px; }
+.z-main-solo { padding: 40px 16px; }
+@media (max-width: 991px) {
+  .z-sidebar { transform: translateX(-100%); transition: transform .2s; box-shadow: 0 0 20px rgba(0,0,0,.2); }
+  body.z-menu-aberto .z-sidebar { transform: none; }
+  .z-main { margin-left: 0; padding-left: 14px; padding-right: 14px; }
+  .z-busca { display: none; }
+}
+h1.z-titulo { font-size: 1.35rem; font-weight: 700; margin: 0 0 2px; }
+.z-sub { color: var(--texto-2); margin-bottom: 16px; }
+.z-card { background: var(--surface-0); border: 1px solid var(--borda); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.z-card h2 { font-size: 1rem; font-weight: 700; margin-bottom: 12px; }
+.z-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.z-kpi { background: var(--surface-0); border: 1px solid var(--borda); border-radius: 8px; padding: 12px 14px; text-decoration: none; color: inherit; display: block; }
+.z-kpi:hover { border-color: var(--accent); }
+.z-kpi .r { font-size: .75rem; color: var(--texto-2); }
+.z-kpi .v { font-size: 1.7rem; font-weight: 700; line-height: 1.2; }
+.z-kpi.alerta .v { color: #c0392b; }
+.table { --bs-table-bg: transparent; margin-bottom: 0; }
+.table thead th { font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: var(--texto-2); font-weight: 600; white-space: nowrap; }
+.table td { vertical-align: middle; }
+.badge.text-bg-loaner { background: var(--loaner); color: #fff; }
+.badge.text-bg-light { border: 1px solid var(--borda); }
+.btn-zelo { background: var(--accent); border-color: var(--accent); color: #1e1f22; font-weight: 600; }
+.btn-zelo:hover { background: var(--accent-dark); border-color: var(--accent-dark); color: #fff; }
+.z-def { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; font-size: .86rem; }
+.z-def dt { color: var(--texto-2); font-weight: 500; }
+.z-def dd { margin: 0; word-break: break-word; }
+.z-mono { font-family: ui-monospace, Consolas, monospace; }
+a.z-link { color: var(--accent-fg); text-decoration: none; font-weight: 500; }
+a.z-link:hover { text-decoration: underline; }
+.z-vazio { color: var(--texto-2); text-align: center; padding: 24px; }
+.z-paginacao { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 10px; }
+/* grade de lançamento */
+.z-grade td { padding: 3px; }
+.z-grade .form-control, .z-grade .form-select { font-size: .82rem; padding: 4px 6px; min-width: 90px; }
+.z-grade td.z-res { min-width: 260px; font-size: .8rem; }
+.z-ok { color: #2e7d32; font-weight: 600; }
+.z-erro { color: #b3261e; font-weight: 600; }
+.z-aviso { color: #8a6100; font-weight: 600; }
+.z-login { max-width: 400px; margin: 6vh auto; }
+.z-login .z-logo { width: 44px; height: 44px; font-size: 1.4rem; border-radius: 10px; }
+@media print { .z-topbar, .z-sidebar, .no-print { display: none !important; } .z-main { margin: 0; padding: 0; } body { background: #fff; } }

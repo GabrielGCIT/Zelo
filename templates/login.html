@@ -1,0 +1,17 @@
+{% extends 'base.html' %}{% block title %}Entrar{% endblock %}
+{% block content %}
+<div class="z-login z-card p-4">
+  <div class="d-flex align-items-center gap-2 mb-3"><span class="z-logo">Z</span><div><div class="fw-bold fs-5">Zelo</div><div class="z-sub m-0">Gestão de ativos de TI</div></div></div>
+  {% if sem_usuario %}
+    <div class="alert alert-info mb-0">Esta instalação ainda não tem administrador. Use o endereço de <b>primeiro acesso</b> que aparece na janela do servidor do Zelo.</div>
+  {% else %}
+  {% with msgs = get_flashed_messages(with_categories=true) %}{% for c,m in msgs %}<div class="alert alert-{{c}} py-2">{{m}}</div>{% endfor %}{% endwith %}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="form-label">E-mail</label><input class="form-control mb-2" name="email" type="email" required autofocus>
+    <label class="form-label">Senha</label><input class="form-control mb-3" name="senha" type="password" required>
+    <button class="btn btn-zelo w-100">Entrar</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

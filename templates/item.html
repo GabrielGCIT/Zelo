@@ -1,0 +1,36 @@
+{% extends 'base.html' %}{% from '_macros.html' import sit, pessoa_link, linha_link, mov_tabela %}
+{% block title %}Item {{ it.codigo }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-1"><h1 class="z-titulo m-0"><span class="z-mono">{{ it.codigo }}</span></h1>{{ sit(it.situacao) }}{% if it.kit %}<span class="badge text-bg-light">kit {{ it.kit|lower }}</span>{% endif %}
+  {% if pode('lancar') %}<a class="btn btn-sm btn-zelo ms-auto" href="{{ url_for('lancar.grade', item=it.codigo) }}"><i class="fa fa-pen-to-square me-1"></i>Lançar para este item</a>{% endif %}</div>
+<p class="z-sub">{{ it.categoria or '' }} · {{ it.fabricante or '' }} {{ it.modelo or '' }}</p>
+<div class="row g-3">
+ <div class="col-lg-5">
+  <div class="z-card"><h2>Situação atual</h2>
+   <dl class="z-def">
+    <dt>Situação</dt><dd>{{ sit(it.situacao) }}</dd>
+    <dt>Com quem</dt><dd>{{ pessoa_link(it.matricula, it.com_quem) or '—' }}</dd>
+    <dt>Desde</dt><dd>{{ it.desde|data or '—' }}{% if it.desde %} <span class="text-muted small">({{ dias_desde(it.desde) }} dias)</span>{% endif %}</dd>
+    {% if it.prazo %}<dt>Prazo devolução</dt><dd class="{{ 'z-erro' if it.prazo < hoje() else '' }}">{{ it.prazo|data }}</dd>{% endif %}
+    {% if it.etapa %}<dt>Etapa</dt><dd>{{ it.etapa }}</dd>{% endif %}
+    {% if it.termo %}<dt>Termo</dt><dd>{{ it.termo }}</dd>{% endif %}
+    <dt>Linha no aparelho</dt><dd>{{ linha_link(linha.numero) if linha else '—' }}</dd>
+    <dt>Último lançamento</dt><dd>{{ 'Nº %s'|format(it.ultima_mov_id) if it.ultima_mov_id else '—' }}</dd>
+    {% if contrato %}<dt>Contrato</dt><dd>{{ contrato.contrato }} ({{ contrato.locadora }}) · fim {{ contrato.fim|data or '—' }}</dd>{% endif %}
+   </dl></div>
+  {% if manut %}<div class="z-card"><h2>Manutenções</h2><table class="table table-sm"><thead><tr><th>OS</th><th>Abertura</th><th>Defeito</th><th>Status</th></tr></thead>
+   {% for m in manut %}<tr><td>{{ m.id }}</td><td>{{ m.abertura|data }}</td><td>{{ m.defeito or '' }}</td><td>{{ m.status }}</td></tr>{% endfor %}</table></div>{% endif %}
+ </div>
+ <div class="col-lg-7"><div class="z-card"><h2>Cadastro</h2>
+  <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+   <div class="row g-2">{% for k, rot in campos %}
+    <div class="{{ 'col-12' if k=='obs' else 'col-md-6 col-xl-4' }}"><label class="form-label small text-muted mb-0">{{ rot }}</label>
+     {% if k in opcoes %}<select class="form-select form-select-sm" name="{{ k }}" {{ '' if pode('lancar') else 'disabled' }}><option value=""></option>{% for o in opcoes[k] %}<option {{ 'selected' if it[k]==o }}>{{ o }}</option>{% endfor %}{% if it[k] and it[k] not in opcoes[k] %}<option selected>{{ it[k] }}</option>{% endif %}</select>
+     {% elif k=='obs' %}<textarea class="form-control form-control-sm" name="obs" rows="2" {{ '' if pode('lancar') else 'readonly' }}>{{ it.obs or '' }}</textarea>
+     {% else %}<input class="form-control form-control-sm {{ 'z-mono' if k in ('imei1','imei2','tag','eid') else '' }}" name="{{ k }}" value="{{ it[k] if it[k] is not none else '' }}" {{ 'type=date' if k in ('data_nf','garantia') else '' }} {{ '' if pode('lancar') else 'readonly' }}>{% endif %}</div>
+   {% endfor %}</div>
+   {% if pode('lancar') %}<button class="btn btn-sm btn-zelo mt-3">Salvar cadastro</button>{% endif %}
+  </form></div></div>
+</div>
+<div class="z-card"><h2>Histórico do item</h2>{{ mov_tabela(movs, mostra_item=False) }}</div>
+{% endblock %}

@@ -1,0 +1,8 @@
+.venv/
+instance/
+logs/
+backups/
+__pycache__/
+*.pyc
+dist/
+uploads/

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<title>{% block title %}Zelo{% endblock %} | Zelo</title>
+<script>
+(function () {
+  var pref = {{ (usuario.tema if usuario else none)|tojson }} || localStorage.getItem('zelo-tema') || 'light';
+  localStorage.setItem('zelo-tema', pref);
+  if (pref === 'auto') pref = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-bs-theme', pref);
+})();
+</script>
+<link href="{{ url_for('static', filename='vendor/bootstrap-5.3.0/css/bootstrap.min.css') }}" rel="stylesheet">
+<link href="{{ url_for('static', filename='vendor/fontawesome-6.4.0/css/all.min.css') }}" rel="stylesheet">
+<link href="{{ url_for('static', filename='zelo.css') }}" rel="stylesheet">
+{% block head %}{% endblock %}
+</head>
+<body>
+{% if usuario %}
+<nav class="z-topbar">
+  <button class="btn btn-sm z-ico d-lg-none" onclick="document.body.classList.toggle('z-menu-aberto')" aria-label="Menu"><i class="fa fa-bars"></i></button>
+  <a class="z-marca" href="{{ url_for('painel.inicio') }}"><span class="z-logo">Z</span> Zelo <small>{{ empresa }}</small></a>
+  <form class="z-busca" action="{{ url_for('consulta.buscar') }}" method="get">
+    <i class="fa fa-magnifying-glass"></i>
+    <input name="q" placeholder="Plaqueta, tag, IMEI, linha, nome ou matrícula" value="{{ request.args.get('q','') if request.endpoint=='consulta.buscar' else '' }}">
+  </form>
+  <div class="ms-auto d-flex align-items-center gap-2">
+    <button class="btn btn-sm z-ico" onclick="zTema()" title="Tema claro/escuro"><i class="fa fa-circle-half-stroke"></i></button>
+    <div class="dropdown">
+      <button class="btn btn-sm z-user dropdown-toggle" data-bs-toggle="dropdown">{{ usuario.nome.split(' ')[0] }} <small>· {{ usuario.perfil }}</small></button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li><a class="dropdown-item" href="{{ url_for('auth.trocar_senha') }}"><i class="fa fa-key me-2"></i>Trocar senha</a></li>
+        <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}"><i class="fa fa-right-from-bracket me-2"></i>Sair</a></li>
+      </ul>
+    </div>
+  </div>
+</nav>
+<aside class="z-sidebar">
+  {% set ep = request.endpoint or '' %}
+  {% macro link(endpoint, icone, texto, prefixo=None) -%}
+    <a href="{{ url_for(endpoint) }}" class="{{ 'ativo' if (ep == endpoint or (prefixo and ep.startswith(prefixo))) else '' }}"><i class="fa {{ icone }}"></i>{{ texto }}</a>
+  {%- endmacro %}
+  <div class="z-grupo">Visão geral</div>
+  {{ link('painel.inicio', 'fa-gauge', 'Painel') }}
+  {{ link('painel.fila', 'fa-list-check', 'Minha fila') }}
+  {% if pode('lancar') %}
+  <div class="z-grupo">Lançar</div>
+  {{ link('lancar.grade', 'fa-pen-to-square', 'Lançamentos', 'lancar.') }}
+  {{ link('acompanhar.inicio', 'fa-route', 'Acompanhar', 'acompanhar.') }}
+  {{ link('manutencao.inicio', 'fa-screwdriver-wrench', 'Manutenção', 'manutencao.') }}
+  {{ link('estoque.consumiveis', 'fa-boxes-stacked', 'Consumíveis', 'estoque.consumiveis') }}
+  {% endif %}
+  <div class="z-grupo">Consultar</div>
+  {{ link('consulta.itens', 'fa-laptop', 'Itens', 'consulta.item') }}
+  {{ link('consulta.pessoas', 'fa-users', 'Pessoas', 'consulta.pessoa') }}
+  {{ link('linhas.lista', 'fa-sim-card', 'Linhas', 'linhas.') }}
+  {{ link('consulta.historico', 'fa-clock-rotate-left', 'Histórico') }}
+  {{ link('consulta.emprestimos', 'fa-hand-holding', 'Empréstimos') }}
+  {{ link('consulta.contratos', 'fa-file-contract', 'Contratos e garantias') }}
+  {{ link('termo.inicio', 'fa-file-signature', 'Termo') }}
+  {% if pode('admin') %}
+  <div class="z-grupo">Administração</div>
+  {{ link('admin.usuarios', 'fa-user-shield', 'Usuários') }}
+  {{ link('admin.config', 'fa-sliders', 'Configurações') }}
+  {{ link('admin.auditoria', 'fa-shoe-prints', 'Auditoria') }}
+  {% endif %}
+</aside>
+{% endif %}
+<main class="{{ 'z-main' if usuario else 'z-main-solo' }}">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}<div class="alert alert-{{ cat }} alert-dismissible fade show py-2">{{ m }}<button class="btn-close" data-bs-dismiss="alert"></button></div>{% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+<script src="{{ url_for('static', filename='vendor/bootstrap-5.3.0/js/bootstrap.bundle.min.js') }}"></script>
+<script>
+function zTema(){var a=document.documentElement.getAttribute('data-bs-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-bs-theme',a);localStorage.setItem('zelo-tema',a);}
+function zCsrf(){return document.querySelector('meta[name=csrf-token]').content;}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

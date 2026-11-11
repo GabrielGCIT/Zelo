@@ -1,0 +1,19 @@
+{% extends 'base.html' %}{% from '_macros.html' import sit, item_link, pessoa_link %}
+{% block title %}Empréstimos{% endblock %}
+{% block content %}
+<h1 class="z-titulo">Empréstimos</h1><p class="z-sub">Pool de máquinas e acessórios emprestados. Baixadas não aparecem.</p>
+<div class="z-kpis">
+ <div class="z-kpi"><div class="r">No pool</div><div class="v">{{ pool|length }}</div></div>
+ <div class="z-kpi"><div class="r">Emprestados</div><div class="v">{{ pool|selectattr('situacao','equalto','Emprestado')|list|length }}</div></div>
+ <div class="z-kpi"><div class="r">Disponíveis</div><div class="v">{{ pool|selectattr('situacao','equalto','Em estoque')|list|length }}</div></div>
+ <div class="z-kpi alerta"><div class="r">Vencidos</div><div class="v">{{ pool|selectattr('situacao','equalto','Emprestado')|selectattr('prazo')|selectattr('prazo','lt',hoje)|list|length }}</div></div>
+</div>
+<div class="row g-3"><div class="col-xl-8"><div class="z-card"><h2>Pool por máquina</h2>
+<div class="table-responsive"><table class="table table-sm table-hover"><thead><tr><th>Item</th><th>Modelo</th><th>Site</th><th>Situação</th><th>Com quem</th><th>Desde</th><th>Prazo</th><th>Dias</th></tr></thead>
+{% for i in pool %}<tr><td>{{ item_link(i.codigo) }}</td><td>{{ i.modelo or '' }}</td><td>{{ i.site or '' }}</td><td>{{ sit(i.situacao) }}</td><td>{{ pessoa_link(i.matricula, i.com_quem) }}</td><td>{{ i.desde|data }}</td><td class="{{ 'z-erro' if i.prazo and i.prazo < hoje else '' }}">{{ i.prazo|data }}</td><td>{{ dias_desde(i.desde) if i.situacao=='Emprestado' else '' }}</td></tr>{% endfor %}</table></div></div>
+{% if fora %}<div class="z-card"><h2>Emprestados fora do pool</h2><table class="table table-sm">{% for i in fora %}<tr><td>{{ item_link(i.codigo) }}</td><td>{{ i.modelo }}</td><td>{{ pessoa_link(i.matricula, i.com_quem) }}</td><td>{{ i.prazo|data }}</td></tr>{% endfor %}</table></div>{% endif %}
+</div><div class="col-xl-4">
+<div class="z-card"><h2>Acessórios emprestados</h2>{% if acess %}<table class="table table-sm">{% for a in acess %}<tr><td>EA-{{ '%04d'|format(a.id) }}</td><td>{{ a.consumivel }}</td><td>{{ pessoa_link(a.matricula, a.nome) }}</td><td class="{{ 'z-erro' if a.prazo and a.prazo < hoje else '' }}">{{ a.prazo|data }}</td></tr>{% endfor %}</table>{% else %}<div class="text-muted small">Nenhum.</div>{% endif %}</div>
+<div class="z-card"><h2>Manutenções cobertas por empréstimo</h2>{% if cobertas %}<table class="table table-sm">{% for m in cobertas %}<tr><td>{{ item_link(m.item) }}</td><td>→ {{ item_link(m.substituto) }}</td><td>{{ m.status }}</td></tr>{% endfor %}</table>{% else %}<div class="text-muted small">Nenhuma.</div>{% endif %}</div>
+</div></div>
+{% endblock %}

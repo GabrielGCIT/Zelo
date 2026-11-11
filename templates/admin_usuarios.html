@@ -1,0 +1,15 @@
+{% extends 'base.html' %}{% block title %}Usuários{% endblock %}
+{% block content %}
+<h1 class="z-titulo">Usuários</h1><p class="z-sub">Quem entra no Zelo. Perfis: {% for k, v in perfis.items() %}<b>{{ k }}</b> ({{ v|lower }}){{ '; ' if not loop.last }}{% endfor %}.</p>
+<form class="z-card row g-2 align-items-end" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="criar">
+ <div class="col-md-4"><label class="form-label small">Nome</label><input class="form-control form-control-sm" name="nome" required></div>
+ <div class="col-md-4"><label class="form-label small">E-mail</label><input class="form-control form-control-sm" name="email" type="email" required></div>
+ <div class="col-md-2"><label class="form-label small">Perfil</label><select class="form-select form-select-sm" name="perfil">{% for k in perfis %}<option {{ 'selected' if k=='Operador' }}>{{ k }}</option>{% endfor %}</select></div>
+ <div class="col-auto"><button class="btn btn-sm btn-zelo">Criar usuário</button></div>
+</form>
+<div class="z-card"><table class="table table-sm"><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Situação</th><th></th></tr></thead>
+{% for u in usuarios %}<tr><td>{{ u.nome }}</td><td>{{ u.email }}</td>
+<td><form method="post" class="d-flex gap-1"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="perfil"><input type="hidden" name="id" value="{{ u.id }}"><select class="form-select form-select-sm" name="perfil" onchange="this.form.submit()">{% for k in perfis %}<option {{ 'selected' if u.perfil==k }}>{{ k }}</option>{% endfor %}</select></form></td>
+<td>{{ 'Ativo' if u.ativo else 'Desativado' }}{% if u.senha_provisoria %} <span class="badge text-bg-warning">senha provisória</span>{% endif %}</td>
+<td class="text-end"><form method="post" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{ u.id }}"><button class="btn btn-sm btn-outline-secondary" name="acao" value="senha">Redefinir senha</button> <button class="btn btn-sm btn-outline-{{ 'danger' if u.ativo else 'success' }}" name="acao" value="ativo" {{ 'disabled' if u.id==usuario.id }}>{{ 'Desativar' if u.ativo else 'Reativar' }}</button></form></td></tr>{% endfor %}</table></div>
+{% endblock %}

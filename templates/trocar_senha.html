@@ -1,0 +1,14 @@
+{% extends 'base.html' %}{% block title %}Trocar senha{% endblock %}
+{% block content %}
+<div class="z-card" style="max-width:420px">
+  <h1 class="z-titulo">Trocar senha</h1>
+  {% if usuario.senha_provisoria %}<p class="z-sub">Sua senha foi definida por outra pessoa. Escolha a sua para continuar.</p>{% endif %}
+  {% if erro %}<div class="alert alert-danger py-2">{{ erro }}</div>{% endif %}
+  <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if not usuario.senha_provisoria %}<label class="form-label">Senha atual</label><input class="form-control mb-2" name="atual" type="password" required>{% endif %}
+    <label class="form-label">Nova senha (mín. 8)</label><input class="form-control mb-2" name="senha" type="password" required>
+    <label class="form-label">Confirmar</label><input class="form-control mb-3" name="confirmacao" type="password" required>
+    <button class="btn btn-zelo">Salvar</button>
+  </form>
+</div>
+{% endblock %}

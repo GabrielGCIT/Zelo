@@ -1,0 +1,22 @@
+{% extends 'base.html' %}{% from '_macros.html' import sit, item_link, linha_link, mov_tabela %}
+{% block title %}{{ p.nome }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-1"><h1 class="z-titulo m-0">{{ p.nome }}</h1>{{ sit(p.situacao) }}
+{% if pode('lancar') %}<a class="btn btn-sm btn-zelo ms-auto" href="{{ url_for('lancar.grade', para=p.id) }}"><i class="fa fa-pen-to-square me-1"></i>Lançar para esta pessoa</a>{% endif %}</div>
+<p class="z-sub"><span class="z-mono">{{ p.id }}</span> · {{ p.tipo or '' }} · {{ p.empresa or '' }}</p>
+{% if p.situacao == 'Desligado' and (itens or linhas) %}<div class="alert alert-warning py-2">Pessoa desligada ainda com {{ itens|length }} item(ns) e {{ linhas|length }} linha(s). Peça a devolução.</div>{% endif %}
+<div class="row g-3"><div class="col-lg-7">
+ <div class="z-card"><h2>Com a pessoa agora</h2>
+ <table class="table table-sm"><thead><tr><th>Item</th><th>Categoria</th><th>Modelo</th><th>Situação</th><th>Desde</th><th>Termo</th><th>Prazo</th></tr></thead>
+ {% for i in itens %}<tr><td>{{ item_link(i.codigo) }}</td><td>{{ i.categoria }}</td><td>{{ i.modelo or '' }}</td><td>{{ sit(i.situacao) }}</td><td>{{ i.desde|data }}</td><td>{{ i.termo or '' }}</td><td>{{ i.prazo|data }}</td></tr>{% else %}<tr><td colspan="7" class="text-muted">Nenhum item.</td></tr>{% endfor %}</table>
+ {% if linhas %}<h2 class="mt-3">Linhas</h2><table class="table table-sm">{% for l in linhas %}<tr><td>{{ linha_link(l.numero) }}</td><td>{{ l.operadora or '' }}</td><td>aparelho {{ item_link(l.aparelho) if l.aparelho else '—' }}</td><td>desde {{ l.desde|data }}</td></tr>{% endfor %}</table>{% endif %}
+ {% if acess %}<h2 class="mt-3">Acessórios emprestados</h2><table class="table table-sm">{% for a in acess %}<tr><td>EA-{{ '%04d'|format(a.id) }}</td><td>{{ a.consumivel }}</td><td>{{ a.qtd }}</td><td>{{ a.data|data }}</td><td>{{ 'devolvido ' ~ (a.devolvido|data) if a.devolvido else 'prazo ' ~ (a.prazo|data) }}</td></tr>{% endfor %}</table>{% endif %}
+ </div></div>
+ <div class="col-lg-5"><div class="z-card"><h2>Cadastro</h2>
+ <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="row g-2">
+ {% for k, rot in campos %}<div class="{{ 'col-12' if k in ('obs','nome') else 'col-md-6' }}"><label class="form-label small text-muted mb-0">{{ rot }}</label>
+  {% if k in opcoes %}<select class="form-select form-select-sm" name="{{ k }}" {{ '' if pode('lancar') else 'disabled' }}><option value=""></option>{% for o in opcoes[k] %}<option {{ 'selected' if p[k]==o }}>{{ o }}</option>{% endfor %}{% if p[k] and p[k] not in opcoes[k] %}<option selected>{{ p[k] }}</option>{% endif %}</select>
+  {% else %}<input class="form-control form-control-sm" name="{{ k }}" value="{{ p[k] or '' }}" {{ '' if pode('lancar') else 'readonly' }}>{% endif %}</div>{% endfor %}
+ </div>{% if pode('lancar') %}<button class="btn btn-sm btn-zelo mt-3">Salvar</button>{% endif %}</form></div></div></div>
+<div class="z-card"><h2>Histórico da pessoa</h2>{{ mov_tabela(movs) }}</div>
+{% endblock %}

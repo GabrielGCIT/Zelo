@@ -1,0 +1,13 @@
+{% extends 'base.html' %}{% from '_macros.html' import mov_tabela, paginacao %}
+{% block title %}Histórico{% endblock %}
+{% block content %}
+<h1 class="z-titulo">Histórico</h1><p class="z-sub">Todas as movimentações, da mais recente para a mais antiga.</p>
+<form class="z-card row g-2 align-items-end" method="get">
+ <div class="col-md-3"><label class="form-label small">Buscar</label><input class="form-control form-control-sm" name="q" value="{{ f.q }}" placeholder="item, linha, nome, chamado..."></div>
+ <div class="col-md-2"><label class="form-label small">Tipo</label><select class="form-select form-select-sm" name="tipo"><option value="">Todos</option>{% for t in tipos %}<option {{ 'selected' if f.tipo==t }}>{{ t }}</option>{% endfor %}</select></div>
+ <div class="col-md-2"><label class="form-label small">De</label><input type="date" class="form-control form-control-sm" name="de" value="{{ f.de }}"></div>
+ <div class="col-md-2"><label class="form-label small">Até</label><input type="date" class="form-control form-control-sm" name="ate" value="{{ f.ate }}"></div>
+ <div class="col-auto"><button class="btn btn-sm btn-zelo">Filtrar</button></div>
+</form>
+<div class="z-card">{{ mov_tabela(pag.items) }}{{ paginacao(pag, 'consulta.historico') }}</div>
+{% endblock %}

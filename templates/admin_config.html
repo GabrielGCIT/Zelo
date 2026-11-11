@@ -1,0 +1,7 @@
+{% extends 'base.html' %}{% block title %}Configurações{% endblock %}
+{% block content %}
+<h1 class="z-titulo">Configurações</h1><p class="z-sub">Parâmetros usados nas regras e nas listas.</p>
+<form class="z-card" method="post" style="max-width:820px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{% for k, v in valores.items() %}<div class="mb-2"><label class="form-label small">{{ rotulos.get(k, k) }}</label><input class="form-control form-control-sm" name="{{ k }}" value="{{ v }}"></div>{% endfor %}
+<button class="btn btn-sm btn-zelo mt-2">Salvar</button></form>
+{% endblock %}
