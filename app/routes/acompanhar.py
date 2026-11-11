@@ -56,11 +56,17 @@ def corrigir_mov(num):
         registrar_log('acompanhar', msg)
         from flask import current_app
         from app import servicedesk as sd
-        if sd.configurado() and m.chamado and (dados['etapa'] == 'Entregue' or not chamado_antes):
-            ids = sd.enfileirar([m])
-            if ids:
-                sd.processar(current_app._get_current_object(), ids)
-                msg += ' · enviado ao Service Desk'
+        if sd.configurado():
+            app_ = current_app._get_current_object()
+            if m.chamado and (dados['etapa'] == 'Entregue' or not chamado_antes):
+                ids = sd.enfileirar([m])
+                if ids:
+                    sd.processar(app_, ids)
+                    msg += ' · termo enviado ao chamado'
+            if dados['etapa'] == 'Entregue' and sd.ativos_ligado():
+                ids = sd.enfileirar_ativos([m])
+                if ids:
+                    sd.processar(app_, ids)
     flash(msg, 'success' if ok else 'danger')
     volta = request.form.get('volta') or url_for('acompanhar.inicio')
     return redirect(volta if volta.startswith('/') else url_for('acompanhar.inicio'))

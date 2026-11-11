@@ -341,7 +341,9 @@ class EnvioSD(db.Model):
     __tablename__ = 'envios_sd'
     id = db.Column(db.Integer, primary_key=True)
     mov_id = db.Column(db.Integer, index=True)
+    tipo = db.Column(db.String(10), default='chamado')  # chamado (termo + nota) | ativo (usuário/estado do ativo)
     chamado = db.Column(db.String(30), index=True)
+    alvo = db.Column(db.String(60))                     # tipo ativo: hostname procurado no Service Desk
     status = db.Column(db.String(15), index=True)      # Pendente | Enviado | Erro
     anexo_ok = db.Column(db.Boolean, default=False)
     tentativas = db.Column(db.Integer, default=0)

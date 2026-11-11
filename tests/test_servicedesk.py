@@ -17,12 +17,32 @@ class SimuladorSD:
     def __init__(self, chamados):
         self.chamados = chamados          # {id: {'subject', 'status', 'requester': {...}}}
         self.anexos, self.notas, self.fora = [], [], False
+        self.ativos, self.ativos_por_id, self.usuarios = {}, {}, []
 
     def __call__(self, metodo, url, headers, corpo):
         if self.fora:
             raise sd.ErroSD('Sem conexão com o Service Desk: simulador fora do ar')
         assert headers['authtoken'] == 'CHAVE-TESTE' and 'sdp.v3' in headers['Accept']
-        cam = urllib.parse.urlparse(url).path
+        u = urllib.parse.urlparse(url)
+        cam = u.path
+        q = urllib.parse.parse_qs(u.query)
+        dados = json.loads((q.get('input_data') or ['{}'])[0]) if q else (
+            json.loads(urllib.parse.parse_qs(corpo.decode())['input_data'][0]) if corpo and b'input_data' in corpo else {})
+        if cam == '/api/v3/asset_assets' and metodo == 'GET':
+            v = dados['list_info']['search_criteria']['value']
+            return 200, json.dumps({'asset_assets': [a for a in self.ativos.values() if a['name'] == v],
+                                    'response_status': [{'status': 'success'}]})
+        ma = re.match(r'^/api/v3/asset_assets/(\d+)$', cam)
+        if ma and metodo == 'PUT':
+            a = self.ativos_por_id[ma.group(1)]
+            novo = dados['asset_asset']
+            a['user'] = {'id': novo['user']['id']} if novo.get('user') else None
+            a['state'] = novo['state']
+            return 200, json.dumps({'asset_asset': a, 'response_status': {'status': 'success'}})
+        if cam == '/api/v3/users':
+            sc = dados['list_info']['search_criteria']
+            achados = [x for x in self.usuarios if x.get(sc['field'], '').lower() == sc['value'].lower()]
+            return 200, json.dumps({'users': achados, 'response_status': [{'status': 'success'}]})
         m = re.match(r'^/api/v3/requests/(\d+)(/upload|/notes)?$', cam)
         if cam == '/api/v3/requests':
             return 200, json.dumps({'requests': [{'id': '1'}], 'response_status': [{'status': 'success'}]})
@@ -138,3 +158,50 @@ def test_baixar_pdf(app, cli):
     m = Movimentacao.query.filter_by(tipo='Entrega').first()
     r = cli.get(f'/termo/{m.id}.pdf')
     assert r.status_code == 200 and r.data[:4] == b'%PDF'
+
+
+def test_entrega_e_devolucao_atualizam_o_ativo(app, cli, sim):
+    from app.models import EnvioSD
+    s, p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim'})
+    it = Item.query.filter(Item.situacao == 'Em estoque', Item.categoria == 'Notebook', Item.hostname.isnot(None),
+                           Item.finalidade != 'Pool de empréstimo').first()
+    a = {'id': '1', 'name': it.hostname.upper(), 'user': None, 'state': {'name': 'In Store'}}
+    s.ativos[a['name']] = a
+    s.ativos_por_id['1'] = a
+    s.usuarios.append({'id': '14', 'name': p.nome, 'email_id': ''})
+    r = cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}]})
+    assert r.json['gravadas'] == 1
+    assert a['user'] == {'id': '14'} and a['state']['name'] == 'In Use'
+    assert EnvioSD.query.filter_by(tipo='ativo').one().status == 'Enviado'
+    cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Devolver', 'item': it.codigo, 'receb_por': 'Adriano Santos'}]})
+    assert a['user'] is None and a['state']['name'] == 'In Store'
+
+
+def test_ativo_inexistente_no_sd_fica_como_erro(app, cli, sim):
+    from app.models import EnvioSD
+    s, p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim'})
+    it = Item.query.filter(Item.situacao == 'Em estoque', Item.categoria == 'Notebook', Item.hostname.isnot(None),
+                           Item.finalidade != 'Pool de empréstimo').first()
+    r = cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}]})
+    assert r.json['gravadas'] == 1
+    e = EnvioSD.query.filter_by(tipo='ativo').one()
+    assert e.status == 'Erro' and 'não existe no Service Desk' in e.erro
+
+
+def test_migracao_acrescenta_colunas(tmp_path):
+    import sqlite3
+    from app import create_app
+    caminho = tmp_path / 'velho.db'
+    cx = sqlite3.connect(caminho)
+    cx.execute('CREATE TABLE envios_sd (id INTEGER PRIMARY KEY, mov_id INTEGER, chamado VARCHAR(30), status VARCHAR(15),'
+               ' anexo_ok BOOLEAN, tentativas INTEGER, erro VARCHAR(300), criado VARCHAR(25), enviado VARCHAR(25))')
+    cx.commit()
+    cx.close()
+    create_app(f'sqlite:///{caminho}', testing=True)
+    cols = {r[1] for r in sqlite3.connect(caminho).execute('PRAGMA table_info(envios_sd)')}
+    assert {'tipo', 'alvo'} <= cols

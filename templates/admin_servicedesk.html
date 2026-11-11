@@ -9,6 +9,8 @@
   <input type="password" class="form-control form-control-sm" name="sd_chave" autocomplete="new-password" placeholder="{{ 'deixe vazio para manter a atual' if tem_chave else 'cole a chave aqui' }}"></div>
  <div class="col-6"><label class="form-label mb-0">Certificado HTTPS</label><select class="form-select form-select-sm" name="sd_ssl">{% for o in ['Verificar','Ignorar'] %}<option {{ 'selected' if ssl==o }}>{{ o }}</option>{% endfor %}</select></div>
  <div class="col-6"><label class="form-label mb-0">Integração ligada</label><select class="form-select form-select-sm" name="sd_ativo">{% for o in ['Não','Sim'] %}<option {{ 'selected' if ativo==o }}>{{ o }}</option>{% endfor %}</select></div>
+ <div class="col-12"><label class="form-label mb-0">Atualizar o ativo no Service Desk (usuário e estado)</label><select class="form-select form-select-sm" name="sd_ativos">{% for o in ['Não','Sim'] %}<option {{ 'selected' if ativos==o }}>{{ o }}</option>{% endfor %}</select>
+  <div class="form-text">Entrega/empréstimo concluído → ativo "In Use" com a pessoa; devolução → sem usuário, "In Store". O ativo é achado pelo hostname.</div></div>
  <div class="col-12 d-flex gap-2 mt-2"><button class="btn btn-sm btn-zelo">Salvar</button></div>
 </form>
 <form method="post" class="mt-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="testar"><button class="btn btn-sm btn-outline-secondary"><i class="fa fa-plug me-1"></i>Testar conexão</button></form>
@@ -18,12 +20,13 @@
  <li>Entrega, empréstimo ou devolução com Nº de chamado → anexo <code>Termo_Zelo_&lt;Nº&gt;.pdf</code> + nota com o item, a pessoa, o CC e o Nº do lançamento.</li>
  <li>Reserva que vira Entregue no Acompanhar → novo termo (agora assinado) + nota.</li>
  <li>Chamado informado depois, no Acompanhar → envia na hora.</li>
+ <li>Com "Atualizar o ativo" ligado: a máquina (pelo hostname) passa a aparecer associada à pessoa, inclusive no campo Ativos dos chamados dela.</li>
  <li>Nada vem do Service Desk além do solicitante (nome, e-mail e usuário) do chamado.</li></ul></div></div></div>
 <div class="z-card"><div class="d-flex align-items-center gap-2"><h2 class="m-0">Envios</h2>{% if pendentes %}<span class="badge text-bg-warning">{{ pendentes }} sem enviar</span>
 <form method="post" class="ms-auto"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="reenviar"><button class="btn btn-sm btn-outline-secondary"><i class="fa fa-rotate me-1"></i>Reenviar pendentes</button></form>{% endif %}</div>
 {% if not envios %}<p class="text-muted mt-2">Nenhum envio ainda.</p>{% else %}
-<div class="table-responsive mt-2"><table class="table table-sm z-tab small"><thead><tr><th>Quando</th><th>Lançamento</th><th>Chamado</th><th>Status</th><th>Tentativas</th><th>Detalhe</th></tr></thead><tbody>
-{% for e in envios %}<tr><td>{{ e.criado|replace('T',' ') }}</td><td><a href="{{ url_for('termo.inicio', n=e.mov_id) }}">Nº {{ e.mov_id }}</a></td><td class="z-mono">{{ e.chamado }}</td>
+<div class="table-responsive mt-2"><table class="table table-sm z-tab small"><thead><tr><th>Quando</th><th>Lançamento</th><th>O quê</th><th>Chamado / ativo</th><th>Status</th><th>Tentativas</th><th>Detalhe</th></tr></thead><tbody>
+{% for e in envios %}<tr><td>{{ e.criado|replace('T',' ') }}</td><td><a href="{{ url_for('termo.inicio', n=e.mov_id) }}">Nº {{ e.mov_id }}</a></td><td>{{ 'Ativo' if e.tipo=='ativo' else 'Termo + nota' }}</td><td class="z-mono">{{ e.alvo if e.tipo=='ativo' else e.chamado }}</td>
 <td><span class="badge text-bg-{{ 'success' if e.status=='Enviado' else ('danger' if e.status=='Erro' else 'secondary') }}">{{ e.status }}</span></td><td>{{ e.tentativas }}</td><td>{{ e.erro or (e.enviado|replace('T',' ') if e.enviado else '') }}</td></tr>{% endfor %}
 </tbody></table></div>{% endif %}</div>
 {% endblock %}

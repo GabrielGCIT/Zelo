@@ -55,10 +55,8 @@ def api_gravar():
         registrar_log('lançamento', f'{n} linha(s) gravada(s) na aba {aba}, lote {lote}')
         from flask import current_app
         from app import servicedesk as sd
-        if sd.configurado():
-            ids = sd.enfileirar([m for r in resultados if r.status in ('ok', 'aviso') for m in r.movs if m.id])
-            if ids:
-                sd.processar(current_app._get_current_object(), ids)
+        sd.enfileirar_tudo(current_app._get_current_object(),
+                           [m for r in resultados if r.status in ('ok', 'aviso') for m in r.movs if m.id])
     return jsonify({'gravadas': n, 'lote': lote,
                     'resultados': [dict(r.json(), gravada=r.status in ('ok', 'aviso'),
                                         nums=[m.id for m in r.movs if m.id]) for r in resultados]})

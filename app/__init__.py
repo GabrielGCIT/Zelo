@@ -52,6 +52,19 @@ def _configurar_sqlite(app):
         cur.close()
 
 
+# Colunas novas em tabelas que já existem (o create_all só cria tabelas). Só acrescenta, nunca apaga.
+COLUNAS_NOVAS = [('envios_sd', 'tipo', "VARCHAR(10) DEFAULT 'chamado'"), ('envios_sd', 'alvo', 'VARCHAR(60)')]
+
+
+def _migrar():
+    from sqlalchemy import inspect, text
+    insp = inspect(db.engine)
+    for tabela, coluna, tipo in COLUNAS_NOVAS:
+        if tabela in insp.get_table_names() and coluna not in {c['name'] for c in insp.get_columns(tabela)}:
+            with db.engine.begin() as cx:
+                cx.execute(text(f'ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}'))
+
+
 def create_app(database_url=None, testing=False):
     app = Flask(__name__, template_folder=os.path.join(ROOT_DIR, 'templates'),
                 static_folder=os.path.join(ROOT_DIR, 'static'))
@@ -74,6 +87,7 @@ def create_app(database_url=None, testing=False):
     from app import models  # noqa: F401  (registra as tabelas)
     with app.app_context():
         db.create_all()
+        _migrar()
 
     from app.auth import auth_bp, registrar_hooks
     from app.routes.consulta import consulta_bp

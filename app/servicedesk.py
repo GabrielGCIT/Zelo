@@ -27,7 +27,7 @@ from app import db
 from app.models import Config
 
 ACCEPT = 'application/vnd.manageengine.sdp.v3+json'
-CHAVES = ('sd_url', 'sd_chave', 'sd_ssl', 'sd_ativo')
+CHAVES = ('sd_url', 'sd_chave', 'sd_ssl', 'sd_ativo', 'sd_ativos')
 TIPOS_ENVIO = ('Entrega', 'Empréstimo', 'Devolução')
 _cache = {}            # chamado → (quando, dados)
 CACHE_SEG = 300
@@ -97,10 +97,10 @@ def _http(metodo, caminho, dados=None, arquivo=None, timeout=10):
         j = json.loads(texto) if texto else {}
     except ValueError:
         raise ErroSD(f'Resposta inesperada do Service Desk (HTTP {st})')
-    if st >= 400 or (j.get('response_status') or {}).get('status') == 'failed':
-        rs = j.get('response_status') or {}
-        if isinstance(rs, list):
-            rs = rs[0] if rs else {}
+    rs = j.get('response_status') or {}
+    if isinstance(rs, list):          # listagens devolvem response_status como lista
+        rs = rs[0] if rs else {}
+    if st >= 400 or rs.get('status') == 'failed':
         msgs = [m.get('message') or m.get('field') or '' for m in rs.get('messages', [])] if isinstance(rs, dict) else []
         raise ErroSD(f'Service Desk recusou (HTTP {st}): ' + ('; '.join(x for x in msgs if x) or texto[:200]))
     return j
@@ -160,13 +160,101 @@ def texto_nota(m, it, arquivo):
     return '<br>'.join(linhas)
 
 
+# ------------------------------------------------------------------ ativos (usuário e estado)
+# Provado no laboratório (SDP 16): PUT /api/v3/asset_assets/{id} com {"asset_asset": {...}} edita usuário e estado.
+# O formato em lote (?ids=) devolve "Internal Error" nesse build: não usar.
+def ativos_ligado():
+    return configurado() and conf('sd_ativos') == 'Sim'
+
+
+def _busca(campo, valor, linhas=5):
+    return {'list_info': {'row_count': linhas, 'search_criteria': {'field': campo, 'condition': 'is', 'value': valor}}}
+
+
+def achar_ativo(hostname):
+    r = _http('GET', '/api/v3/asset_assets', _busca('name', hostname))
+    lst = r.get('asset_assets') or []
+    return lst[0] if lst else None
+
+
+def achar_usuario(email=None, nome=None):
+    """Id do usuário no Service Desk: pelo e-mail; senão pelo nome exato (só se for único)."""
+    if email:
+        try:
+            u = _http('GET', '/api/v3/users', _busca('email_id', email)).get('users') or []
+            if u:
+                return u[0]
+        except ErroSD:
+            pass
+    if nome:
+        u = _http('GET', '/api/v3/users', _busca('name', nome)).get('users') or []
+        if len(u) == 1:
+            return u[0]
+        if len(u) > 1:
+            raise ErroSD(f'Há {len(u)} usuários "{nome}" no Service Desk: cadastre o e-mail da pessoa no Zelo')
+    return None
+
+
+def atualizar_ativo(asset_id, usuario_id, estado):
+    return _http('PUT', f'/api/v3/asset_assets/{asset_id}',
+                 {'asset_asset': {'user': {'id': str(usuario_id)} if usuario_id else None, 'state': {'name': estado}}})
+
+
+def acao_ativo(m):
+    """('In Use', pessoa) na entrega/empréstimo concluídos; ('In Store', None) na devolução; senão None."""
+    if m.tipo in ('Entrega', 'Empréstimo') and m.etapa == 'Entregue':
+        return 'In Use'
+    if m.tipo == 'Devolução':
+        return 'In Store'
+    return None
+
+
+def enviar_ativo(envio, m):
+    from app.models import Item, Pessoa
+    it = db.session.get(Item, m.item) if m.item else None
+    host = (envio.alvo or (it.hostname if it else '') or '').strip().upper()
+    if not host:
+        raise ErroSD('Item sem hostname no Zelo: não dá para achar o ativo no Service Desk')
+    a = achar_ativo(host)
+    if not a:
+        raise ErroSD(f'Ativo {host} não existe no Service Desk')
+    estado = acao_ativo(m)
+    uid = None
+    if estado == 'In Use':
+        p = db.session.get(Pessoa, m.matricula) if m.matricula else None
+        u = achar_usuario(p.email if p else None, (p.nome if p else m.nome))
+        if not u:
+            raise ErroSD(f'{m.nome} não encontrado(a) como usuário no Service Desk')
+        uid = u.get('id')
+    atualizar_ativo(a['id'], uid, estado)
+    aviso = ''
+    serial = (a.get('serial_number') or a.get('service_tag') or '')
+    if it and it.tag and serial and serial.upper() != it.tag.upper():
+        aviso = f' (atenção: service tag no SD {serial} ≠ Zelo {it.tag})'
+    return f'{host} → {estado}' + (f' com {m.nome}' if uid else '') + aviso
+
+
+def enfileirar_ativos(movs):
+    from app.models import EnvioSD, Item
+    novos = []
+    for m in movs:
+        it = db.session.get(Item, m.item) if m.item else None
+        if it and it.hostname and acao_ativo(m):
+            e = EnvioSD(mov_id=m.id, tipo='ativo', alvo=it.hostname.upper(), status='Pendente',
+                        criado=datetime.now().isoformat(timespec='seconds'), tentativas=0)
+            db.session.add(e)
+            novos.append(e)
+    db.session.commit()
+    return [e.id for e in novos]
+
+
 def enfileirar(movs):
     """Cria os envios para os lançamentos que têm chamado. Não envia (ver processar)."""
     from app.models import EnvioSD
     novos = []
     for m in movs:
         if m.chamado and m.tipo in TIPOS_ENVIO and ''.join(c for c in m.chamado if c.isdigit()):
-            e = EnvioSD(mov_id=m.id, chamado=''.join(c for c in m.chamado if c.isdigit()), status='Pendente',
+            e = EnvioSD(mov_id=m.id, tipo='chamado', chamado=''.join(c for c in m.chamado if c.isdigit()), status='Pendente',
                         criado=datetime.now().isoformat(timespec='seconds'), tentativas=0)
             db.session.add(e)
             novos.append(e)
@@ -186,6 +274,13 @@ def enviar(envio):
             raise ErroSD('Integração com o Service Desk desligada ou sem chave')
         if not m:
             raise ErroSD('Lançamento não existe mais (foi desfeito)')
+        if envio.tipo == 'ativo':
+            if not ativos_ligado():
+                raise ErroSD('Atualização de ativos desligada')
+            envio.erro = enviar_ativo(envio, m)
+            envio.status, envio.enviado = 'Enviado', datetime.now().isoformat(timespec='seconds')
+            db.session.commit()
+            return True
         it = db.session.get(Item, m.item) if m.item else None
         arquivo = None
         d, _erro = montar(str(m.id))
@@ -223,3 +318,15 @@ def processar(app, ids):
         _enviar_todos()
     else:
         threading.Thread(target=_rodar, daemon=True).start()
+
+
+def enfileirar_tudo(app, movs):
+    """Chamado pelas telas depois de gravar: termo+nota (se tem chamado) e usuário/estado do ativo (se ligado)."""
+    if not configurado():
+        return 0
+    ids = enfileirar(movs)
+    if ativos_ligado():
+        ids += enfileirar_ativos(movs)
+    if ids:
+        processar(app, ids)
+    return len(ids)

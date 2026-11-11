@@ -99,7 +99,8 @@ def servicedesk():
         acao = request.form.get('acao')
         if acao == 'salvar':
             v = {'sd_url': (request.form.get('sd_url') or '').strip().rstrip('/'),
-                 'sd_ssl': request.form.get('sd_ssl') or 'Verificar', 'sd_ativo': request.form.get('sd_ativo') or 'Não'}
+                 'sd_ssl': request.form.get('sd_ssl') or 'Verificar', 'sd_ativo': request.form.get('sd_ativo') or 'Não',
+                 'sd_ativos': request.form.get('sd_ativos') or 'Não'}
             if (request.form.get('sd_chave') or '').strip():
                 v['sd_chave'] = request.form['sd_chave'].strip()
             sd.salvar_conf(v)
@@ -121,5 +122,5 @@ def servicedesk():
         return redirect(url_for('admin.servicedesk'))
     envios = EnvioSD.query.order_by(EnvioSD.id.desc()).limit(150).all()
     return render_template('admin_servicedesk.html', url=sd.conf('sd_url'), tem_chave=bool(sd.conf('sd_chave')),
-                           ssl=sd.conf('sd_ssl') or 'Verificar', ativo=sd.conf('sd_ativo') or 'Não', envios=envios,
+                           ssl=sd.conf('sd_ssl') or 'Verificar', ativo=sd.conf('sd_ativo') or 'Não', ativos=sd.conf('sd_ativos') or 'Não', envios=envios,
                            pendentes=sum(1 for e in envios if e.status != 'Enviado'))
