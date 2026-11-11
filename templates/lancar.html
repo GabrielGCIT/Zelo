@@ -30,6 +30,7 @@
    {% else %}<input class="form-control {{ 'z-mono' if c in ('item','linha') else '' }}" data-c="{{ c }}" {% if i==0 and c in pre %}value="{{ pre[c] }}"{% endif %}>{% endif %}
   </td>{% if loop.first %}<td class="z-res"></td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody></table></div>
  <datalist id="dl-pessoas"></datalist>
+ <div id="espelho" class="z-espelho mt-2"><div class="text-muted small"><i class="fa fa-eye me-1"></i>Conferência em tempo real: clique numa linha preenchida para ver quem recebe, qual aparelho e o que conferir.</div></div>
  <div class="d-flex gap-2 align-items-center mt-2">
   <button class="btn btn-zelo" id="btn-gravar"><i class="fa fa-check me-1"></i>Registrar tudo</button>
   <button class="btn btn-outline-danger" id="btn-desfazer" title="Apaga todas as linhas do seu último clique em Registrar"><i class="fa fa-rotate-left me-1"></i>Desfazer último</button>
@@ -63,11 +64,36 @@ const linhas = () => [...document.querySelectorAll('#grade tbody tr')].map(tr =>
 async function post(url, body) {
   const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': zCsrf()}, body: JSON.stringify(body)});
   if (!r.ok) throw new Error('Erro ' + r.status); return r.json(); }
+let ULT = [], ATUAL = 0;
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function pinta(res) {
+  ULT = res;
   document.querySelectorAll('#grade tbody tr').forEach((tr, i) => {
-    const r = res[i] || {}; const td = tr.querySelector('.z-res');
-    td.textContent = r.msg || ''; td.className = 'z-res ' + (r.status === 'erro' ? 'z-erro' : r.status === 'aviso' ? 'z-aviso' : r.status === 'ok' ? 'z-ok' : '');
-  }); }
+    const r = res[i] || {}; const td = tr.querySelector('.z-res'); const e = r.espelho || {};
+    const n = (e.atencao || []).length;
+    td.innerHTML = esc(r.msg || '') + (e.resumo ? `<div class="z-resumo">${esc(e.resumo)}</div>` : '') +
+      (n && r.status !== 'erro' ? `<div><span class="badge text-bg-warning">⚠ ${n} para conferir</span></div>` : '');
+    td.className = 'z-res ' + (r.status === 'erro' ? 'z-erro' : r.status === 'aviso' || n ? 'z-aviso' : r.status === 'ok' ? 'z-ok' : '');
+  });
+  mostraEspelho(); }
+function cartao(tit, ico, corpo) { return `<div class="col-md-4"><div class="z-esp-card"><div class="z-esp-tit"><i class="fa ${ico} me-1"></i>${tit}</div>${corpo}</div></div>`; }
+function mostraEspelho() {
+  const box = document.getElementById('espelho'); const r = ULT[ATUAL] || {}; const e = r.espelho;
+  if (!e) { box.innerHTML = '<div class="text-muted small"><i class="fa fa-eye me-1"></i>Conferência em tempo real: clique numa linha preenchida para ver quem recebe, qual aparelho e o que conferir.</div>'; return; }
+  const p = e.pessoa, nv = e.nova, it = e.item, ln = e.linha;
+  const pess = p ? `<div class="fw-bold">${esc(p.nome)}</div><div class="z-mono small">${esc(p.id)} · ${esc(p.tipo || '')}</div>
+     <div class="small">CC <b class="${p.cc ? '' : 'text-danger'}">${esc(p.cc || 'sem CC')}</b> · site ${esc(p.site || '—')}${p.cargo ? ' · ' + esc(p.cargo) : ''}</div>
+     ${p.email ? `<div class="small text-muted">${esc(p.email)}</div>` : ''}
+     <div class="small mt-1">${p.tem.length ? 'Já está com: ' + p.tem.map(esc).join('; ') : 'Não está com nenhum item'}${p.linhas.length ? '<br>Linhas: ' + p.linhas.join(', ') : ''}</div>`
+   : nv ? `<div class="fw-bold text-warning-emphasis">${esc(nv.nome)}</div><div class="small">Pessoa nova (${esc(nv.tipo)}${nv.id ? ', matrícula ' + esc(nv.id) : ''})</div>` : '<div class="text-muted small">—</div>';
+  const item = it ? `<div class="fw-bold">${esc(it.categoria)} ${esc(it.modelo || '')}</div><div class="z-mono small">${esc(it.codigo)}${it.tag ? ' · tag ' + esc(it.tag) : ''}${it.imei && it.imei !== it.codigo ? ' · IMEI ' + esc(it.imei) : ''}</div>
+     <div class="small">${esc(it.situacao)}${it.com_quem ? ' com ' + esc(it.com_quem) : ''} · site ${esc(it.site || '—')}</div>${it.finalidade === 'Pool de empréstimo' ? '<div class="small">Pool de empréstimo</div>' : ''}`
+   : ln ? '' : '<div class="text-muted small">—</div>';
+  const linha = ln ? `<div class="mt-1 small"><b>Linha ${esc(ln.numero)}</b> ${esc(ln.operadora || '')} · ${esc(ln.situacao)}${ln.com_quem ? ' com ' + esc(ln.com_quem) : ''}${ln.aparelho ? ' · aparelho ' + esc(ln.aparelho) : ''}</div>` : '';
+  const at = e.atencao.length ? '<ul class="mb-0 ps-3 small">' + e.atencao.map(a => `<li>${esc(a)}</li>`).join('') + '</ul>' : '<div class="small z-ok"><i class="fa fa-check me-1"></i>Nada fora do comum</div>';
+  box.innerHTML = `<div class="small text-muted mb-1">Linha ${ATUAL + 1}${e.resumo ? ' · <b class="text-body">' + esc(e.resumo) + '</b>' : ''}</div><div class="row g-2">`
+    + cartao('Quem', 'fa-user', pess) + cartao('O quê', 'fa-laptop', item + linha) + cartao('Conferir', 'fa-triangle-exclamation', at) + '</div>'; }
+document.querySelectorAll('#grade tbody tr').forEach((tr, i) => tr.addEventListener('focusin', () => { ATUAL = i; mostraEspelho(); }));
 let tConf; function agendaConferir() { clearTimeout(tConf); tConf = setTimeout(async () => { try { pinta(await post('{{ url_for("lancar.api_conferir") }}', {aba: ABA, linhas: linhas()})); } catch (e) {} }, 350); }
 document.querySelectorAll('#grade [data-c]').forEach(e => { e.addEventListener('change', agendaConferir); e.addEventListener('input', agendaConferir); });
 // pessoas: sugestões enquanto digita
@@ -76,7 +102,10 @@ let tP; document.addEventListener('input', ev => { const e = ev.target; if (e.da
     const r = await fetch('{{ url_for("lancar.api_pessoas") }}?q=' + encodeURIComponent(q)); const ps = await r.json();
     document.getElementById('dl-pessoas').innerHTML = ps.map(p => `<option value="${p.rotulo.replace(/"/g,'&quot;')}">`).join(''); }, 250); });
 document.getElementById('btn-gravar').onclick = async () => {
-  const st = document.getElementById('status'); st.textContent = 'Gravando...';
+  const st = document.getElementById('status');
+  const pend = ULT.map((r, i) => [i, r]).filter(([i, r]) => r.status !== 'erro' && r.espelho && r.espelho.atencao.length);
+  if (pend.length && !confirm('Confira antes de gravar:\n\n' + pend.map(([i, r]) => `Linha ${i + 1}: ${r.espelho.resumo}\n  - ` + r.espelho.atencao.join('\n  - ')).join('\n\n') + '\n\nGravar assim mesmo?')) return;
+  st.textContent = 'Gravando...';
   try {
     const r = await post('{{ url_for("lancar.api_gravar") }}', {aba: ABA, linhas: linhas()});
     const trs = [...document.querySelectorAll('#grade tbody tr')];

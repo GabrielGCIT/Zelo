@@ -39,8 +39,11 @@ def _linhas_do_pedido():
 @lancar_bp.route('/api/lancar/conferir', methods=['POST'])
 @exige('lancar')
 def api_conferir():
+    from app.espelho import espelho
     aba = (request.get_json(silent=True) or {}).get('aba', 'entrega')
-    return jsonify([r.json() for r in conferir(_linhas_do_pedido(), aba)])
+    linhas = _linhas_do_pedido()
+    return jsonify([dict(r.json(), espelho=espelho(d) if r.status else None)
+                    for r, d in zip(conferir(linhas, aba), linhas)])
 
 
 @lancar_bp.route('/api/lancar/gravar', methods=['POST'])

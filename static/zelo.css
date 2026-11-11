@@ -72,3 +72,9 @@ a.z-link:hover { text-decoration: underline; }
 .z-login { max-width: 400px; margin: 6vh auto; }
 .z-login .z-logo { width: 44px; height: 44px; font-size: 1.4rem; border-radius: 10px; }
 @media print { .z-topbar, .z-sidebar, .no-print { display: none !important; } .z-main { margin: 0; padding: 0; } body { background: #fff; } }
+
+/* espelho: conferência em tempo real */
+.z-resumo { font-weight: 400; font-size: .75rem; color: var(--bs-secondary-color); margin-top: 2px; }
+.z-espelho { border-top: 1px solid var(--bs-border-color); padding-top: .6rem; position: sticky; bottom: 0; background: var(--bs-body-bg); z-index: 2; }
+.z-esp-card { border: 1px solid var(--bs-border-color); border-radius: .5rem; padding: .5rem .7rem; height: 100%; }
+.z-esp-tit { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color); margin-bottom: .25rem; }

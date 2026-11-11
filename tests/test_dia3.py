@@ -153,3 +153,20 @@ def test_analise_linhas_arquivos_reais(app, cli):
     assert x.status_code == 200
     wb = openpyxl.load_workbook(io.BytesIO(x.data))
     assert wb.active.max_row == len(rs) + 1
+
+
+def test_espelho_tempo_real(app, cli):
+    from app.espelho import espelho
+    dono = Item.query.filter(Item.situacao == 'Em uso', Item.categoria == 'Notebook', Item.matricula.isnot(None)).first()
+    p = db.session.get(Pessoa, dono.matricula)
+    it = _nb()
+    e = espelho({'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id})
+    assert e['pessoa']['id'] == p.id and e['item']['codigo'] == it.codigo
+    assert any('já tem' in a for a in e['atencao'])                      # já tem notebook
+    assert p.nome in e['resumo'] and it.codigo in e['resumo']
+    e = espelho({'acao': 'Devolver', 'item': dono.codigo})
+    assert any('Quem devolve' in a for a in e['atencao'])
+    e = espelho({'acao': 'Entregar agora', 'item': it.codigo, 'para': 'FULANO QUE NAO EXISTE'})
+    assert e['nova'] and any('NOVA' in a for a in e['atencao'])
+    r = cli.post('/api/lancar/conferir', json={'aba': 'entrega', 'linhas': [{'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id}, {}]})
+    assert r.json[0]['espelho']['pessoa']['id'] == p.id and r.json[1]['espelho'] is None
