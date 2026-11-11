@@ -1,6 +1,6 @@
 {% extends 'base.html' %}{% from '_macros.html' import sit, item_link, pessoa_link %}
 {% block title %}Acompanhar{% endblock %}
-{% set n1 = quadro1['Reservado']|length + quadro1['Termo assinado']|length + quadro1['Chamado aberto']|length %}
+{% set n1 = quadro1['Reservado']|length %}
 {% set n2 = prep_cols['Devolvido']|length + prep_cols['Em preparação']|length %}
 {% macro mover_menu(opcoes) %}<div class="dropdown"><button data-bs-toggle="dropdown" aria-label="Mover"><i class="fa fa-ellipsis"></i></button>
  <ul class="dropdown-menu dropdown-menu-end">{% for o, rot in opcoes %}<li><a class="dropdown-item small" href="#" data-mover="{{ o }}">{{ rot }}</a></li>{% endfor %}</ul></div>{% endmacro %}
@@ -10,30 +10,37 @@
 <div class="z-abas">
  <a class="z-aba ativo" href="#entregas" data-aba="entregas">Entregas <span class="badge text-bg-secondary">{{ n1 }}</span></a>
  <a class="z-aba" href="#preparacao" data-aba="preparacao">Preparação <span class="badge text-bg-secondary">{{ n2 }}</span></a>
- <a class="z-aba" href="#links" data-aba="links">Termos sem link <span class="badge text-bg-secondary">{{ s3|length }}</span></a>
+ <a class="z-aba" href="#links" data-aba="links">Termos sem arquivo <span class="badge text-bg-secondary">{{ s3|length }}</span></a>
  <form class="d-flex gap-1 ms-auto" method="get"><input class="form-control form-control-sm" style="width:150px" name="n" placeholder="Abrir lançamento Nº" value="{{ n4 }}"><button class="btn btn-sm btn-outline-secondary">Abrir</button></form>
 </div>
 {% if n4 %}<div class="alert alert-warning py-2">Lançamento Nº {{ n4 }} não encontrado.</div>{% endif %}
 
 <section data-painel="entregas">
-<div class="z-quadro" id="q-entregas">
+<div class="z-quadro z-quadro-2" id="q-entregas">
  {% for c in colunas %}<div class="z-col" data-col="{{ c }}" {{ 'data-aceita=nao' if c == 'Reservado' }}>
-  <div class="z-col-topo"><span class="z-pt" style="background:{{ ['#8a94a0','#f0ad00','#3d8bfd','#7AC143'][loop.index0] }}"></span>{{ c }}<span class="z-col-n">0</span></div>
-  <div class="z-col-corpo">
+  <div class="z-col-topo"><span class="z-pt" style="background:{{ ['#f0ad00','#7AC143'][loop.index0] }}"></span>{{ 'Reservado (a entregar)' if c == 'Reservado' else 'Entregue (última semana e termos pendentes)' }}<span class="z-col-n">0</span></div>
+  <div class="z-col-corpo {{ 'z-grade' if c == 'Entregue' }}">
    {% for x in quadro1[c] %}{% set m = x.m %}{% set it = x.it %}{% set d = dias_desde(m.data) if m.data else none %}
-   <div class="z-kc" data-id="{{ m.id }}" draggable="{{ 'false' if c == 'Entregue' or not pode('lancar') else 'true' }}">
+   <div class="z-kc z-ent" data-id="{{ m.id }}" draggable="{{ 'false' if c == 'Entregue' or not pode('lancar') else 'true' }}">
     <div class="z-kc-tit"><a href="{{ url_for('lancar.lancamento', num=m.id) }}" title="Abrir o lançamento">{{ m.nome or m.local or '—' }}</a>
-     {% if c != 'Entregue' and pode('lancar') %}{{ mover_menu([('Termo assinado','Termo assinado'),('Chamado aberto','Chamado aberto'),('Entregue','Entregue'),('Cancelado','Cancelar reserva')]) }}{% endif %}</div>
+     {% if c != 'Entregue' and pode('lancar') %}{{ mover_menu([('Entregue','Entregue'),('Cancelado','Cancelar reserva')]) }}{% endif %}</div>
     <div class="z-kc-sub">{% if it %}{{ it.categoria }} {{ it.modelo or '' }} · <a class="z-mono" href="{{ url_for('consulta.item', codigo=it.codigo) }}">{{ it.codigo }}</a>{% else %}linha {{ m.linha }}{% endif %}</div>
+    <div class="d-flex flex-wrap gap-1 mt-2 align-items-center">
+     <button type="button" class="z-tic z-m-termo {{ 'on' if m.termo == 'Assinado' }}" {{ '' if pode('lancar') else 'disabled' }} title="Clique para marcar/desmarcar"><i class="fa fa-file-signature me-1"></i>Termo{{ ' dispensado' if m.termo == 'Dispensado' }}</button>
+     <button type="button" class="z-tic z-m-cham {{ 'on' if m.chamado }}" {{ '' if pode('lancar') else 'disabled' }} title="Clique para informar o Nº do chamado"><i class="fa fa-ticket me-1"></i><span>{{ '#' ~ m.chamado if m.chamado else 'Chamado' }}</span></button>
+     {% if m.termo_arquivo %}<a class="z-tic on z-m-arq" href="{{ url_for('termo.assinado', num=m.id) }}" target="_blank" title="Abrir o termo assinado"><i class="fa fa-paperclip"></i></a>
+     {% elif pode('lancar') %}<label class="z-tic z-m-up mb-0" title="Guardar o termo assinado (PDF ou foto)"><i class="fa fa-paperclip"></i><input type="file" accept=".pdf,.jpg,.jpeg,.png" hidden></label>{% endif %}
+     <a class="z-tic" href="{{ url_for('termo.inicio', n=m.id) }}" target="_blank" title="Gerar o termo para assinar"><i class="fa fa-print"></i></a></div>
     <div class="z-kc-pe"><span class="z-dias {{ 'velho' if d is not none and d > 7 and c != 'Entregue' }}">{% if c == 'Entregue' %}{{ (m.data_ent or m.data)|data }}{% elif d is none %}sem data{% else %}{{ d }} dia{{ 's' if d != 1 }}{% endif %}</span>
      {% if m.tecnico %}<span class="z-dias" title="Técnico"><i class="fa fa-user-gear me-1"></i>{{ m.tecnico.split(' ')[0] }}</span>{% endif %}
-     {% if m.chamado %}<span class="z-dias">#{{ m.chamado }}</span>{% endif %}
-     <span class="z-pends">{% for f in x.pend %}<span class="z-pend">falta {{ f }}</span> {% endfor %}</span></div>
+     <span class="z-pends">{% for f in x.pend if f not in ('Nº do chamado', 'Termo assinado', 'Arquivo do termo') %}<span class="z-pend">falta {{ f }}</span> {% endfor %}</span></div>
    </div>{% endfor %}
-   <div class="z-col-vazio" hidden>{{ 'Nenhuma reserva aberta' if c == 'Reservado' else 'Solte aqui' }}</div>
+   <div class="z-col-vazio" hidden>{{ 'Nenhuma reserva aberta' if c == 'Reservado' else 'Solte aqui para entregar' }}</div>
   </div></div>{% endfor %}
  <div class="z-col z-perigo z-so-arrasto" data-col="Cancelado"><div class="z-col-topo text-danger"><i class="fa fa-ban"></i>Cancelar reserva</div><div class="z-col-corpo"><div class="z-col-vazio">Solte aqui para cancelar: o item e o kit voltam ao estoque</div></div></div>
-</div></section>
+</div>
+<p class="small text-muted mt-2">A coluna é o que aconteceu com a máquina. Termo e chamado são marcas no cartão: clique para marcar, informe o chamado, e guarde o termo assinado pelo clipe.</p>
+</section>
 
 <section data-painel="preparacao" hidden>
 <div class="z-quadro" id="q-prep">
@@ -64,12 +71,12 @@
 </section>
 
 <section data-painel="links" hidden><div class="z-card">
-<p class="small text-muted">Termos assinados que ainda não têm o link do arquivo digitalizado.</p>
-{% if not s3 %}<div class="z-vazio"><i class="fa fa-circle-check"></i><div>Todos os termos têm link</div></div>{% else %}
-<div class="table-responsive"><table class="table table-sm align-middle z-tab"><thead><tr><th>Nº</th><th>Data</th><th>Tipo</th><th>Item / linha</th><th>Pessoa</th><th style="min-width:380px">Link</th></tr></thead><tbody>
+<p class="small text-muted">Termos marcados como assinados que ainda não têm o arquivo guardado no Zelo.</p>
+{% if not s3 %}<div class="z-vazio"><i class="fa fa-circle-check"></i><div>Todos os termos assinados estão guardados</div></div>{% else %}
+<div class="table-responsive"><table class="table table-sm align-middle z-tab"><thead><tr><th>Nº</th><th>Data</th><th>Tipo</th><th>Item / linha</th><th>Pessoa</th><th style="min-width:340px">Guardar o termo assinado</th></tr></thead><tbody>
 {% for m in s3 %}<tr><td class="z-mono"><a class="z-link" href="{{ url_for('lancar.lancamento', num=m.id) }}">{{ m.id }}</a></td><td>{{ m.data|data }}</td><td>{{ m.tipo }}</td><td>{{ item_link(m.item) if m.item else (m.linha or '—') }}</td><td>{{ pessoa_link(m.matricula, m.nome) }}</td>
-<td>{% if pode('lancar') %}<form method="post" action="{{ url_for('acompanhar.corrigir_mov', num=m.id) }}" class="d-flex gap-1"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="volta" value="{{ url_for('acompanhar.inicio') }}#links">
-<input class="form-control form-control-sm" name="link" placeholder="https://..." required><button class="btn btn-sm btn-zelo"><i class="fa fa-link"></i></button></form>{% endif %}</td></tr>{% endfor %}
+<td>{% if pode('lancar') %}<form method="post" enctype="multipart/form-data" action="{{ url_for('termo.assinado', num=m.id) }}" class="d-flex gap-1"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="volta" value="{{ url_for('acompanhar.inicio') }}#links">
+<input type="file" class="form-control form-control-sm" name="arquivo" accept=".pdf,.jpg,.jpeg,.png" required><button class="btn btn-sm btn-zelo"><i class="fa fa-upload"></i></button></form>{% endif %}</td></tr>{% endfor %}
 </tbody></table></div>{% endif %}</div></section>
 {% endblock %}
 {% block scripts %}
@@ -85,10 +92,29 @@ if (['#preparacao', '#links'].includes(location.hash)) aba(location.hash.slice(1
 const qe = document.getElementById('q-entregas');
 zQuadro(qe, async (card, para) => {
   const r = await zPost('{{ url_for("acompanhar.api_etapa") }}', {id: card.dataset.id, para});
-  if (r.ok) { const p = card.querySelector('.z-pends'); if (p) p.innerHTML = (r.pend || []).map(f => `<span class="z-pend">falta ${f}</span>`).join(' ');
+  if (r.ok) { pends(card, r.pend);
     if (para === 'Cancelado') r.some = true; if (para === 'Entregue') { r.trava = true; card.querySelector('.dropdown')?.remove(); }
     r.link = {href: '{{ url_for("lancar.lancamento", num=0) }}'.slice(0, -1) + card.dataset.id, texto: 'Abrir'}; }
   return r; });
+
+// marcas do cartão: termo, chamado, arquivo do termo
+const NAS_MARCAS = ['Nº do chamado', 'Termo assinado', 'Arquivo do termo'];   // já aparecem como marca apagada no cartão
+const pends = (card, lista) => { const p = card.querySelector('.z-pends'); if (p) p.innerHTML = (lista || []).filter(f => !NAS_MARCAS.includes(f)).map(f => `<span class="z-pend">falta ${f}</span>`).join(' '); };
+async function marca(card, campo, valor) { try { const r = await zPost('{{ url_for("acompanhar.api_marca") }}', {id: card.dataset.id, campo, valor}); if (!r.ok) { zAviso(r.msg, 'erro'); return null; } pends(card, r.pend); return r; } catch (e) { zAviso(e.message, 'erro'); return null; } }
+qe.querySelectorAll('.z-ent').forEach(card => {
+  const t = card.querySelector('.z-m-termo'), c = card.querySelector('.z-m-cham'), up = card.querySelector('.z-m-up input');
+  t.onclick = async () => { const r = await marca(card, 'termo', t.classList.contains('on') ? 'Pendente' : 'Assinado'); if (r) { t.classList.toggle('on', r.termo === 'Assinado'); t.innerHTML = '<i class="fa fa-file-signature me-1"></i>Termo'; } };
+  c.onclick = () => { if (c.querySelector('input')) return; const sp = c.querySelector('span'), atual = sp.textContent.startsWith('#') ? sp.textContent.slice(1) : '';
+    sp.innerHTML = '<input class="z-mini" size="8" placeholder="Nº">'; const i = sp.querySelector('input'); i.value = atual; i.focus();
+    const fim = async salva => { const v = i.value.trim(); if (salva && v !== atual) { const r = await marca(card, 'chamado', v); if (r) { sp.textContent = r.chamado ? '#' + r.chamado : 'Chamado'; c.classList.toggle('on', !!r.chamado); return; } } sp.textContent = atual ? '#' + atual : 'Chamado'; };
+    i.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); i.onblur = null; fim(true); } if (e.key === 'Escape') { i.onblur = null; fim(false); } }; i.onblur = () => fim(true); };
+  if (up) up.onchange = async () => { if (!up.files[0]) return; const fd = new FormData(); fd.append('arquivo', up.files[0]);
+    try { const r = await (await fetch('{{ url_for("termo.assinado", num=0) }}'.replace('/0/', '/' + card.dataset.id + '/'), {method: 'POST', headers: {'X-CSRFToken': zCsrf(), 'X-Requested-With': 'fetch'}, body: fd})).json();
+      if (!r.ok) { zAviso(r.msg, 'erro'); up.value = ''; return; }
+      zAviso(r.msg, 'ok'); pends(card, r.pend); t.classList.add('on');
+      const a = document.createElement('a'); a.className = 'z-tic on z-m-arq'; a.target = '_blank'; a.title = 'Abrir o termo assinado'; a.href = '{{ url_for("termo.assinado", num=0) }}'.replace('/0/', '/' + card.dataset.id + '/'); a.innerHTML = '<i class="fa fa-paperclip"></i>'; up.closest('label').replaceWith(a);
+    } catch (e) { zAviso('Não consegui enviar o arquivo.', 'erro'); } };
+});
 
 // quadro da preparação
 const qp = document.getElementById('q-prep');

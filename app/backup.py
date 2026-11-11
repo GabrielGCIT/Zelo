@@ -104,6 +104,19 @@ def fazer_backup(uri, pasta_destino, agora=None):
         _apagar(destino)
         raise
 
+    # os termos assinados guardados no Zelo vão junto (cópia incremental; falha aqui não invalida o backup do banco)
+    try:
+        import shutil
+        org = os.path.join(os.path.dirname(origem), 'termos')
+        if os.path.isdir(org):
+            dst = os.path.join(pasta_destino, 'termos')
+            os.makedirs(dst, exist_ok=True)
+            for nome in os.listdir(org):
+                if not os.path.exists(os.path.join(dst, nome)):
+                    shutil.copy2(os.path.join(org, nome), os.path.join(dst, nome))
+    except OSError:
+        pass
+
     return destino
 
 

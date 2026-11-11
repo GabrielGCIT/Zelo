@@ -4,10 +4,10 @@ from app import db
 from app.models import Item, Movimentacao, cfg
 
 ROTULO = {'chamado': 'Nº do chamado', 'tecnico': 'Técnico', 'termo': 'Termo assinado', 'receb_por': 'Recebido por',
-          'link': 'Link do termo', 'solucao': 'O que foi feito'}
+          'arquivo': 'Arquivo do termo', 'solucao': 'O que foi feito'}
 EDITAVEIS = [('data', 'Data', 'date'), ('chamado', 'Nº do chamado', 'text'), ('tecnico', 'Técnico', 'tecnico'),
              ('termo', 'Termo', 'termo'), ('data_ass', 'Data da assinatura', 'date'), ('data_ent', 'Data da entrega', 'date'),
-             ('receb_por', 'Recebido por', 'recebido'), ('motivo', 'Motivo', 'text'), ('link', 'Link do termo', 'text'),
+             ('receb_por', 'Recebido por', 'recebido'), ('motivo', 'Motivo', 'text'),
              ('obs', 'Observação', 'text')]
 
 
@@ -21,8 +21,8 @@ def pendencias(m, item=None):
             p.append('tecnico')
         if m.etapa == 'Entregue' and m.termo == 'Pendente':
             p.append('termo')
-        elif m.termo == 'Assinado' and not m.link:
-            p.append('link')
+        elif m.termo == 'Assinado' and not m.termo_arquivo and not m.link:
+            p.append('arquivo')
     elif m.tipo == 'Devolução' and m.item:
         it = item or db.session.get(Item, m.item)
         if it and it.categoria == 'Notebook' and it.finalidade != 'Pool de empréstimo' and not m.receb_por:

@@ -53,7 +53,8 @@ def _configurar_sqlite(app):
 
 
 # Colunas novas em tabelas que já existem (o create_all só cria tabelas). Só acrescenta, nunca apaga.
-COLUNAS_NOVAS = [('envios_sd', 'tipo', "VARCHAR(10) DEFAULT 'chamado'"), ('envios_sd', 'alvo', 'VARCHAR(60)')]
+COLUNAS_NOVAS = [('envios_sd', 'tipo', "VARCHAR(10) DEFAULT 'chamado'"), ('envios_sd', 'alvo', 'VARCHAR(60)'),
+                 ('movimentacoes', 'termo_arquivo', 'VARCHAR(120)')]
 
 
 def _migrar():

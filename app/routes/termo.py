@@ -139,3 +139,43 @@ def pdf(num):
         abort(404)
     return Response(gerar_pdf(dados), mimetype='application/pdf',
                     headers={'Content-Disposition': f'inline; filename="Termo_Zelo_{num}.pdf"'})
+
+
+@termo_bp.route('/termo/<int:num>/assinado', methods=['GET', 'POST'])
+@exige('ver')
+def assinado(num):
+    """GET: abre o termo assinado guardado. POST: guarda o arquivo (marca o termo como Assinado)."""
+    from flask import abort, flash, g, jsonify, redirect, send_file, url_for
+    from app import db
+    from app.auth import pode, registrar_log
+    from app.models import Movimentacao
+    from app.termo_arquivo import MIME, caminho, salvar
+    m = db.session.get(Movimentacao, num) or abort(404)
+    if request.method == 'GET':
+        c = caminho(m)
+        if not c:
+            abort(404)
+        ext = c.rsplit('.', 1)[-1].lower()
+        return send_file(c, mimetype=MIME.get(ext), download_name=f'Termo_assinado_{num}.{ext}')
+    if not pode('lancar'):
+        abort(403)
+    ok, msg = salvar(m, request.files.get('arquivo'), g.usuario.nome)
+    if ok:
+        registrar_log('termo assinado guardado', f'Nº {num}: {m.termo_arquivo}')
+        from app import servicedesk as sd
+        if m.chamado and sd.configurado():
+            try:
+                c = caminho(m)
+                ext = c.rsplit('.', 1)[-1].lower()
+                n = ''.join(x for x in m.chamado if x.isdigit())
+                with open(c, 'rb') as fh:
+                    sd.anexar(n, f'Termo_assinado_Zelo_{num}.{ext}', fh.read(), MIME.get(ext))
+                sd.nota(n, f'[Zelo] Termo assinado do lançamento Nº {num} anexado ao chamado: Termo_assinado_Zelo_{num}.{ext}')
+                msg += ' e anexado ao chamado ' + n
+            except sd.ErroSD as e:
+                msg += f' (não consegui anexar ao chamado: {e})'
+    if request.headers.get('X-Requested-With') == 'fetch':
+        from app.pendencias import texto
+        return jsonify(ok=ok, msg=msg, pend=texto(m) if ok else [])
+    flash(msg, 'success' if ok else 'danger')
+    return redirect(request.form.get('volta') or url_for('lancar.lancamento', num=num))

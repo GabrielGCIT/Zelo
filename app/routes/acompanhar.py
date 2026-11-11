@@ -8,12 +8,12 @@ from app.models import ESTADOS_DEV, Item, Movimentacao, cfg, cfg_lista
 acompanhar_bp = Blueprint('acompanhar', __name__)
 
 
-COLUNAS_ENTREGA = ['Reservado', 'Termo assinado', 'Chamado aberto', 'Entregue']
+COLUNAS_ENTREGA = ['Reservado', 'Entregue']      # o que acontece com a máquina; termo e chamado são marcas no cartão
 
 
 def _cartao_entrega(m, it):
     from app.pendencias import texto
-    return dict(m=m, it=it, pend=texto(m, it), col=m.etapa if m.etapa in COLUNAS_ENTREGA else 'Reservado')
+    return dict(m=m, it=it, pend=texto(m, it), col='Entregue' if m.etapa == 'Entregue' else 'Reservado')
 
 
 @acompanhar_bp.route('/acompanhar')
@@ -52,9 +52,10 @@ def inicio():
             Movimentacao.id.desc()).limit(30):
         prep_cols['Liberado'].append(dict(it=db.session.get(Item, m.item), lib=m))
     # 3 · termos assinados sem link (desde a data do fluxo)
-    s3 = (Movimentacao.query.filter(Movimentacao.tipo.in_(('Entrega', 'Empréstimo', 'Devolução')),
-                                    Movimentacao.data >= fluxo, (Movimentacao.link.is_(None)) | (Movimentacao.link == ''),
-                                    ((Movimentacao.termo == 'Assinado') | (Movimentacao.tipo == 'Devolução')))
+    s3 = (Movimentacao.query.filter(Movimentacao.tipo.in_(('Entrega', 'Empréstimo')), Movimentacao.data >= fluxo,
+                                    (Movimentacao.link.is_(None)) | (Movimentacao.link == ''),
+                                    Movimentacao.termo_arquivo.is_(None), Movimentacao.termo == 'Assinado',
+                                    (Movimentacao.etapa.is_(None)) | (Movimentacao.etapa != 'Cancelado'))
           .order_by(Movimentacao.id.desc()).limit(200).all())
     n4 = request.args.get('n', '')
     if n4.isdigit() and db.session.get(Movimentacao, int(n4)):
@@ -74,7 +75,7 @@ def api_etapa():
     para = j.get('para')
     if para == m.etapa:
         return jsonify(ok=True, msg='')
-    if para == 'Reservado':
+    if para not in ('Entregue', 'Cancelado'):
         return jsonify(ok=False, msg='Não dá para voltar a Reservado: abra o lançamento para corrigir')
     ok, msg = corrigir(m, {'etapa': para}, g.usuario.nome)
     if ok:
@@ -85,6 +86,31 @@ def api_etapa():
             sd.enfileirar_tudo(current_app._get_current_object(), [m])
     from app.pendencias import texto
     return jsonify(ok=ok, msg=msg, pend=texto(m) if ok and para != 'Cancelado' else [])
+
+
+@acompanhar_bp.route('/api/acompanhar/marca', methods=['POST'])
+@exige('lancar')
+def api_marca():
+    """Marcas do cartão: termo assinado (sim/não) e Nº do chamado. Tudo vai para a auditoria."""
+    from app.pendencias import editar, texto
+    j = request.get_json(silent=True) or {}
+    m = db.session.get(Movimentacao, int(j.get('id') or 0))
+    campo, valor = j.get('campo'), (j.get('valor') or '').strip()
+    if not m or campo not in ('termo', 'chamado'):
+        return jsonify(ok=False, msg='Lançamento não encontrado')
+    if campo == 'termo' and valor not in ('Assinado', 'Pendente'):
+        return jsonify(ok=False, msg='Valor inválido')
+    antes = m.chamado
+    mudou = editar(m, {campo: valor}, g.usuario.nome)
+    if mudou:
+        registrar_log('acompanhar', f'Nº {m.id}: ' + '; '.join(mudou))
+        from flask import current_app
+        from app import servicedesk as sd
+        if campo == 'chamado' and m.chamado and not antes and sd.configurado():
+            ids = sd.enfileirar([m])
+            if ids:
+                sd.processar(current_app._get_current_object(), ids)
+    return jsonify(ok=True, msg='; '.join(mudou), pend=texto(m), termo=m.termo, chamado=m.chamado or '')
 
 
 @acompanhar_bp.route('/api/acompanhar/preparo', methods=['POST'])

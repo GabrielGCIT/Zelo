@@ -180,6 +180,7 @@ class Movimentacao(db.Model):
     local = db.Column(db.String(100))
     etapa = db.Column(db.String(20))
     termo = db.Column(db.String(20))
+    termo_arquivo = db.Column(db.String(120))   # termo assinado guardado no Zelo (instance/termos)
     data_ass = db.Column(db.String(10))
     chamado = db.Column(db.String(30))
     data_ent = db.Column(db.String(10))

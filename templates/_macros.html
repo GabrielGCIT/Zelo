@@ -15,7 +15,7 @@
 <thead><tr><th>Nº</th><th>Data</th><th>Tipo</th>{% if mostra_item %}<th>Item</th>{% endif %}<th>Linha</th><th>Pessoa / local</th><th>Etapa</th><th>Termo</th><th>Chamado</th><th>Motivo</th><th>Resp.</th><th>Observação</th></tr></thead>
 <tbody>{% for m in movs %}<tr>
 <td class="z-mono"><a class="z-link" href="{{ url_for('lancar.lancamento', num=m.id) }}">{{ m.id }}</a></td><td>{{ m.data|data }}</td><td>{{ m.tipo }}</td>{% if mostra_item %}<td>{{ item_link(m.item) }}</td>{% endif %}
-<td>{{ linha_link(m.linha) }}</td><td>{{ pessoa_link(m.matricula, m.nome or m.local) }}</td><td>{{ m.etapa or '' }}</td><td>{{ m.termo or '' }}</td>
+<td>{{ linha_link(m.linha) }}</td><td>{{ pessoa_link(m.matricula, m.nome or m.local) }}</td><td>{{ m.etapa or '' }}</td><td>{{ m.termo or '' }}{% if m.termo_arquivo %} <a href="{{ url_for('termo.assinado', num=m.id) }}" target="_blank" title="Abrir o termo assinado"><i class="fa fa-paperclip"></i></a>{% endif %}</td>
 <td>{{ m.chamado or '' }}</td><td>{{ m.motivo or '' }}</td><td>{{ m.resp or '' }}</td><td class="small">{{ m.obs or '' }}</td></tr>
 {% else %}<tr><td colspan="12" class="z-vazio">Nenhuma movimentação.</td></tr>{% endfor %}</tbody></table></div>
 {%- endmacro %}

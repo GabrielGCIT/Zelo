@@ -47,7 +47,12 @@
 - Ações em lote na lista de itens (devolver vários, mudar site, separar para baixa).
 - Fila única de devolução no desligamento.
 
+## Feito em 11/11 (v1.5.0), a pedido do Gabriel
+- Quadro das entregas com 2 colunas (Reservado → Entregue); termo e chamado são marcas no cartão.
+- Termo assinado guardado no próprio Zelo (instance/termos, vai no backup); a ideia de "link" foi abandonada.
+
 ## Etapa 5 — Aceite digital do termo (aprovado pelo Gabriel)
+- O PDF aceito deve ser gravado no mesmo lugar do termo assinado (termo_arquivo).
 - Link de aceite para a pessoa, registro de quem/quando/IP, PDF assinado anexado ao chamado e ao
   lançamento; termo passa a Assinado sozinho. Definir com o Gabriel: aceite por link interno ou e-mail.
 

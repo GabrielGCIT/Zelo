@@ -171,3 +171,9 @@ a.z-link:hover { text-decoration: underline; }
 .z-toast i { color: var(--accent); } .z-toast.erro i { color: #ff8b95; } .z-toast.aviso i { color: #ffcf66; }
 .z-toast a { color: var(--accent); margin-left: auto; white-space: nowrap; }
 .z-toast.sai { opacity: 0; transform: translateY(8px); }
+
+.z-quadro-2 { grid-auto-columns: minmax(300px, 1fr) minmax(300px, 2fr); }
+.z-col-corpo.z-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); align-items: start; }
+.z-col-corpo.z-grade .z-col-vazio { grid-column: 1 / -1; }
+a.z-tic { text-decoration: none; } button.z-tic:disabled { opacity: .7; }
+.z-mini { border: 0; outline: 0; background: transparent; color: inherit; font: inherit; width: 70px; padding: 0; }

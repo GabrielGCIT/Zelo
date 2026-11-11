@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
 {% block title %}Lançamentos{% endblock %}
 {% set COLS = {
-  'entrega': ['acao','item','para','linha','termo','chamado','data','motivo','tecnico','acess','receb_por','link','obs'],
-  'emprestimo': ['acao','item','para','termo','chamado','data','prazo','tecnico','link','obs'],
-  'mobile': ['acao','item','para','linha','local','termo','chamado','data','motivo','tecnico','link','obs'],
+  'entrega': ['acao','item','para','linha','termo','chamado','data','motivo','tecnico','acess','receb_por','obs'],
+  'emprestimo': ['acao','item','para','termo','chamado','data','prazo','tecnico','obs'],
+  'mobile': ['acao','item','para','linha','local','termo','chamado','data','motivo','tecnico','obs'],
   'estoque': ['acao','item','data','motivo','bo','obs'] } %}
 {% set ROT = {'acao':'Ação','item':'Item (plaqueta, tag, IMEI)','para':'Para (quem recebe)','linha':'Linha','termo':'Termo',
   'chamado':'Nº chamado','data':'Data (vazio = hoje)','motivo':'Motivo','bo':'B.O.','tecnico':'Técnico','acess':'Acessórios (vazio = automático)',

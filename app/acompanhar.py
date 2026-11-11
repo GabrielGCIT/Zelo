@@ -47,7 +47,7 @@ def corrigir(mov, dados, resp):
             return False, 'Data no futuro'
     mudou = []
     if nova:
-        if nova in ('Termo assinado', 'Chamado aberto', 'Entregue') and mov.termo != 'Assinado' and mov.termo != 'Dispensado':
+        if nova == 'Termo assinado' and mov.termo != 'Assinado' and mov.termo != 'Dispensado':
             mov.termo = 'Assinado'
             mov.data_ass = dados.get('data_ass') or mov.data_ass or hoje
             mudou.append('termo assinado')

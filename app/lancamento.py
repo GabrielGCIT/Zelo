@@ -53,7 +53,7 @@ CARDS = {
 }
 # ação → campos que a tela mostra (o resto nem aparece)
 CAMPOS_ACAO = {
-    'Entregar agora': ['para', 'linha', 'local', 'chamado', 'tecnico', 'termo', 'acess', 'data', 'link', 'obs'],
+    'Entregar agora': ['para', 'linha', 'local', 'chamado', 'tecnico', 'termo', 'acess', 'data', 'obs'],
     'Reservar': ['para', 'linha', 'chamado', 'tecnico', 'acess', 'data', 'obs'],
     'Transferir para outra pessoa': ['para', 'chamado', 'tecnico', 'termo', 'data', 'obs'],
     'Emprestar': ['para', 'prazo', 'chamado', 'tecnico', 'data', 'obs'],

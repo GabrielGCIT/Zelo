@@ -102,12 +102,13 @@ def test_quadro_entregas_arrastar(app, cli):
     m = r[0].movs[0]
     h = cli.get('/acompanhar').get_data(as_text=True)
     assert f'data-id="{m.id}"' in h
-    j = cli.post('/api/acompanhar/etapa', json={'id': m.id, 'para': 'Chamado aberto'}).json
-    assert j['ok'] and 'Nº do chamado' in j['pend']
+    j = cli.post('/api/acompanhar/marca', json={'id': m.id, 'campo': 'chamado', 'valor': 'INC77'}).json
+    assert j['ok'] and j['chamado'] == 'INC77' and 'Nº do chamado' not in j['pend']
     assert cli.post('/api/acompanhar/etapa', json={'id': m.id, 'para': 'Entregue'}).json['ok']
     db.session.expire_all()
     assert db.session.get(Item, it.codigo).situacao == 'Em uso'
-    assert not cli.post('/api/acompanhar/etapa', json={'id': m.id, 'para': 'Termo assinado'}).json['ok']   # já entregue
+    assert db.session.get(Movimentacao, m.id).termo == 'Pendente'           # entregar não assina o termo sozinho
+    assert not cli.post('/api/acompanhar/etapa', json={'id': m.id, 'para': 'Reservado'}).json['ok']
 
 
 def test_quadro_preparacao_salva_a_cada_clique(app, cli):
@@ -135,3 +136,29 @@ def test_quadro_manutencao(app, cli):
     assert cli.post('/api/manutencao/status', json={'id': os_.id, 'para': 'Concluída'}).json['ok']
     db.session.refresh(os_)
     assert not os_.aberta and cli.get('/manutencao').status_code == 200
+
+
+def test_termo_assinado_guardado_no_zelo(app, cli):
+    import io
+    it, p = _nb(), _p()
+    r, _, _ = gravar([{'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum', 'termo': 'Pendente'}],
+                     'entrega', 'T')
+    m = r[0].movs[0]
+    assert 'Termo assinado' in texto(m)
+    ruim = cli.post(f'/termo/{m.id}/assinado', data={'arquivo': (io.BytesIO(b'nao sou pdf'), 't.pdf')},
+                    content_type='multipart/form-data', headers={'X-Requested-With': 'fetch'}).json
+    assert not ruim['ok']
+    ok = cli.post(f'/termo/{m.id}/assinado', data={'arquivo': (io.BytesIO(b'%PDF-1.4 termo assinado'), 'termo.pdf')},
+                  content_type='multipart/form-data', headers={'X-Requested-With': 'fetch'}).json
+    assert ok['ok'] and 'Termo assinado' not in ok['pend'] and 'Arquivo do termo' not in ok['pend']
+    db.session.refresh(m)
+    assert m.termo == 'Assinado' and m.termo_arquivo
+    g = cli.get(f'/termo/{m.id}/assinado')
+    assert g.status_code == 200 and g.data.startswith(b'%PDF') and g.mimetype == 'application/pdf'
+    assert 'Abrir o termo assinado' in cli.get(f'/lancamento/{m.id}').get_data(as_text=True)
+    # vai junto no backup
+    import os, tempfile
+    from app.backup import fazer_backup
+    with tempfile.TemporaryDirectory() as d:
+        fazer_backup(app.config['SQLALCHEMY_DATABASE_URI'], d)
+        assert m.termo_arquivo in os.listdir(os.path.join(d, 'termos'))
