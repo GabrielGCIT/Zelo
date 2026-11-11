@@ -1,0 +1,38 @@
+{% extends 'base.html' %}{% block title %}Pessoa{% endblock %}
+{% block content %}
+<h1 class="z-titulo">Pessoa: cadastrar, atualizar ou desligar</h1><p class="z-sub">Desligar abre o pedido de devolução de tudo que está com a pessoa.</p>
+<div class="row g-3">
+<form class="col-lg-6" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="cadastrar">
+<div class="z-card"><h2>Cadastrar</h2><div class="row g-2">
+ <div class="col-12"><label class="form-label small">Nome *</label><input class="form-control form-control-sm" name="nome" required></div>
+ <div class="col-md-4"><label class="form-label small">Tipo *</label><select class="form-select form-select-sm" name="tipo" required>{% for t in tipos %}<option>{{ t }}</option>{% endfor %}</select></div>
+ <div class="col-md-4"><label class="form-label small">ID (CLT = matrícula; vazio = automático)</label><input class="form-control form-control-sm" name="id"></div>
+ <div class="col-md-4"><label class="form-label small">CPF</label><input class="form-control form-control-sm" name="cpf"></div>
+ <div class="col-md-6"><label class="form-label small">Empresa (CLT vazio = Martin Brower)</label><input class="form-control form-control-sm" name="empresa"></div>
+ <div class="col-md-6"><label class="form-label small">Centro de custo</label><input class="form-control form-control-sm" name="cc"></div>
+ <div class="col-md-6"><label class="form-label small">Cargo</label><input class="form-control form-control-sm" name="cargo"></div>
+ <div class="col-md-3"><label class="form-label small">Site</label><select class="form-select form-select-sm" name="site"><option></option>{% for s in sites %}<option>{{ s }}</option>{% endfor %}</select></div>
+ <div class="col-md-3"><label class="form-label small">Cadastro JDE</label><input class="form-control form-control-sm" name="jde"></div>
+ <div class="col-md-6"><label class="form-label small">User</label><input class="form-control form-control-sm" name="user"></div>
+ <div class="col-md-6"><label class="form-label small">E-mail</label><input class="form-control form-control-sm" name="email"></div>
+ <div class="col-12"><label class="form-label small">Observação</label><input class="form-control form-control-sm" name="obs"></div>
+</div><button class="btn btn-sm btn-zelo mt-3">Cadastrar</button></div></form>
+<div class="col-lg-6">
+<form method="post" class="z-card"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><h2>Atualizar ou desligar</h2>
+ <label class="form-label small">Pessoa (ID)</label><input class="form-control form-control-sm mb-2" name="pessoa" id="pessoa-sel" list="dl-p" required placeholder="digite o nome e escolha">
+ <datalist id="dl-p"></datalist>
+ <div class="row g-2"><div class="col-md-6"><label class="form-label small">Novo CC</label><input class="form-control form-control-sm" name="cc"></div>
+ <div class="col-md-6"><label class="form-label small">Novo cargo</label><input class="form-control form-control-sm" name="cargo"></div>
+ <div class="col-md-6"><label class="form-label small">Novo site</label><select class="form-select form-select-sm" name="site"><option></option>{% for s in sites %}<option>{{ s }}</option>{% endfor %}</select></div>
+ <div class="col-md-6"><label class="form-label small">Novo e-mail</label><input class="form-control form-control-sm" name="email"></div>
+ <div class="col-12"><label class="form-label small">Observação</label><input class="form-control form-control-sm" name="obs"></div></div>
+ <div class="small text-muted mt-2">Atualizar: só os campos preenchidos mudam.</div>
+ <div class="d-flex gap-2 mt-2"><button class="btn btn-sm btn-zelo" name="acao" value="atualizar">Atualizar</button>
+ <button class="btn btn-sm btn-outline-danger" name="acao" value="desligar" onclick="return confirm('Desligar e pedir a devolução de tudo que está com a pessoa?')">Desligar</button></div>
+</form></div></div>
+{% endblock %}
+{% block scripts %}<script>
+let t; document.getElementById('pessoa-sel').addEventListener('input', e => { clearTimeout(t); t = setTimeout(async () => {
+  const q = e.target.value; if (q.length < 2) return; const r = await fetch('{{ url_for("lancar.api_pessoas") }}?q=' + encodeURIComponent(q));
+  document.getElementById('dl-p').innerHTML = (await r.json()).map(p => `<option value="${p.id}">${p.nome}</option>`).join(''); }, 250); });
+</script>{% endblock %}

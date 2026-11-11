@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block title %}Lançamentos{% endblock %}
+{% set COLS = {
+  'entrega': ['acao','item','para','linha','termo','chamado','data','motivo','tecnico','acess','receb_por','link','obs'],
+  'emprestimo': ['acao','item','para','termo','chamado','data','prazo','tecnico','link','obs'],
+  'mobile': ['acao','item','para','linha','local','termo','chamado','data','motivo','tecnico','link','obs'],
+  'estoque': ['acao','item','data','motivo','bo','obs'] } %}
+{% set ROT = {'acao':'Ação','item':'Item (plaqueta, tag, IMEI)','para':'Para (quem recebe)','linha':'Linha','termo':'Termo',
+  'chamado':'Nº chamado','data':'Data (vazio = hoje)','motivo':'Motivo','bo':'B.O.','tecnico':'Técnico','acess':'Acessórios (vazio = automático)',
+  'receb_por':'Recebido por','link':'Link do termo','obs':'Observação','prazo':'Prazo (dias)','local':'Local de uso'} %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center gap-2"><div><h1 class="z-titulo">Lançamentos</h1>
+<p class="z-sub">Uma linha por movimentação. A Conferência mostra o que vai acontecer; só as linhas OK são gravadas.</p></div>
+<div class="ms-auto"><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lancar.pessoa') }}"><i class="fa fa-user-plus me-1"></i>Pessoa</a></div></div>
+<ul class="nav nav-tabs mb-0">{% for k, (rot, _a) in abas.items() %}<li class="nav-item"><a class="nav-link {{ 'active' if k==aba }}" href="{{ url_for('lancar.grade', aba=k) }}">{{ rot }}</a></li>{% endfor %}</ul>
+<div class="z-card" style="border-top-left-radius:0">
+ <div class="small text-muted mb-2">Ações desta aba: {{ abas[aba][1]|join(' · ') }}</div>
+ <div class="table-responsive"><table class="table z-grade" id="grade">
+  <thead><tr>{% for c in COLS[aba] %}<th>{{ ROT[c] }}</th>{% if loop.first %}<th>Conferência</th>{% endif %}{% endfor %}</tr></thead>
+  <tbody>{% for i in range(n) %}<tr data-i="{{ i }}">{% for c in COLS[aba] %}<td>
+   {% if c=='acao' %}<select class="form-select" data-c="acao"><option></option>{% for a in abas[aba][1] %}<option>{{ a }}</option>{% endfor %}</select>
+   {% elif c=='termo' %}<select class="form-select" data-c="termo"><option value="">(padrão)</option>{% for t in termos %}<option>{{ t }}</option>{% endfor %}</select>
+   {% elif c=='motivo' %}<select class="form-select" data-c="motivo"><option></option>{% for t in motivos %}<option>{{ t }}</option>{% endfor %}</select>
+   {% elif c=='tecnico' %}<select class="form-select" data-c="tecnico"><option></option>{% for t in tecnicos %}<option>{{ t }}</option>{% endfor %}</select>
+   {% elif c=='receb_por' %}<select class="form-select" data-c="receb_por"><option></option>{% for t in recebido %}<option>{{ t }}</option>{% endfor %}</select>
+   {% elif c=='acess' %}<select class="form-select" data-c="acess"><option></option>{% for t in kit %}<option>{{ t }}</option>{% endfor %}</select>
+   {% elif c=='prazo' %}<select class="form-select" data-c="prazo"><option value="">(padrão)</option>{% for t in prazos %}<option>{{ t }}</option>{% endfor %}</select>
+   {% elif c=='data' %}<input type="date" class="form-control" data-c="data">
+   {% elif c=='para' %}<input class="form-control" data-c="para" list="dl-pessoas" autocomplete="off" {% if i==0 %}value="{{ pre.para }}"{% endif %}>
+   {% else %}<input class="form-control {{ 'z-mono' if c in ('item','linha') else '' }}" data-c="{{ c }}" {% if i==0 and c in pre %}value="{{ pre[c] }}"{% endif %}>{% endif %}
+  </td>{% if loop.first %}<td class="z-res"></td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody></table></div>
+ <datalist id="dl-pessoas"></datalist>
+ <div class="d-flex gap-2 align-items-center mt-2">
+  <button class="btn btn-zelo" id="btn-gravar"><i class="fa fa-check me-1"></i>Registrar tudo</button>
+  <button class="btn btn-outline-danger" id="btn-desfazer" title="Apaga todas as linhas do seu último clique em Registrar"><i class="fa fa-rotate-left me-1"></i>Desfazer último</button>
+  <span id="status" class="ms-2 small"></span>
+ </div>
+</div>
+{% if aba == 'emprestimo' %}
+<div class="z-card"><h2>Acessórios (fonte, mouse, headset...)</h2>
+ <div class="row g-3">
+ <form class="col-lg-7 row g-2 align-items-end" method="post" action="{{ url_for('lancar.acessorio') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao_ac" value="emprestar">
+  <div class="col-md-5"><label class="form-label small">Acessório</label><select class="form-select form-select-sm" name="consumivel" required><option></option>{% for c in consumiveis %}<option>{{ c }}</option>{% endfor %}</select></div>
+  <div class="col-md-1"><label class="form-label small">Qtd</label><input class="form-control form-control-sm" name="qtd" value="1"></div>
+  <div class="col-md-4"><label class="form-label small">Para</label><input class="form-control form-control-sm" name="para_ac" list="dl-pessoas" data-c="para" required></div>
+  <div class="col-md-2"><label class="form-label small">Prazo</label><select class="form-select form-select-sm" name="prazo_ac">{% for t in prazos %}<option>{{ t }}</option>{% endfor %}</select></div>
+  <div class="col-md-4"><label class="form-label small">Nº chamado</label><input class="form-control form-control-sm" name="chamado_ac"></div>
+  <div class="col-md-6"><label class="form-label small">Observação</label><input class="form-control form-control-sm" name="obs_ac"></div>
+  <div class="col-md-2"><button class="btn btn-sm btn-zelo w-100">Emprestar</button></div>
+ </form>
+ <form class="col-lg-5 row g-2 align-items-end" method="post" action="{{ url_for('lancar.acessorio') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao_ac" value="devolver">
+  <div class="col-md-4"><label class="form-label small">Nº EA-</label><input class="form-control form-control-sm" name="ea" placeholder="EA-0001" required></div>
+  <div class="col-md-5"><label class="form-label small">Recebido por</label><select class="form-select form-select-sm" name="receb_ac">{% for t in recebido %}<option>{{ t }}</option>{% endfor %}</select></div>
+  <div class="col-md-3"><button class="btn btn-sm btn-outline-secondary w-100">Devolver</button></div>
+ </form></div></div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+const ABA = {{ aba|tojson }};
+const linhas = () => [...document.querySelectorAll('#grade tbody tr')].map(tr => {
+  const d = {}; tr.querySelectorAll('[data-c]').forEach(e => d[e.dataset.c] = e.value); return d; });
+async function post(url, body) {
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': zCsrf()}, body: JSON.stringify(body)});
+  if (!r.ok) throw new Error('Erro ' + r.status); return r.json(); }
+function pinta(res) {
+  document.querySelectorAll('#grade tbody tr').forEach((tr, i) => {
+    const r = res[i] || {}; const td = tr.querySelector('.z-res');
+    td.textContent = r.msg || ''; td.className = 'z-res ' + (r.status === 'erro' ? 'z-erro' : r.status === 'aviso' ? 'z-aviso' : r.status === 'ok' ? 'z-ok' : '');
+  }); }
+let tConf; function agendaConferir() { clearTimeout(tConf); tConf = setTimeout(async () => { try { pinta(await post('{{ url_for("lancar.api_conferir") }}', {aba: ABA, linhas: linhas()})); } catch (e) {} }, 350); }
+document.querySelectorAll('#grade [data-c]').forEach(e => { e.addEventListener('change', agendaConferir); e.addEventListener('input', agendaConferir); });
+// pessoas: sugestões enquanto digita
+let tP; document.addEventListener('input', ev => { const e = ev.target; if (e.dataset.c !== 'para') return; clearTimeout(tP);
+  tP = setTimeout(async () => { const q = e.value; if (q.length < 2 || q.includes(' · ')) return;
+    const r = await fetch('{{ url_for("lancar.api_pessoas") }}?q=' + encodeURIComponent(q)); const ps = await r.json();
+    document.getElementById('dl-pessoas').innerHTML = ps.map(p => `<option value="${p.rotulo.replace(/"/g,'&quot;')}">`).join(''); }, 250); });
+document.getElementById('btn-gravar').onclick = async () => {
+  const st = document.getElementById('status'); st.textContent = 'Gravando...';
+  try {
+    const r = await post('{{ url_for("lancar.api_gravar") }}', {aba: ABA, linhas: linhas()});
+    const trs = [...document.querySelectorAll('#grade tbody tr')];
+    r.resultados.forEach((x, i) => { if (x.gravada) trs[i].querySelectorAll('[data-c]').forEach(e => e.value = ''); });
+    pinta(r.resultados.map(x => x.gravada ? {status: 'ok', msg: 'Gravado: Nº ' + x.nums.join(', ')} : x));
+    const erros = r.resultados.filter(x => x.status === 'erro').length;
+    st.innerHTML = `<span class="z-ok">${r.gravadas} linha(s) gravada(s)</span>` + (erros ? ` · <span class="z-erro">${erros} com erro ficaram na grade</span>` : '');
+  } catch (e) { st.innerHTML = '<span class="z-erro">' + e.message + '</span>'; } };
+document.getElementById('btn-desfazer').onclick = async () => {
+  if (!confirm('Desfazer o seu último clique em Registrar? Todas as linhas daquele clique serão apagadas do Histórico.')) return;
+  const r = await post('{{ url_for("lancar.api_desfazer") }}', {});
+  document.getElementById('status').innerHTML = r.apagados ? `<span class="z-aviso">${r.apagados} lançamento(s) do último clique apagado(s).</span>` : 'Nada para desfazer.'; };
+agendaConferir();
+</script>
+{% endblock %}

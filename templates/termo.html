@@ -1,0 +1,45 @@
+{% extends 'base.html' %}{% block title %}Termo{% endblock %}
+{% block head %}<style>
+.termo { background:#fff; color:#000; max-width: 820px; margin: 0 auto; padding: 48px 56px; font-family: Arial, sans-serif; font-size: 12.5px; line-height: 1.55; border:1px solid var(--borda); }
+.termo .cab { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 28px; }
+.termo .logo { font-size: 30px; font-weight: 700; letter-spacing: -1px; line-height: 1; }
+.termo .logo small { display:block; font-size: 30px; }
+.termo .end { text-align:right; font-size: 11px; line-height: 1.45; }
+.termo h3 { font-size: 14px; font-weight: 700; font-style: italic; text-align:center; margin: 24px 0; }
+.termo p { text-align: justify; margin: 0 0 12px; }
+.termo .eq { font-weight: 700; margin: 10px 0 14px; }
+.termo .ass { display:flex; justify-content:space-between; gap: 40px; margin-top: 70px; }
+.termo .ass div { flex:1; border-top:1px solid #000; padding-top: 4px; text-align:center; font-size: 11.5px; }
+@media print { .termo { border:0; padding: 0; max-width:none; } }
+</style>{% endblock %}
+{% block content %}
+<div class="no-print">
+<h1 class="z-titulo">Termo</h1><p class="z-sub">Digite o Nº do lançamento (ou EA-0001 para acessório). O tipo de termo sai sozinho; imprima ou salve em PDF.</p>
+<form class="z-card row g-2 align-items-end" method="get">
+ <div class="col-md-3"><label class="form-label small">Nº do lançamento</label><input class="form-control" name="n" value="{{ num }}" autofocus></div>
+ <div class="col-md-4"><label class="form-label small">Trocar o tipo (opcional)</label><select class="form-select" name="tipo"><option value="">Automático{% if d %} ({{ d.tipo_auto }}){% endif %}</option>{% for t in tipos %}<option {{ 'selected' if request.args.get('tipo')==t }}>{{ t }}</option>{% endfor %}</select></div>
+ <div class="col-auto"><button class="btn btn-zelo">Gerar</button> {% if d %}<button type="button" class="btn btn-outline-secondary" onclick="window.print()"><i class="fa fa-print me-1"></i>Imprimir / PDF</button>{% endif %}</div>
+</form>
+{% if erro %}<div class="alert alert-danger">{{ erro }}</div>{% endif %}
+</div>
+{% if d %}
+<div class="termo">
+ <div class="cab"><div class="logo">MB Martin<small>Brower.</small></div>
+  <div class="end">Martin Brower Brasil<br>Avenida das Comunicações, 333<br>Parque Industrial Anhanguera<br>Osasco, SP<br>06276-190<br>Tel: +55 (11) 3659-2800<br><br>martinbrower.com.br</div></div>
+ <h3>{{ d.titulo }}</h3>
+ <p style="text-align:right">{{ d.data_ext }}</p>
+ <p>Ilmo Sr(a). &nbsp;{{ d.nome }}{% if d.matricula_fmt %}<br>Matrícula nº {{ d.matricula_fmt }}{% endif %}</p>
+ <p>{{ d.abertura }}</p>
+ {% if d.equipamento %}<p class="eq">{{ d.equipamento }}</p>{% endif %}
+ {% if d.linha %}<p class="eq">{{ d.linha }}</p>{% endif %}
+ {% if d.acessorios %}<p class="eq">{{ d.acessorios }}</p>{% endif %}
+ {% if d.periodo %}<p><b>Período do empréstimo:</b> {{ d.periodo }}{% if d.ref %} · {{ d.ref }}{% endif %}</p>{% elif d.chamado %}<p><b>Chamado:</b> {{ d.chamado }}</p>{% endif %}
+ {% if d.p1 %}<p>{{ d.p1 }}</p>{% endif %}
+ {% if d.p2 %}<p>{{ d.p2 }}</p>{% endif %}
+ {% if d.obs %}<p><b>Observação:</b> {{ d.obs }}</p>{% endif %}
+ {% if d.fecho %}<p>{{ d.fecho }}</p>{% endif %}
+ <div class="ass"><div>{{ d.nome }}<br>Colaborador(a)</div><div>{{ 'Martin Brower Brasil' if d.ass_empresa == '(empresa)' else d.ass_empresa }}</div></div>
+ <p class="text-muted mt-4" style="font-size:10px">Ref.: {{ 'lançamento Nº ' ~ d.num if d.num.isdigit() else d.num }}</p>
+</div>
+{% endif %}
+{% endblock %}
