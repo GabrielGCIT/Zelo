@@ -9,10 +9,10 @@
   'chamado':'Nº chamado','data':'Data (vazio = hoje)','motivo':'Motivo','bo':'B.O.','tecnico':'Técnico','acess':'Acessórios (vazio = automático)',
   'receb_por':'Recebido por','link':'Link do termo','obs':'Observação','prazo':'Prazo (dias)','local':'Local de uso'} %}
 {% block content %}
-<div class="d-flex flex-wrap align-items-center gap-2"><div><h1 class="z-titulo">Lançamentos</h1>
-<p class="z-sub">Uma linha por movimentação. A Conferência mostra o que vai acontecer; só as linhas OK são gravadas.</p></div>
+<div class="d-flex flex-wrap align-items-center gap-2"><div><h1 class="z-titulo">Lançamento em lote</h1>
+<p class="z-sub"><a href="{{ url_for('lancar.grade') }}"><i class="fa fa-arrow-left me-1"></i>Voltar aos cards</a> · Uma linha por movimentação. A Conferência mostra o que vai acontecer; só as linhas OK são gravadas.</p></div>
 <div class="ms-auto d-flex gap-2"><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('consulta.item_novo') }}"><i class="fa fa-laptop-medical me-1"></i>Ativo novo</a><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lancar.pessoa') }}"><i class="fa fa-user-plus me-1"></i>Pessoa</a></div></div>
-<ul class="nav nav-tabs mb-0">{% for k, (rot, _a) in abas.items() %}<li class="nav-item"><a class="nav-link {{ 'active' if k==aba }}" href="{{ url_for('lancar.grade', aba=k) }}">{{ rot }}</a></li>{% endfor %}</ul>
+<ul class="nav nav-tabs mb-0">{% for k, (rot, _a) in abas.items() %}<li class="nav-item"><a class="nav-link {{ 'active' if k==aba }}" href="{{ url_for('lancar.lote', aba=k) }}">{{ rot }}</a></li>{% endfor %}</ul>
 <div class="z-card" style="border-top-left-radius:0">
  <div class="small text-muted mb-2">Ações desta aba: {{ abas[aba][1]|join(' · ') }}</div>
  <div class="table-responsive"><table class="table z-grade" id="grade">

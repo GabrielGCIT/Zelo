@@ -51,8 +51,6 @@ def corrigir(mov, dados, resp):
             mov.termo = 'Assinado'
             mov.data_ass = dados.get('data_ass') or mov.data_ass or hoje
             mudou.append('termo assinado')
-        if nova in ('Chamado aberto', 'Entregue') and not (dados.get('chamado') or mov.chamado) and mov.tipo == 'Entrega':
-            return False, 'Informe o Nº do chamado'
         if nova == 'Entregue':
             mov.data_ent = dados.get('data_ent') or hoje
         if nova == 'Cancelado':
@@ -104,23 +102,26 @@ def preparar(item, dados, resp):
     for k in ('veio_fonte', 'veio_mouse', 'veio_teclado', 'estado'):
         if not dados.get(k):
             return False, 'Confira a chegada: veio fonte, mouse, teclado e estado'
-    if not dados.get('preparado_por'):
-        return False, 'Preencha Preparado por'
+    dados['preparado_por'] = dados.get('preparado_por') or resp
     marcas = {k: dados.get(k) == 'Sim' for k, _r in PASSOS}
-    tudo = all(marcas.values())
+    # "Liberar assim mesmo": volta ao estoque sem todas as marcas; o que ficou sem marcar vai na observação.
+    tudo = all(marcas.values()) or dados.get('liberar') == 'Sim'
+    pulou = [rot for k, rot in PASSOS if not marcas[k]] if tudo else []
     hoje = date.today().isoformat()
     obs = 'Preparação: ' + ' · '.join(filter(None, [
         'chegou com avaria' if dados['estado'] == 'Com avaria' else '',
-        *[f'{rot} ✓' for k, rot in PASSOS if marcas[k]]]))
+        *[f'{rot} ✓' for k, rot in PASSOS if marcas[k]],
+        ('liberado sem: ' + ', '.join(pulou)) if pulou else '']))
     kit = []
     if tudo:
         falta = []
-        if dados['veio_fonte'] != 'Sim':
+        if dados['veio_fonte'] != 'Sim' and marcas['fonte']:
             n = f'Fonte de notebook – {item.fabricante or "Dell"}'
             if saldo(n) <= 0:
                 return False, f'Sem saldo de {n} no EC para completar o kit'
             falta.append(n)
-        km, erro = escolher_kit(item.fabricante, dados['veio_mouse'] != 'Sim', dados['veio_teclado'] != 'Sim', {})
+        km, erro = escolher_kit(item.fabricante, dados['veio_mouse'] != 'Sim' and marcas['mouse'],
+                                dados['veio_teclado'] != 'Sim' and marcas['teclado'], {})
         if erro:
             return False, erro + ' para completar o kit'
         kit = falta + km
@@ -136,5 +137,6 @@ def preparar(item, dados, resp):
     tocar([item.codigo])
     db.session.commit()
     if tudo:
-        return True, 'Volta ao estoque com kit completo' + (f' · baixa EC: {"; ".join(kit)}' if kit else '')
+        return True, ('Volta ao estoque' + (' (sem: ' + ', '.join(pulou) + ')' if pulou else ' com kit completo')
+                      + (f' · baixa EC: {"; ".join(kit)}' if kit else ''))
     return True, 'Em preparação (salvo; continue depois)'

@@ -1,0 +1,199 @@
+{% extends 'base.html' %}
+{% block title %}Lançamentos{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-2"><div><h1 class="z-titulo">Novo lançamento</h1>
+<p class="z-sub">Escolha o tipo, digite ou bipe o item, e a tela mostra só o que dá para fazer com ele.</p></div>
+<div class="ms-auto d-flex gap-2">
+ <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('consulta.item_novo') }}"><i class="fa fa-laptop-medical me-1"></i>Ativo novo</a>
+ <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lancar.pessoa') }}"><i class="fa fa-user-plus me-1"></i>Pessoa</a>
+ <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lancar.lote') }}"><i class="fa fa-table-cells me-1"></i>Em lote</a></div></div>
+
+<div class="z-ops" role="tablist">{% for k, (tit, sub, ico, _a) in cards.items() %}
+ <button type="button" class="z-op {{ 'ativo' if k==card }}" data-card="{{ k }}"><i class="fa {{ ico }}"></i><span><b>{{ tit }}</b><small>{{ sub }}</small></span></button>{% endfor %}</div>
+
+<div class="row g-3" id="fluxo" {{ 'hidden' if card=='acessorio' }}>
+ <div class="col-lg-7"><div class="z-card z-passos">
+  <div class="z-passo"><span class="z-num">1</span><div class="flex-grow-1">
+   <label class="form-label mb-1 fw-semibold" id="rot-item">Qual item?</label>
+   <div class="row g-2"><div class="col" id="box-item"><div class="input-group"><span class="input-group-text"><i class="fa fa-barcode"></i></span>
+     <input class="form-control z-mono" id="f-item" placeholder="Plaqueta, service tag, hostname ou IMEI" value="{{ pre.item }}" autocomplete="off" autofocus></div></div>
+    <div class="col-md-5" id="box-linha" hidden><div class="input-group"><span class="input-group-text"><i class="fa fa-sim-card"></i></span>
+     <input class="form-control z-mono" id="f-linha" placeholder="Linha (DDD + número)" value="{{ pre.linha }}" autocomplete="off"></div></div></div>
+   <div id="sobre" class="small mt-2"></div></div></div>
+
+  <div class="z-passo" id="p-acao" hidden><span class="z-num">2</span><div class="flex-grow-1">
+   <label class="form-label mb-1 fw-semibold">O que fazer?</label><div id="acoes" class="d-flex flex-wrap gap-2"></div></div></div>
+
+  <div class="z-passo" id="p-campos" hidden><span class="z-num">3</span><div class="flex-grow-1"><div class="row g-2">
+   <div class="col-md-8 z-c" data-c="para"><label class="form-label small mb-0">Para quem</label><input class="form-control" id="c-para" list="dl-pessoas" autocomplete="off" placeholder="Nome ou matrícula" value="{{ pre.para }}"><datalist id="dl-pessoas"></datalist></div>
+   <div class="col-md-4 z-c" data-c="prazo"><label class="form-label small mb-0">Prazo</label><select class="form-select" id="c-prazo"><option value="">30 dias (padrão)</option>{% for t in prazos %}<option value="{{ t }}">{{ t }} dias</option>{% endfor %}</select></div>
+   <div class="col-md-8 z-c" data-c="local"><label class="form-label small mb-0">Local de uso (aparelho sem pessoa fixa)</label><input class="form-control" id="c-local" placeholder="Ex.: Portaria RJ"></div>
+   <div class="col-md-4 z-c" data-c="chamado"><label class="form-label small mb-0">Nº do chamado</label><input class="form-control" id="c-chamado"></div>
+   <div class="col-md-4 z-c" data-c="tecnico"><label class="form-label small mb-0">Técnico</label><select class="form-select" id="c-tecnico"><option></option>{% for t in tecnicos %}<option>{{ t }}</option>{% endfor %}</select></div>
+   <div class="col-md-4 z-c" data-c="termo"><label class="form-label small mb-0">Termo</label><select class="form-select" id="c-termo"><option value="">(padrão da ação)</option>{% for t in termos %}<option>{{ t }}</option>{% endfor %}</select></div>
+   <div class="col-md-4 z-c" data-c="acess"><label class="form-label small mb-0">Mouse e teclado</label><select class="form-select" id="c-acess"><option value="">Automático</option>{% for t in kit %}<option>{{ t }}</option>{% endfor %}</select></div>
+   <div class="col-md-4 z-c" data-c="receb_por"><label class="form-label small mb-0">Recebido por</label><select class="form-select" id="c-receb_por"><option></option>{% for t in recebido %}<option>{{ t }}</option>{% endfor %}</select></div>
+   <div class="col-md-4 z-c" data-c="motivo"><label class="form-label small mb-0">Motivo</label><select class="form-select" id="c-motivo"><option></option>{% for t in motivos %}<option>{{ t }}</option>{% endfor %}</select></div>
+   <div class="col-md-4 z-c" data-c="bo"><label class="form-label small mb-0">B.O. (roubo/furto)</label><input class="form-control" id="c-bo"></div>
+   <div class="col-md-4 z-c" data-c="destino"><label class="form-label small mb-0">Site de destino</label><select class="form-select" id="c-destino"><option></option>{% for t in sites %}<option>{{ t }}</option>{% endfor %}</select></div>
+   <div class="col-md-4 z-c" data-c="data"><label class="form-label small mb-0">Data (vazio = hoje)</label><input type="date" class="form-control" id="c-data"></div>
+   <div class="col-md-8 z-c" data-c="link"><label class="form-label small mb-0">Link do termo assinado</label><input class="form-control" id="c-link"></div>
+   <div class="col-12 z-c" data-c="fica"><label class="form-check"><input class="form-check-input" type="checkbox" id="c-fica"> A linha fica com a pessoa (devolve só o aparelho)</label></div>
+   <div class="col-12 z-c" data-c="obs"><label class="form-label small mb-0">Observação</label><input class="form-control" id="c-obs"></div>
+  </div></div></div>
+
+  <div class="d-flex flex-wrap gap-2 align-items-center mt-3 pt-3 border-top">
+   <button class="btn btn-zelo btn-lg" id="btn-reg" disabled><i class="fa fa-check me-1"></i>Registrar</button>
+   <button class="btn btn-link text-secondary" id="btn-limpar" type="button">Limpar</button>
+   <span id="conf" class="small ms-1"></span>
+   <button class="btn btn-sm btn-outline-danger ms-auto" id="btn-desfazer" type="button" title="Apaga o seu último registro"><i class="fa fa-rotate-left me-1"></i>Desfazer último</button></div>
+  <div id="feito" class="z-feito" hidden></div>
+ </div></div>
+ <div class="col-lg-5"><div id="espelho" class="z-esp-col"><div class="z-vazio"><i class="fa fa-eye"></i><div>Conferência em tempo real</div><small>Quem recebe, qual aparelho e o que conferir aparecem aqui enquanto você preenche.</small></div></div></div>
+</div>
+
+<div class="z-card" id="acess-card" {{ '' if card=='acessorio' else 'hidden' }}><h2>Acessórios (fonte, mouse, headset...)</h2>
+ <p class="small text-muted">Empréstimo de acessório avulso, com prazo e termo próprio (EA-0001). Mouse e teclado que saem junto com o notebook não entram aqui.</p>
+ <div class="row g-4">
+ <form class="col-lg-7 row g-2 align-items-end" method="post" action="{{ url_for('lancar.acessorio') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao_ac" value="emprestar">
+  <div class="col-12 fw-semibold">Emprestar</div>
+  <div class="col-md-6"><label class="form-label small mb-0">Acessório</label><select class="form-select" name="consumivel" required><option></option>{% for c in consumiveis %}<option>{{ c }}</option>{% endfor %}</select></div>
+  <div class="col-md-2"><label class="form-label small mb-0">Qtd</label><input class="form-control" name="qtd" value="1"></div>
+  <div class="col-md-4"><label class="form-label small mb-0">Prazo (dias)</label><select class="form-select" name="prazo_ac">{% for t in prazos %}<option>{{ t }}</option>{% endfor %}</select></div>
+  <div class="col-md-6"><label class="form-label small mb-0">Para</label><input class="form-control" name="para_ac" list="dl-pessoas" id="ac-para" required></div>
+  <div class="col-md-3"><label class="form-label small mb-0">Nº chamado</label><input class="form-control" name="chamado_ac"></div>
+  <div class="col-md-3"><button class="btn btn-zelo w-100">Emprestar</button></div>
+  <div class="col-12"><label class="form-label small mb-0">Observação</label><input class="form-control" name="obs_ac"></div>
+ </form>
+ <form class="col-lg-5 row g-2 align-items-end align-content-start" method="post" action="{{ url_for('lancar.acessorio') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao_ac" value="devolver">
+  <div class="col-12 fw-semibold">Devolver</div>
+  <div class="col-md-5"><label class="form-label small mb-0">Nº do empréstimo</label><input class="form-control z-mono" name="ea" placeholder="EA-0001" required></div>
+  <div class="col-md-7"><label class="form-label small mb-0">Recebido por</label><select class="form-select" name="receb_ac"><option></option>{% for t in recebido %}<option>{{ t }}</option>{% endfor %}</select></div>
+  <div class="col-12"><button class="btn btn-outline-secondary">Devolver</button></div>
+ </form></div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+const CAMPOS = {{ campos_acao|tojson }}, PRE = {{ pre|tojson }};
+const U = {ctx: '{{ url_for("lancar.api_contexto") }}', conf: '{{ url_for("lancar.api_conferir") }}', grav: '{{ url_for("lancar.api_gravar") }}',
+  desf: '{{ url_for("lancar.api_desfazer") }}', pess: '{{ url_for("lancar.api_pessoas") }}', termo: '{{ url_for("termo.inicio") }}', lanc: '{{ url_for("lancar.lancamento", num=0) }}'.slice(0, -1)};
+let S = {card: {{ card|tojson }}, acao: '', ctx: null, res: null, confirmado: false};
+const $ = id => document.getElementById(id), esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const v = c => { const e = $('c-' + c); return e ? (e.type === 'checkbox' ? e.checked : e.value.trim()) : ''; };
+async function post(url, body) { const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': zCsrf()}, body: JSON.stringify(body)}); if (!r.ok) throw new Error('Erro ' + r.status); return r.json(); }
+
+function pintaCard() {
+  document.querySelectorAll('.z-op').forEach(b => b.classList.toggle('ativo', b.dataset.card === S.card));
+  const ac = S.card === 'acessorio'; $('fluxo').hidden = ac; $('acess-card').hidden = !ac;
+  $('box-linha').hidden = S.card !== 'mobile';
+  $('rot-item').textContent = S.card === 'mobile' ? 'Qual aparelho ou linha?' : 'Qual item?';
+  $('f-item').placeholder = S.card === 'mobile' ? 'IMEI, plaqueta ou código do aparelho' : 'Plaqueta, service tag, hostname ou IMEI';
+}
+document.querySelectorAll('.z-op').forEach(b => b.onclick = () => { S.card = b.dataset.card; S.acao = ''; pintaCard(); history.replaceState(null, '', '?card=' + S.card); if (S.card !== 'acessorio') contexto(); });
+
+let tC; function agContexto() { clearTimeout(tC); tC = setTimeout(contexto, 300); }
+async function contexto() {
+  const item = $('f-item').value.trim(), linha = S.card === 'mobile' ? $('f-linha').value.trim() : '';
+  $('feito').hidden = true;
+  if (!item && !linha) { S.ctx = null; $('sobre').innerHTML = ''; $('p-acao').hidden = $('p-campos').hidden = true; limpaEspelho(); estado(); return; }
+  const c = await (await fetch(U.ctx + '?' + new URLSearchParams({card: S.card, item, linha}))).json();
+  S.ctx = c;
+  if (c.card !== S.card) { S.card = c.card; pintaCard(); }
+  let h = '';
+  if (c.achou_item === false) h += '<span class="z-erro"><i class="fa fa-circle-xmark me-1"></i>Item não encontrado.</span> <a href="{{ url_for("consulta.item_novo") }}">Cadastrar ativo</a> ';
+  if (c.item) h += `<span class="z-chip"><b>${esc(c.item.categoria)} ${esc(c.item.modelo || '')}</b> · ${esc(c.item.codigo)} · <span class="z-sit">${esc(c.item.situacao)}</span>${c.item.com_quem ? ' com ' + esc(c.item.com_quem) : ''}${c.item.pool ? ' · pool' : ''}</span> `;
+  if (c.achou_linha === false) h += '<span class="z-erro">Linha não cadastrada.</span> ';
+  if (c.linha) h += `<span class="z-chip"><b>Linha ${esc(c.linha.numero)}</b> · ${esc(c.linha.situacao)}${c.linha.com_quem ? ' com ' + esc(c.linha.com_quem) : ''}</span>`;
+  if (c.recado) h += `<div class="z-aviso mt-1"><i class="fa fa-circle-info me-1"></i>${esc(c.recado)}</div>`;
+  $('sobre').innerHTML = h;
+  const box = $('acoes'); box.innerHTML = '';
+  c.acoes.forEach(a => { const b = document.createElement('button'); b.type = 'button'; b.className = 'z-acao'; b.textContent = a; b.onclick = () => escolhe(a); box.appendChild(b); });
+  $('p-acao').hidden = !c.acoes.length;
+  if (!c.acoes.includes(S.acao)) S.acao = '';
+  if (!S.acao && PRE.acao && c.acoes.includes(PRE.acao)) { S.acao = PRE.acao; PRE.acao = ''; }
+  if (!S.acao && c.acoes.length === 1) S.acao = c.acoes[0];
+  escolhe(S.acao, true);
+}
+function escolhe(a, silencioso) {
+  S.acao = a; S.confirmado = false;
+  document.querySelectorAll('.z-acao').forEach(b => b.classList.toggle('ativo', b.textContent === a));
+  const it = S.ctx && S.ctx.item, mostra = new Set(CAMPOS[a] || []);
+  if (!(it && it.categoria === 'Notebook')) mostra.delete('acess');
+  if (!(it && it.categoria === 'Notebook' && !it.pool)) mostra.delete('receb_por');
+  if (S.card !== 'mobile') { mostra.delete('local'); mostra.delete('fica'); }
+  if (!(it && (S.ctx.linha || it.linha))) mostra.delete('fica');
+  mostra.delete('linha');
+  document.querySelectorAll('.z-c').forEach(d => { const on = mostra.has(d.dataset.c); d.hidden = !on;
+    if (!on) { const e = d.querySelector('input,select'); if (e.type === 'checkbox') e.checked = false; else if (e.id !== 'c-para' || !PRE.para) e.value = ''; } });
+  $('p-campos').hidden = !a;
+  if (a && !silencioso) { const p = document.querySelector('.z-c:not([hidden]) input, .z-c:not([hidden]) select'); if (p) p.focus(); }
+  agConferir();
+}
+function linhaAtual() {
+  const d = {acao: S.acao, item: $('f-item').value.trim(), linha: S.card === 'mobile' ? $('f-linha').value.trim() : ''};
+  ['para','prazo','local','chamado','tecnico','termo','acess','receb_por','motivo','bo','data','link','obs'].forEach(c => d[c] = v(c));
+  if (v('fica')) d.linha = 'fica';
+  if (S.acao === 'Enviar para outro site') d.obs = v('destino');
+  return d;
+}
+let tK; function agConferir() { clearTimeout(tK); tK = setTimeout(conferir, 300); }
+async function conferir() {
+  S.confirmado = false;
+  if (!S.acao) { S.res = null; limpaEspelho(); estado(); return; }
+  try { S.res = (await post(U.conf, {card: S.card, linhas: [linhaAtual()]}))[0]; } catch (e) { S.res = {status: 'erro', msg: e.message}; }
+  estado(); espelho();
+}
+function estado() {
+  const r = S.res, b = $('btn-reg'), c = $('conf');
+  if (!S.acao || !r) { b.disabled = true; c.textContent = S.ctx && S.ctx.acoes.length && !S.acao ? 'Escolha o que fazer.' : ''; c.className = 'small ms-1 text-muted'; b.innerHTML = '<i class="fa fa-check me-1"></i>Registrar'; return; }
+  const n = r.espelho ? r.espelho.atencao.length : 0;
+  b.disabled = r.status === 'erro' || !r.status;
+  c.textContent = r.msg || ''; c.className = 'small ms-1 ' + (r.status === 'erro' ? 'z-erro' : r.status === 'aviso' ? 'z-aviso' : 'z-ok');
+  b.innerHTML = S.confirmado ? '<i class="fa fa-check-double me-1"></i>Conferi, registrar' : '<i class="fa fa-check me-1"></i>Registrar' + (n && r.status !== 'erro' ? ` <span class="badge text-bg-warning ms-1">${n}</span>` : '');
+}
+function cartao(tit, ico, corpo, cls) { return `<div class="z-esp-card ${cls || ''}"><div class="z-esp-tit"><i class="fa ${ico} me-1"></i>${tit}</div>${corpo}</div>`; }
+function limpaEspelho() { $('espelho').innerHTML = '<div class="z-vazio"><i class="fa fa-eye"></i><div>Conferência em tempo real</div><small>Quem recebe, qual aparelho e o que conferir aparecem aqui enquanto você preenche.</small></div>'; }
+function espelho() {
+  const e = S.res && S.res.espelho; if (!e) { limpaEspelho(); return; }
+  const p = e.pessoa, nv = e.nova, it = e.item, ln = e.linha, ch = e.chamado;
+  const pess = p ? `<div class="z-esp-nome">${esc(p.nome)}</div><div class="z-mono small">${esc(p.id)} · ${esc(p.tipo || '')}</div>
+     <div class="small">CC <b class="${p.cc ? '' : 'text-danger'}">${esc(p.cc || 'sem CC')}</b> · site ${esc(p.site || '—')}${p.cargo ? ' · ' + esc(p.cargo) : ''}</div>
+     ${p.email ? `<div class="small text-muted">${esc(p.email)}</div>` : ''}
+     <div class="small mt-1">${p.tem.length ? 'Já está com: ' + p.tem.map(esc).join('; ') : 'Não está com nenhum item'}${p.linhas.length ? '<br>Linhas: ' + p.linhas.join(', ') : ''}</div>`
+   : nv ? `<div class="z-esp-nome text-warning-emphasis">${esc(nv.nome)}</div><div class="small">Pessoa nova (${esc(nv.tipo)}${nv.id ? ', matrícula ' + esc(nv.id) : ''})</div>` : '';
+  const cham = ch && !ch.erro && !ch.inexistente ? `<div class="mt-2 small border-top pt-1"><b>Chamado ${esc(ch.id)}</b> · ${esc(ch.status)}<br>aberto por ${esc(ch.solicitante)}<div class="text-muted">${esc(ch.assunto)}</div></div>` : '';
+  const item = (it ? `<div class="z-esp-nome">${esc(it.categoria)} ${esc(it.modelo || '')}</div><div class="z-mono small">${esc(it.codigo)}${it.tag ? ' · tag ' + esc(it.tag) : ''}${it.imei && it.imei !== it.codigo ? ' · IMEI ' + esc(it.imei) : ''}</div>
+     <div class="small">${esc(it.situacao)}${it.com_quem ? ' com ' + esc(it.com_quem) : ''} · site ${esc(it.site || '—')}</div>` : '')
+   + (ln ? `<div class="small ${it ? 'mt-1' : ''}"><b>Linha ${esc(ln.numero)}</b> ${esc(ln.operadora || '')} · ${esc(ln.situacao)}${ln.com_quem ? ' com ' + esc(ln.com_quem) : ''}${ln.aparelho ? ' · aparelho ' + esc(ln.aparelho) : ''}</div>` : '');
+  const at = e.atencao.length ? '<ul class="mb-0 ps-3 small">' + e.atencao.map(a => `<li>${esc(a)}</li>`).join('') + '</ul>' : '<div class="small z-ok"><i class="fa fa-circle-check me-1"></i>Nada fora do comum</div>';
+  $('espelho').innerHTML = (e.resumo ? `<div class="z-resumo-g">${esc(e.resumo)}</div>` : '')
+    + (pess || cham ? cartao('Quem', 'fa-user', pess + cham) : '') + (item ? cartao('O quê', 'fa-laptop', item) : '')
+    + cartao('Conferir', 'fa-triangle-exclamation', at, e.atencao.length ? 'z-esp-at' : '');
+}
+$('f-item').addEventListener('input', agContexto); $('f-linha').addEventListener('input', agContexto);
+document.querySelectorAll('.z-c input, .z-c select').forEach(e => { e.addEventListener('input', agConferir); e.addEventListener('change', agConferir); });
+let tP; document.addEventListener('input', ev => { const e = ev.target; if (e.id !== 'c-para' && e.id !== 'ac-para') return; clearTimeout(tP);
+  tP = setTimeout(async () => { const q = e.value; if (q.length < 2 || q.includes(' · ')) return;
+    const ps = await (await fetch(U.pess + '?q=' + encodeURIComponent(q))).json();
+    $('dl-pessoas').innerHTML = ps.map(p => `<option value="${esc(p.rotulo)}">`).join(''); }, 250); });
+function limpar(tudo) { ['f-item','f-linha'].forEach(i => $(i).value = ''); document.querySelectorAll('.z-c input, .z-c select').forEach(e => e.type === 'checkbox' ? e.checked = false : e.value = '');
+  S.acao = ''; S.res = null; S.ctx = null; PRE.para = ''; $('sobre').innerHTML = ''; $('p-acao').hidden = $('p-campos').hidden = true; limpaEspelho(); estado(); if (tudo) $('feito').hidden = true; $('f-item').focus(); }
+$('btn-limpar').onclick = () => limpar(true);
+$('btn-reg').onclick = async () => {
+  const r = S.res; if (!r || r.status === 'erro') return;
+  if (r.espelho && r.espelho.atencao.length && !S.confirmado) { S.confirmado = true; estado(); document.querySelector('.z-esp-at')?.classList.add('z-pulsa'); return; }
+  $('btn-reg').disabled = true;
+  try {
+    const g = await post(U.grav, {card: S.card, linhas: [linhaAtual()]}); const x = g.resultados[0];
+    if (!x.gravada) { S.res = x; estado(); return; }
+    const n = x.nums[x.nums.length - 1];
+    $('feito').innerHTML = `<div class="z-check"><i class="fa fa-check"></i></div><div class="flex-grow-1"><b>Registrado: Nº ${x.nums.join(', ')}</b><div class="small text-muted">${esc(x.msg.replace(/^OK[^→·]*[→·]\s*/, ''))}</div></div>
+      <a class="btn btn-sm btn-outline-secondary" href="${U.termo}?n=${n}" target="_blank"><i class="fa fa-file-signature me-1"></i>Termo</a>
+      <a class="btn btn-sm btn-outline-secondary" href="${U.lanc}${n}">Abrir</a>`;
+    limpar(false); $('feito').hidden = false;
+  } catch (e) { $('conf').textContent = e.message; $('conf').className = 'small ms-1 z-erro'; $('btn-reg').disabled = false; } };
+$('btn-desfazer').onclick = async () => { if (!confirm('Desfazer o seu último registro? Ele sai do Histórico.')) return;
+  const r = await post(U.desf, {}); $('feito').hidden = false; $('feito').innerHTML = r.apagados ? `<div class="flex-grow-1 z-aviso">${r.apagados} lançamento(s) do último registro apagado(s).</div>` : '<div class="flex-grow-1 text-muted">Nada para desfazer.</div>'; contexto(); };
+pintaCard(); if (S.card !== 'acessorio' && ($('f-item').value || $('f-linha').value)) contexto();
+</script>
+{% endblock %}

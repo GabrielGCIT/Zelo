@@ -1,7 +1,7 @@
 from collections import Counter, defaultdict
 from datetime import date, timedelta
 
-from flask import Blueprint, redirect, render_template, url_for
+from flask import request, Blueprint, redirect, render_template, url_for
 from sqlalchemy import func
 
 from app import db
@@ -92,7 +92,11 @@ def fila():
     from app.models import Contrato
     cts = Contrato.query.filter(Contrato.fim.isnot(None), Contrato.fim <= aviso_ct).order_by(Contrato.fim).all()
     add('Contratos vencendo', 'Planeje a renovação ou a devolução à locadora.', cts, 'contrato')
-    return render_template('fila.html', secoes=secoes, hoje=hoje)
+    from flask import g
+    from app.pendencias import abertas
+    todas = request.args.get('pend') == 'todas'
+    pend = abertas(None if todas else g.usuario.nome)
+    return render_template('fila.html', secoes=secoes, hoje=hoje, pend=pend, pend_todas=todas)
 
 
 @painel_bp.route('/inicio')

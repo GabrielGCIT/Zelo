@@ -19,8 +19,8 @@ def test_entregar_e_devolver(app):
     assert it.situacao == 'Em uso' and it.matricula == p.id
     # entregar de novo: erro
     assert conferir([{'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id}], 'entrega')[0].status == 'erro'
-    # devolução de notebook pede Recebido por
-    assert 'Recebido por' in conferir([{'acao': 'Devolver', 'item': it.codigo}], 'entrega')[0].msg
+    # devolução de notebook sem Recebido por não trava mais: vira pendência
+    assert conferir([{'acao': 'Devolver', 'item': it.codigo}], 'entrega')[0].status in ('ok', 'aviso')
     gravar([{'acao': 'Devolver', 'item': it.codigo, 'receb_por': 'Adriano Santos'}], 'entrega', 'Teste')
     db.session.refresh(it)
     assert it.situacao == 'Devolvido'

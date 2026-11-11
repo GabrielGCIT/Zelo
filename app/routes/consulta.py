@@ -126,7 +126,11 @@ def item(codigo):
     if it.propriedade == 'Locado':
         contrato = (Contrato.query.filter_by(contrato=it.contrato).first() if it.contrato else
                     Contrato.query.filter_by(locadora=it.fornecedor, padrao='Sim').first())
-    return render_template('item.html', it=it, movs=movs, linha=linha, manut=manut, campos=CAMPOS_ITEM,
+    from app.lancamento import acoes_possiveis, card_do_item
+    card = card_do_item(it)
+    acoes, recado = acoes_possiveis(it, None, card)
+    acoes_est = acoes_possiveis(it, None, 'estoque')[0]
+    return render_template('item.html', card=card, acoes=acoes, acoes_est=acoes_est, recado=recado, it=it, movs=movs, linha=linha, manut=manut, campos=CAMPOS_ITEM,
                            opcoes=OPCOES, contrato=contrato)
 
 

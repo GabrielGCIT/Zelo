@@ -5,7 +5,8 @@ from flask import Blueprint, flash, g, jsonify, redirect, render_template, reque
 
 from app import db
 from app.auth import exige, registrar_log
-from app.lancamento import ABAS, ACOES, KIT_OPCOES, conferir, desfazer_ultimo, gravar, proximo_id_pessoa
+from app.lancamento import (ABAS, ACOES, CAMPOS_ACAO, CARDS, KIT_OPCOES, acoes_possiveis, card_do_item, conferir,
+                            desfazer_ultimo, gravar, proximo_id_pessoa)
 from app.models import (ESTADOS_DEV, MOTIVOS, PRAZOS, SITES, TERMOS, TIPOS_PESSOA, Consumivel, EmprestimoAcessorio,
                         Item, Linha, MovConsumivel, Pessoa, cfg_lista)
 
@@ -13,23 +14,69 @@ lancar_bp = Blueprint('lancar', __name__)
 LINHAS_GRADE = 10
 
 
+def _listas():
+    return dict(motivos=MOTIVOS, termos=TERMOS, tecnicos=cfg_lista('tecnicos'), recebido=cfg_lista('recebido_por'),
+                kit=KIT_OPCOES, prazos=PRAZOS, sites=SITES,
+                consumiveis=[c.nome for c in Consumivel.query.order_by(Consumivel.nome)])
+
+
 @lancar_bp.route('/lancar')
 @exige('lancar')
 def grade():
+    """Lançamento em cards: escolhe o tipo, digita o item, e a tela mostra só o que dá para fazer com ele."""
+    pre = {k: request.args.get(k, '') for k in ('item', 'para', 'linha', 'acao')}
+    card = request.args.get('card', '')
+    if pre['item'] and card not in CARDS:
+        from app.routes.consulta import achar_item
+        it = achar_item(pre['item'])
+        card = card_do_item(it) if it else 'notebook'
+    if card not in CARDS:
+        card = 'mobile' if pre['linha'] else 'notebook'
+    return render_template('lancar_cards.html', cards=CARDS, card=card, pre=pre, campos_acao=CAMPOS_ACAO, **_listas())
+
+
+@lancar_bp.route('/lancar/lote')
+@exige('lancar')
+def lote():
+    """A grade (várias linhas de uma vez): rollout, inventário, lançamentos em série."""
     aba = request.args.get('aba', 'entrega')
     if aba not in ABAS:
         aba = 'entrega'
     pre = {k: request.args.get(k, '') for k in ('item', 'para', 'linha')}
-    if pre['item']:
-        it = db.session.get(Item, pre['item'])
-        if it and it.finalidade == 'Pool de empréstimo' and 'aba' not in request.args:
-            aba = 'emprestimo'
-        elif it and it.categoria in ('Celular', 'Tablet') and 'aba' not in request.args:
-            aba = 'mobile'
-    consumiveis = [c.nome for c in Consumivel.query.order_by(Consumivel.nome)]
-    return render_template('lancar.html', aba=aba, abas=ABAS, pre=pre, n=LINHAS_GRADE, motivos=MOTIVOS, termos=TERMOS,
-                           tecnicos=cfg_lista('tecnicos'), recebido=cfg_lista('recebido_por'), kit=KIT_OPCOES,
-                           prazos=PRAZOS, consumiveis=consumiveis)
+    return render_template('lancar.html', aba=aba, abas=ABAS, pre=pre, n=LINHAS_GRADE, **_listas())
+
+
+@lancar_bp.route('/api/lancar/contexto')
+@exige('lancar')
+def api_contexto():
+    """O que é o item/linha digitado e quais ações cabem agora."""
+    from app.lancamento import so_digitos
+    from app.routes.consulta import achar_item
+    card = request.args.get('card', 'notebook')
+    if card not in CARDS or not CARDS[card][3]:
+        card = 'notebook'
+    it = achar_item(request.args.get('item')) if request.args.get('item') else None
+    n = so_digitos(request.args.get('linha', ''))
+    ln = db.session.get(Linha, n) if len(n) == 11 else None
+    if it and card != 'estoque':
+        card = card_do_item(it)
+    acoes, recado = acoes_possiveis(it, ln, card)
+    return jsonify({
+        'card': card, 'acoes': acoes, 'recado': recado,
+        'achou_item': bool(it) if request.args.get('item') else None,
+        'achou_linha': bool(ln) if request.args.get('linha') else None,
+        'item': it and {'codigo': it.codigo, 'categoria': it.categoria, 'modelo': it.modelo, 'tag': it.tag,
+                        'situacao': it.situacao, 'com_quem': it.com_quem, 'site': it.site,
+                        'pool': it.finalidade == 'Pool de empréstimo', 'linha': it.linha_atual},
+        'linha': ln and {'numero': ln.numero, 'operadora': ln.operadora, 'situacao': ln.situacao, 'com_quem': ln.com_quem,
+                         'aparelho': ln.aparelho}})
+
+
+def _aba_do_pedido():
+    j = request.get_json(silent=True) or {}
+    if j.get('card') in CARDS and CARDS[j['card']][3]:
+        return CARDS[j['card']][3]
+    return j.get('aba', 'entrega')
 
 
 def _linhas_do_pedido():
@@ -40,7 +87,7 @@ def _linhas_do_pedido():
 @exige('lancar')
 def api_conferir():
     from app.espelho import espelho
-    aba = (request.get_json(silent=True) or {}).get('aba', 'entrega')
+    aba = _aba_do_pedido()
     linhas = _linhas_do_pedido()
     return jsonify([dict(r.json(), espelho=espelho(d) if r.status else None)
                     for r, d in zip(conferir(linhas, aba), linhas)])
@@ -49,7 +96,7 @@ def api_conferir():
 @lancar_bp.route('/api/lancar/gravar', methods=['POST'])
 @exige('lancar')
 def api_gravar():
-    aba = (request.get_json(silent=True) or {}).get('aba', 'entrega')
+    aba = _aba_do_pedido()
     resultados, n, lote = gravar(_linhas_do_pedido(), aba, g.usuario.nome)
     if n:
         registrar_log('lançamento', f'{n} linha(s) gravada(s) na aba {aba}, lote {lote}')
@@ -222,4 +269,41 @@ def acessorio():
             db.session.commit()
             registrar_log('acessório devolvido', f'EA-{ea.id:04d}')
             flash(f'EA-{ea.id:04d} devolvido; o saldo do EC voltou.', 'success')
-    return redirect(url_for('lancar.grade', aba='emprestimo'))
+    return redirect(url_for('lancar.grade', card='acessorio'))
+
+
+# ------------------------------------------------------------------ um lançamento: ver, completar, corrigir, desfazer
+@lancar_bp.route('/lancamento/<int:num>', methods=['GET', 'POST'])
+@exige('ver')
+def lancamento(num):
+    from flask import abort
+    from app.auth import pode
+    from app.models import Movimentacao
+    from app.pendencias import EDITAVEIS, desfazer, editar, pode_desfazer, texto
+    m = db.session.get(Movimentacao, num) or abort(404)
+    if request.method == 'POST':
+        if not pode('lancar'):
+            abort(403)
+        if request.form.get('acao') == 'desfazer':
+            if not pode_desfazer(m):
+                flash('Só dá para desfazer o último lançamento do item. Para este, lance a ação inversa.', 'danger')
+                return redirect(url_for('lancar.lancamento', num=num))
+            alvo = m.item or m.linha
+            desfazer(m)
+            registrar_log('lançamento desfeito', f'Nº {num} ({m.tipo} de {alvo})')
+            flash(f'Lançamento Nº {num} desfeito.', 'success')
+            return redirect(url_for('consulta.item', codigo=m.item) if m.item else url_for('painel.inicio'))
+        mudou = editar(m, {k: request.form.get(k) for k, _r, _t in EDITAVEIS if k in request.form}, g.usuario.nome)
+        if mudou:
+            registrar_log('lançamento corrigido', f'Nº {num}: ' + '; '.join(mudou))
+            from flask import current_app
+            from app import servicedesk as sd
+            if any(x.startswith('Nº do chamado') for x in mudou) and m.chamado and sd.configurado():
+                ids = sd.enfileirar([m])
+                if ids:
+                    sd.processar(current_app._get_current_object(), ids)
+        flash('Corrigido: ' + '; '.join(mudou) if mudou else 'Nada mudou.', 'success')
+        return redirect(url_for('lancar.lancamento', num=num))
+    it = db.session.get(Item, m.item) if m.item else None
+    return render_template('lancamento.html', m=m, it=it, pend=texto(m, it), editaveis=EDITAVEIS,
+                           pode_desfazer=pode_desfazer(m), **_listas())

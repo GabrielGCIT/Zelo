@@ -51,8 +51,6 @@ def registrar(d, resp):
         return False, 'Para encerrar, use Fechar ocorrência'
     if fechar and st and st not in ('Concluída', 'Sem conserto'):
         return False, 'Fechar: deixe Status vazio (= Concluída) ou escolha Sem conserto'
-    if fechar and not d.get('feito'):
-        return False, 'Fechar: descreva O que foi feito'
     campos = ('defeito', 'fornecedor', 'caso', 'status', 'visita', 'tecnico', 'chamado', 'backup', 'peca', 'feito', 'obs')
     if atual and not any(d.get(k) for k in campos):
         return False, 'Atualizar: preencha o que mudou'
@@ -112,7 +110,7 @@ def registrar(d, resp):
         if d.get(k):
             setattr(os_, k, d[k].replace('T', ' ') if k == 'visita' else d[k])
     if fechar:
-        os_.retorno, os_.solucao = hoje, d['feito']
+        os_.retorno, os_.solucao = hoje, d.get('feito') or None
     if peca:
         os_.pecas = _anexa(os_.pecas, f'{qtd} × {peca}')
     if d.get('obs'):

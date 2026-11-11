@@ -77,7 +77,7 @@ def corrigir_mov(num):
 def preparar_item(codigo):
     it = db.session.get(Item, codigo)
     dados = {k: (request.form.get(k) or '').strip() for k in ('veio_fonte', 'veio_mouse', 'veio_teclado', 'estado',
-                                                            'preparado_por', *[p for p, _r in PASSOS])}
+                                                            'preparado_por', 'liberar', *[p for p, _r in PASSOS])}
     ok, msg = preparar(it, dados, g.usuario.nome) if it else (False, 'Item não encontrado')
     if ok:
         registrar_log('preparação', f'{codigo}: {msg}')

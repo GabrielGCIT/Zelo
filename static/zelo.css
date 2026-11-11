@@ -78,3 +78,45 @@ a.z-link:hover { text-decoration: underline; }
 .z-espelho { border-top: 1px solid var(--bs-border-color); padding-top: .6rem; position: sticky; bottom: 0; background: var(--bs-body-bg); z-index: 2; }
 .z-esp-card { border: 1px solid var(--bs-border-color); border-radius: .5rem; padding: .5rem .7rem; height: 100%; }
 .z-esp-tit { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color); margin-bottom: .25rem; }
+
+/* ---------- lançamento em cards ---------- */
+@keyframes zIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes zPop { 0% { transform: scale(.4); opacity: 0; } 70% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
+@keyframes zPulsa { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, #f0ad00 50%, transparent); } 50% { box-shadow: 0 0 0 6px transparent; } }
+.z-ops { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.z-op { display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--borda);
+  background: var(--surface-0); color: inherit; transition: transform .15s, box-shadow .15s, border-color .15s; }
+.z-op i { font-size: 1.25rem; width: 38px; height: 38px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface-1); color: var(--texto-2); transition: background .15s, color .15s; flex: none; }
+.z-op b { display: block; font-size: .92rem; } .z-op small { display: block; color: var(--texto-2); font-size: .74rem; line-height: 1.2; }
+.z-op:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(13, 22, 40, .08); }
+.z-op.ativo { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.z-op.ativo i { background: var(--accent); color: var(--mb-blue); }
+.z-passo { display: flex; gap: 12px; padding: 4px 0 14px; animation: zIn .22s ease-out; }
+.z-num { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--mb-blue); color: #fff; font-size: .8rem; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center; margin-top: 2px; }
+[data-bs-theme=dark] .z-num { background: var(--accent); color: var(--mb-blue); }
+.z-acao { border: 1px solid var(--borda); background: var(--surface-0); color: inherit; border-radius: 999px; padding: 6px 14px; font-size: .88rem;
+  transition: all .15s; animation: zIn .2s ease-out; }
+.z-acao:hover { border-color: var(--accent); }
+.z-acao.ativo { background: var(--mb-blue); border-color: var(--mb-blue); color: #fff; }
+[data-bs-theme=dark] .z-acao.ativo { background: var(--accent); border-color: var(--accent); color: var(--mb-blue); }
+.z-chip { display: inline-block; background: var(--surface-1); border-radius: 8px; padding: 3px 9px; animation: zIn .2s ease-out; }
+.z-c { animation: zIn .2s ease-out; }
+.z-esp-col { display: flex; flex-direction: column; gap: 10px; position: sticky; top: calc(var(--topbar-h) + 14px); }
+.z-esp-col .z-esp-card { background: var(--surface-0); animation: zIn .2s ease-out; height: auto; }
+.z-esp-nome { font-weight: 700; font-size: 1rem; }
+.z-esp-at { border-color: #f0ad00; background: color-mix(in srgb, #f0ad00 8%, var(--surface-0)) !important; }
+.z-pulsa { animation: zPulsa .9s ease-in-out 2; }
+.z-resumo-g { font-weight: 600; padding: 2px 2px 0; animation: zIn .2s ease-out; }
+.z-vazio { border: 1px dashed var(--borda); border-radius: 12px; padding: 34px 18px; text-align: center; color: var(--texto-2); }
+.z-vazio i { font-size: 1.6rem; opacity: .5; margin-bottom: 8px; } .z-vazio small { display: block; margin-top: 4px; }
+.z-feito { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-0)); animation: zIn .25s ease-out; }
+.z-feito[hidden] { display: none; }
+.z-check { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: var(--mb-blue);
+  display: inline-flex; align-items: center; justify-content: center; animation: zPop .35s ease-out; }
+.z-pend { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: .74rem; background: color-mix(in srgb, #f0ad00 18%, transparent);
+  color: #8a5a00; border: 1px solid color-mix(in srgb, #f0ad00 45%, transparent); }
+[data-bs-theme=dark] .z-pend { color: #ffcf66; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

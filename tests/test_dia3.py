@@ -41,8 +41,6 @@ def test_reserva_avanca_ate_entregue(app):
                        'entrega', 'T')
     assert n == 1, res[0].msg
     m = res[0].movs[0]
-    ok, msg = corrigir(m, {'etapa': 'Chamado aberto'}, 'T')
-    assert not ok and 'chamado' in msg
     assert corrigir(m, {'etapa': 'Chamado aberto', 'chamado': 'INC123'}, 'T')[0]
     assert m.termo == 'Assinado'
     db.session.refresh(it)

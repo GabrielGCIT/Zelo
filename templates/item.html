@@ -2,7 +2,14 @@
 {% block title %}Item {{ it.codigo }}{% endblock %}
 {% block content %}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-1"><h1 class="z-titulo m-0"><span class="z-mono">{{ it.codigo }}</span></h1>{{ sit(it.situacao) }}{% if it.kit %}<span class="badge text-bg-light">kit {{ it.kit|lower }}</span>{% endif %}
-  {% if pode('lancar') %}<a class="btn btn-sm btn-zelo ms-auto" href="{{ url_for('lancar.grade', item=it.codigo) }}"><i class="fa fa-pen-to-square me-1"></i>Lançar para este item</a>{% endif %}</div>
+</div>
+{% if pode('lancar') %}<div class="d-flex flex-wrap gap-2 align-items-center my-2">
+ {% for a in acoes %}<a class="btn btn-sm {{ 'btn-zelo' if a == ('Devolver' if 'Devolver' in acoes else acoes[0]) else 'btn-outline-secondary' }}" href="{{ url_for('lancar.grade', card=card, item=it.codigo, acao=a) }}">{{ a }}</a>{% endfor %}
+ {% if it.situacao in ('Devolvido', 'Em preparação') %}<a class="btn btn-sm btn-zelo" href="{{ url_for('acompanhar.inicio') }}#preparacao">Preparar e liberar</a>{% endif %}
+ {% if it.situacao == 'Reservada' %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('acompanhar.inicio') }}#entregas">Avançar a reserva</a>{% endif %}
+ {% if it.situacao not in ('Baixada',) %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('manutencao.inicio', acao='Fechar ocorrência' if it.situacao == 'Manutenção' else 'Abrir ocorrência', item=it.codigo) }}"><i class="fa fa-screwdriver-wrench me-1"></i>{{ 'Fechar manutenção' if it.situacao == 'Manutenção' else 'Manutenção' }}</a>{% endif %}
+ {% if acoes_est %}<div class="dropdown"><button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">Estoque e baixa</button><ul class="dropdown-menu">{% for a in acoes_est %}<li><a class="dropdown-item" href="{{ url_for('lancar.grade', card='estoque', item=it.codigo, acao=a) }}">{{ a }}</a></li>{% endfor %}</ul></div>{% endif %}
+ {% if recado %}<span class="small text-muted">{{ recado }}</span>{% endif %}</div>{% endif %}
 <p class="z-sub">{{ it.categoria or '' }} · {{ it.fabricante or '' }} {{ it.modelo or '' }}</p>
 <div class="row g-3">
  <div class="col-lg-5">

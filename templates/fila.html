@@ -2,6 +2,13 @@
 {% block title %}Minha fila{% endblock %}
 {% block content %}
 <h1 class="z-titulo">Minha fila</h1><p class="z-sub">O que precisa de ação hoje.</p>
+<div class="z-card"><div class="d-flex justify-content-between align-items-baseline flex-wrap gap-2"><h2>{{ 'Pendências de preenchimento (todos)' if pend_todas else 'Minhas pendências de preenchimento' }} <span class="badge {{ 'text-bg-warning' if pend else 'text-bg-light' }}">{{ pend|length }}</span></h2>
+<span class="small text-muted">Lançamentos gravados com algo em branco. Clique no Nº para completar. <a href="{{ url_for('painel.fila', pend='' if pend_todas else 'todas') }}">{{ 'ver só os meus' if pend_todas else 'ver de todos' }}</a></span></div>
+{% if not pend %}<div class="text-muted small">Nada pendente.</div>{% else %}
+<div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead><tr><th>Nº</th><th>Data</th><th>Tipo</th><th>Item / linha</th><th>Pessoa</th><th>Falta</th>{% if pend_todas %}<th>Quem lançou</th>{% endif %}</tr></thead><tbody>
+{% for m, falta in pend[:150] %}<tr><td class="z-mono"><a class="z-link" href="{{ url_for('lancar.lancamento', num=m.id) }}">{{ m.id }}</a></td><td>{{ m.data|data }}</td><td>{{ m.tipo }}</td><td>{{ item_link(m.item) if m.item else (m.linha or '') }}</td><td>{{ pessoa_link(m.matricula, m.nome) }}</td>
+<td>{% for f in falta %}<span class="z-pend">{{ f }}</span> {% endfor %}</td>{% if pend_todas %}<td class="small">{{ m.resp or '' }}</td>{% endif %}</tr>{% endfor %}
+</tbody></table></div>{% endif %}</div>
 {% for s in secoes %}
 <div class="z-card"><div class="d-flex justify-content-between align-items-baseline"><h2>{{ s.titulo }} <span class="badge {{ 'text-bg-danger' if s.linhas else 'text-bg-light' }}">{{ s.linhas|length }}</span></h2><span class="small text-muted">{{ s.dica }}</span></div>
 {% if not s.linhas %}<div class="text-muted small">Nada pendente.</div>

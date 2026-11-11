@@ -46,7 +46,7 @@
   <div class="col-6 col-md-1"><label class="form-label mb-0">Estado</label><select class="form-select form-select-sm" name="estado"><option></option>{% for o in estados %}<option {{ 'selected' if r.estado==o }}>{{ o }}</option>{% endfor %}</select></div>
   <div class="col-md-5 d-flex flex-wrap gap-3 pb-1">{% for k, rot in passos %}<label class="form-check"><input class="form-check-input" type="checkbox" name="{{ k }}" value="Sim" {{ 'checked' if r.marcas[k] }}> {{ rot }}</label>{% endfor %}</div>
   <div class="col-md-2"><label class="form-label mb-0">Preparado por</label><select class="form-select form-select-sm" name="preparado_por"><option></option>{% for t in tecnicos + recebido %}<option>{{ t }}</option>{% endfor %}</select></div>
-  <div class="col-md-1">{% if pode('lancar') %}<button class="btn btn-sm btn-zelo w-100">Salvar</button>{% endif %}</div>
+  <div class="col-md-1 d-flex flex-column gap-1">{% if pode('lancar') %}<button class="btn btn-sm btn-zelo w-100">Salvar</button><button class="btn btn-sm btn-outline-secondary w-100 py-0" name="liberar" value="Sim" title="Volta ao estoque mesmo sem todas as marcas; o que faltou fica registrado">Liberar</button>{% endif %}</div>
  </div></form>{% endfor %}{% endif %}</div>
 
 <div class="z-card" id="links"><h2>3 · Termos assinados sem link</h2>

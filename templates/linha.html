@@ -2,7 +2,7 @@
 {% block title %}Linha {{ ln.numero }}{% endblock %}
 {% block content %}
 <div class="d-flex align-items-center gap-2 mb-1"><h1 class="z-titulo m-0 z-mono">{{ ln.numero }}</h1>{{ sit(ln.situacao) }}
-{% if pode('lancar') %}<a class="btn btn-sm btn-zelo ms-auto" href="{{ url_for('lancar.grade', linha=ln.numero, aba='mobile') }}"><i class="fa fa-pen-to-square me-1"></i>Lançar para esta linha</a>{% endif %}</div>
+{% if pode('lancar') %}<a class="btn btn-sm btn-zelo ms-auto" href="{{ url_for('lancar.grade', linha=ln.numero, card='mobile') }}"><i class="fa fa-pen-to-square me-1"></i>Lançar para esta linha</a>{% endif %}</div>
 <p class="z-sub">{{ ln.operadora or '' }} {{ ln.plano or '' }}</p>
 <div class="row g-3"><div class="col-lg-5"><div class="z-card"><h2>Situação atual</h2><dl class="z-def">
  <dt>Situação</dt><dd>{{ sit(ln.situacao) }}</dd><dt>Com quem</dt><dd>{{ pessoa_link(ln.matricula, ln.com_quem) or '—' }}</dd>

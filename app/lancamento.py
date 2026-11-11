@@ -41,6 +41,79 @@ ABAS = {
     'estoque': ('Estoque', ['Entrada no estoque', 'Enviar para outro site', 'A localizar', 'Separar para baixa', 'Baixar']),
 }
 KIT_OPCOES = ['Mouse + teclado', 'Só mouse', 'Só teclado', 'Nenhum']
+
+# ------------------------------------------------------------------ lançamento em cards
+# card → (título, subtítulo, ícone, aba do motor)
+CARDS = {
+    'notebook': ('Notebook e desktop', 'Entregar, reservar, transferir, devolver', 'fa-laptop', 'entrega'),
+    'mobile': ('Celular e linha', 'Aparelho, chip, linha avulsa', 'fa-mobile-screen-button', 'mobile'),
+    'pool': ('Empréstimo do pool', 'Emprestar, renovar, devolver', 'fa-rotate', 'emprestimo'),
+    'acessorio': ('Acessório', 'Fonte, mouse, headset emprestados', 'fa-plug', None),
+    'estoque': ('Estoque e baixa', 'Entrada, outro site, localizar, baixar', 'fa-boxes-stacked', 'estoque'),
+}
+# ação → campos que a tela mostra (o resto nem aparece)
+CAMPOS_ACAO = {
+    'Entregar agora': ['para', 'linha', 'local', 'chamado', 'tecnico', 'termo', 'acess', 'data', 'link', 'obs'],
+    'Reservar': ['para', 'linha', 'chamado', 'tecnico', 'acess', 'data', 'obs'],
+    'Transferir para outra pessoa': ['para', 'chamado', 'tecnico', 'termo', 'data', 'obs'],
+    'Emprestar': ['para', 'prazo', 'chamado', 'tecnico', 'data', 'obs'],
+    'Renovar empréstimo': ['prazo', 'chamado', 'obs'],
+    'Pedir devolução': ['motivo', 'chamado', 'obs'],
+    'Enviado ao EC': ['data', 'obs'],
+    'Devolver': ['receb_por', 'fica', 'chamado', 'motivo', 'data', 'obs'],
+    'Entrada no estoque': ['data', 'obs'],
+    'Enviar para outro site': ['destino', 'data'],
+    'Desativar linha': ['motivo', 'obs'],
+    'Cancelar linha': ['motivo', 'obs'],
+    'A localizar': ['motivo', 'bo', 'data', 'obs'],
+    'Separar para baixa': ['motivo', 'data', 'obs'],
+    'Baixar': ['motivo', 'bo', 'data', 'obs'],
+}
+_POR_SITUACAO = {
+    'Em estoque': {'Entregar agora', 'Reservar', 'Emprestar', 'Enviar para outro site', 'A localizar', 'Separar para baixa',
+                   'Baixar'},
+    'Sem movimentação': {'Entregar agora', 'Reservar', 'Emprestar', 'Entrada no estoque', 'Enviar para outro site',
+                         'A localizar', 'Separar para baixa', 'Baixar'},
+    'Em uso': {'Transferir para outra pessoa', 'Pedir devolução', 'Enviado ao EC', 'Devolver', 'A localizar',
+               'Separar para baixa', 'Baixar'},
+    'Emprestado': {'Renovar empréstimo', 'Devolver', 'Transferir para outra pessoa', 'Pedir devolução', 'Enviado ao EC',
+                   'A localizar', 'Baixar'},
+    'Reservada': {'Transferir para outra pessoa', 'Devolver'},
+    'Pendente devolução': {'Enviado ao EC', 'Devolver', 'A localizar', 'Baixar'},
+    'Em trânsito para o EC': {'Devolver', 'A localizar'},
+    'A localizar': {'Entrada no estoque', 'Devolver', 'Baixar', 'Separar para baixa'},
+    'Aguardando baixa': {'Baixar', 'Entrada no estoque'},
+    'Em transferência': {'Entrada no estoque', 'Enviar para outro site', 'A localizar'},
+}
+
+
+def card_do_item(it):
+    if it.finalidade == 'Pool de empréstimo':
+        return 'pool'
+    return 'mobile' if it.categoria in ('Celular', 'Tablet') else 'notebook'
+
+
+def acoes_possiveis(it, ln, card):
+    """Ações do card que fazem sentido para a situação atual do item (ou da linha). Devolve (ações, recado)."""
+    aba = CARDS[card][3]
+    todas = ABAS[aba][1]
+    if it:
+        sit = it.situacao or 'Sem movimentação'
+        if sit in ('Devolvido', 'Em preparação'):
+            return [], 'Notebook devolvido, em preparação: confira a chegada e libere em Acompanhar.'
+        if sit == 'Manutenção':
+            return [a for a in todas if a in ('Devolver', 'Baixar', 'A localizar')], \
+                'Item em manutenção: feche a ocorrência em Manutenção para poder entregar.'
+        if sit == 'Baixada':
+            return [], 'Item baixado: não aceita lançamentos.'
+        ok = _POR_SITUACAO.get(sit, set(todas))
+        return [a for a in todas if a in ok], ''
+    if ln:
+        if ln.situacao == 'Em uso':
+            return [a for a in todas if a in ('Devolver', 'Desativar linha', 'Cancelar linha')], ''
+        return [a for a in todas if a in ('Entregar agora', 'Reservar', 'Desativar linha', 'Cancelar linha')], ''
+    return [], ''
+
 CAMPOS = ['acao', 'item', 'para', 'linha', 'termo', 'chamado', 'data', 'motivo', 'bo', 'tecnico', 'obs', 'acess',
           'prazo', 'receb_por', 'link', 'local']
 
@@ -235,8 +308,6 @@ def conferir_linha(d, aba, hoje=None, contexto=None):
         return erro('Roubo/furto exige o B.O.')
     if tipo == 'Baixa' and sit == 'Baixada':
         return erro('O item já está baixado')
-    if acao == 'Reservar' and not d['tecnico']:
-        return erro('Reservar pede o Técnico responsável (quem acompanha até a entrega)')
     if tipo == 'Transferência' and not d['obs']:
         return erro('Escreva o site de destino na Observação')
     eh_nb = it is not None and it.categoria == 'Notebook'
@@ -244,8 +315,6 @@ def conferir_linha(d, aba, hoje=None, contexto=None):
     if d['acess'] and not kitok:
         return erro('Acessórios só na entrega/reserva de notebook: deixe vazio')
     recebe = tipo == 'Devolução' and eh_nb and not pool
-    if recebe and not d['receb_por']:
-        return erro('Devolução de notebook: preencha Recebido por (a chegada é conferida em Acompanhar)')
     if d['receb_por'] and not recebe:
         return erro('Recebido por só na devolução de notebook: deixe vazio')
     prazo_dias = None
