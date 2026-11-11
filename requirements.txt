@@ -15,3 +15,9 @@ waitress==3.0.0
 openpyxl==3.1.2
 # PDF do termo (anexado no chamado do Service Desk). Puro Python; puxa pillow e chardet.
 reportlab==4.2.5
+# O SQLAlchemy exige o greenlet no Windows com Python < 3.13. O pip download avalia esse
+# marcador com o Python de QUEM MONTA o pacote (3.13), nao o de destino, e deixava o greenlet
+# de fora: a instalacao offline falhava em 3.10-3.12. Sem marcador, vai sempre (e inofensivo).
+greenlet==3.5.6
+# O click exige o colorama no Windows; pelo mesmo motivo (marcador avaliado no Linux) ficava de fora.
+colorama==0.4.6
