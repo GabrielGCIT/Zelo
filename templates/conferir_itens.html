@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+{% block title %}Conferir com o Service Desk{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+ <h1 class="z-titulo m-0">Ativos × Service Desk</h1>
+ <a class="btn btn-sm btn-outline-secondary ms-auto" href="{{ url_for('consulta.itens') }}">Voltar para Itens</a></div>
+<p class="z-sub">Uma busca, duas perguntas: o que existe lá e falta aqui, e onde os dois discordam — quem está com a
+ máquina, em que estado ela está, qual é a service tag. <b>Nada é corrigido sozinho</b>: o Zelo mostra a divergência
+ e você diz quem está certo.</p>
+
+{% if not ligado %}
+<div class="alert alert-warning"><i class="fa fa-plug-circle-xmark me-1"></i>
+ A integração com o Service Desk está desligada ou sem chave.
+ {% if pode('admin') %}Ligue em <a href="{{ url_for('admin.servicedesk') }}">Administração → Service Desk</a>.{% endif %}</div>
+{% endif %}
+
+<form method="post" id="f-conf">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="acao" value="buscar">
+<input type="hidden" name="escolhas" id="escolhas">
+
+{% if not buscou %}
+<div class="z-card"><div class="z-vazio"><i class="fa fa-scale-balanced"></i>
+ <div>Comparar com o Service Desk</div>
+ <small>O Zelo baixa os ativos (até {{ '{:,}'.format(teto).replace(',', '.') }}), casa por hostname, service tag ou
+  plaqueta, e mostra o que não bate. Leitura só — nada muda antes de você marcar.</small></div>
+ <div class="text-center"><button class="btn btn-zelo btn-lg" {{ 'disabled' if not ligado }}>
+  <i class="fa fa-scale-balanced me-1"></i>Comparar agora</button></div></div>
+{% else %}
+
+{% if erro %}<div class="alert alert-danger"><i class="fa fa-triangle-exclamation me-1"></i>{{ erro }}</div>{% endif %}
+{% if truncou %}<div class="alert alert-warning py-2">A lista passou de {{ '{:,}'.format(teto).replace(',', '.') }} ativos
+ e foi cortada aí.</div>{% endif %}
+
+{% if resumo %}
+<div class="z-kpis mb-3">
+ <div class="z-kpi"><div class="r">Ativos no SD</div><div class="v">{{ resumo.no_sd }}</div></div>
+ <div class="z-kpi {{ 'alerta' if resumo.quem }}"><div class="r">Quem difere</div><div class="v">{{ resumo.quem }}</div></div>
+ <div class="z-kpi {{ 'alerta' if resumo.estado }}"><div class="r">Situação difere</div><div class="v">{{ resumo.estado }}</div></div>
+ <div class="z-kpi"><div class="r">Dado diferente</div><div class="v">{{ resumo.divergente }}</div></div>
+ <div class="z-kpi"><div class="r">Falta no Zelo</div><div class="v">{{ resumo.novo }}</div></div>
+ <div class="z-kpi"><div class="r">Completa cadastro</div><div class="v">{{ resumo.completa }}</div></div>
+ <div class="z-kpi"><div class="r">Só no Zelo</div><div class="v">{{ resumo.so_zelo }}</div></div>
+ <div class="z-kpi"><div class="r">Conferem</div><div class="v">{{ resumo.confere }}</div></div>
+</div>
+{% endif %}
+
+{% for caso, (titulo, porque) in grupos.items() %}{% set grupo = linhas|selectattr('caso', 'equalto', caso)|list %}
+{% if grupo and caso != 'confere' %}
+<div class="z-card">
+ <div class="d-flex flex-wrap align-items-baseline gap-2 mb-1">
+  <h2 class="h6 m-0">{{ titulo }}</h2><span class="badge text-bg-secondary">{{ grupo|length }}</span>
+  {% if caso in ('novo', 'completa') %}
+  <button type="button" class="btn btn-sm btn-link p-0 ms-auto" data-todos="{{ caso }}">marcar todos</button>{% endif %}</div>
+ <p class="small text-muted">{{ porque }}</p>
+ <div class="table-responsive"><table class="table table-sm table-hover align-middle">
+ {% if caso == 'quem' or caso == 'estado' %}
+  <thead><tr><th>Item no Zelo</th><th>Hostname</th><th>No Zelo</th><th>No Service Desk</th><th></th></tr></thead>
+  <tbody>{% for l in grupo[:400] %}<tr>
+   <td class="z-mono"><a href="{{ url_for('consulta.item', codigo=l.item.codigo) }}">{{ l.item.codigo }}</a>
+    <span class="small text-muted d-block">{{ l.item.categoria }} {{ l.item.modelo }}</span></td>
+   <td class="small">{{ l.sd.hostname }}</td>
+   <td>{{ (l.quem_zelo or '—') if caso == 'quem' else l.estado_zelo }}</td>
+   <td class="z-aviso">{{ (l.quem_sd or '—') if caso == 'quem' else l.estado_sd }}</td>
+   <td><a class="btn btn-sm btn-outline-secondary py-0" href="{{ url_for('lancar.ajuste', item=l.item.codigo) }}">Ajustar cadastro</a></td>
+  </tr>{% endfor %}</tbody>
+
+ {% elif caso == 'repetido' %}
+  <thead><tr><th>No Service Desk</th><th>Itens do Zelo com a mesma chave</th></tr></thead>
+  <tbody>{% for l in grupo[:400] %}<tr>
+   <td class="small">{{ l.sd.hostname or l.sd.tag }}<span class="d-block text-muted">{{ l.sd.tag }}</span></td>
+   <td>{% for r in l.repetidos %}<a class="z-tag-l me-1" href="{{ url_for('consulta.item', codigo=r.codigo) }}">
+    <span class="z-mono">{{ r.codigo }}</span> {{ r.situacao }}{% if r.com_quem %} · {{ r.com_quem }}{% endif %}</a>{% endfor %}</td>
+  </tr>{% endfor %}</tbody>
+
+ {% elif caso == 'so_zelo' %}
+  <thead><tr><th>Item</th><th>Hostname</th><th>Service tag</th><th>Situação</th><th>Com quem</th></tr></thead>
+  <tbody>{% for l in grupo[:400] %}<tr>
+   <td class="z-mono"><a href="{{ url_for('consulta.item', codigo=l.item.codigo) }}">{{ l.item.codigo }}</a>
+    <span class="small text-muted d-block">{{ l.item.categoria }} {{ l.item.modelo }}</span></td>
+   <td class="small">{{ l.item.hostname or '—' }}</td><td class="small">{{ l.item.tag or '—' }}</td>
+   <td>{{ l.item.situacao }}</td><td class="small">{{ l.item.com_quem or '' }}</td>
+  </tr>{% endfor %}</tbody>
+
+ {% elif caso == 'novo' %}
+  <thead><tr><th style="width:2rem"></th><th>No Service Desk</th><th>Service tag</th><th>Plaqueta</th><th>Tipo</th>
+   <th>Categoria no Zelo</th><th>Site</th><th>Com quem (no SD)</th></tr></thead>
+  <tbody>{% for l in grupo[:400] %}
+  <tr class="z-lin" data-caso="novo" data-sd='{{ l.sd|tojson }}'>
+   <td><input class="form-check-input z-mk" type="checkbox"></td>
+   <td class="small">{{ l.sd.hostname or '—' }}</td><td class="small">{{ l.sd.tag or '—' }}</td>
+   <td class="small">{{ l.sd.plaqueta or '—' }}</td><td class="small text-muted">{{ l.sd.tipo or '' }}</td>
+   <td><select class="form-select form-select-sm z-cat">{% for c in categorias %}<option {{ 'selected' if c=='Notebook' }}>{{ c }}</option>{% endfor %}</select></td>
+   <td><select class="form-select form-select-sm z-site"><option value=""></option>{% for s in sites %}<option {{ 'selected' if s==l.sd.site }}>{{ s }}</option>{% endfor %}</select></td>
+   <td class="small text-muted">{{ l.sd.usuario or '' }}</td>
+  </tr>{% endfor %}</tbody>
+
+ {% else %}{# completa / divergente #}
+  <thead><tr><th style="width:2rem"></th><th>Item no Zelo</th><th>O que o Service Desk tem</th></tr></thead>
+  <tbody>{% for l in grupo[:400] %}
+  <tr class="z-lin" data-caso="{{ caso }}" data-codigo="{{ l.item.codigo }}"
+      data-campos='{{ l.campos|tojson }}'>
+   <td><input class="form-check-input z-mk" type="checkbox" {{ 'checked' if caso == 'completa' }}></td>
+   <td class="z-mono"><a href="{{ url_for('consulta.item', codigo=l.item.codigo) }}">{{ l.item.codigo }}</a>
+    <span class="small text-muted d-block">{{ l.item.categoria }} {{ l.item.modelo }}</span></td>
+   <td class="small">
+    {% for campo, valor in l.faltam %}<div><b>{{ campo }}</b>: (vazio) → <span class="z-ok">{{ valor }}</span></div>{% endfor %}
+    {% for campo, antes, novo in l.difere %}<div><b>{{ campo }}</b>: {{ antes }} → <span class="z-aviso">{{ novo }}</span></div>{% endfor %}
+   </td></tr>{% endfor %}</tbody>
+ {% endif %}
+ </table></div>
+ {% if grupo|length > 400 %}<p class="small text-muted mb-0">Mostrando 400 de {{ grupo|length }}.</p>{% endif %}
+</div>
+{% endif %}{% endfor %}
+
+<div class="z-selbar" id="barra" hidden>
+ <span><b id="conta">0</b> marcado(s)</span>
+ <button class="btn btn-sm btn-light" id="b-aplicar"><i class="fa fa-check me-1"></i>Aplicar o que está marcado</button>
+ <button class="btn btn-sm btn-outline-light" name="acao" value="buscar"><i class="fa fa-rotate me-1"></i>Comparar de novo</button>
+ <button class="btn btn-sm btn-link ms-auto" type="button" id="b-zera">limpar</button></div>
+{% endif %}
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+const F = document.getElementById('f-conf'), BARRA = document.getElementById('barra');
+const marcadas = () => [...F.querySelectorAll('.z-lin')].filter(tr => tr.querySelector('.z-mk')?.checked);
+function conta() { if (!BARRA) return; const n = marcadas().length;
+  document.getElementById('conta').textContent = n; BARRA.hidden = !n; }
+F.querySelectorAll('.z-mk').forEach(c => c.addEventListener('change', conta));
+F.querySelectorAll('[data-todos]').forEach(b => b.onclick = () => {
+  const alvo = [...F.querySelectorAll(`.z-lin[data-caso="${b.dataset.todos}"] .z-mk`)];
+  const todos = alvo.every(c => c.checked); alvo.forEach(c => c.checked = !todos); conta(); });
+const zera = document.getElementById('b-zera');
+if (zera) zera.onclick = () => { F.querySelectorAll('.z-mk').forEach(c => c.checked = false); conta(); };
+
+const aplicar = document.getElementById('b-aplicar');
+if (aplicar) aplicar.onclick = e => {
+  e.preventDefault();
+  const escolhas = marcadas().map(tr => {
+    if (tr.dataset.caso === 'novo') {
+      const sd = JSON.parse(tr.dataset.sd || '{}');
+      return {criar: true, sd, categoria: tr.querySelector('.z-cat')?.value, site: tr.querySelector('.z-site')?.value};
+    }
+    return {codigo: tr.dataset.codigo, campos: JSON.parse(tr.dataset.campos || '{}')};
+  });
+  if (!escolhas.length) { zAviso('Marque ao menos uma linha.', 'aviso'); return; }
+  document.getElementById('escolhas').value = JSON.stringify(escolhas);
+  F.querySelector('input[name=acao]').value = 'aplicar';
+  F.submit();
+};
+conta();
+</script>
+{% endblock %}

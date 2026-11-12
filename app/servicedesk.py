@@ -172,6 +172,18 @@ def _busca(campo, valor, linhas=5):
     return {'list_info': {'row_count': linhas, 'search_criteria': {'field': campo, 'condition': 'is', 'value': valor}}}
 
 
+def listar_ativos(inicio=1, linhas=100):
+    """Uma página de ativos do Service Desk. Devolve (lista, tem_mais).
+
+    De propósito sem `fields_required`: os nomes de campo variam entre build e tipo de produto, e
+    pedir uma lista errada derruba a chamada inteira. Vem tudo e o Zelo lê o que reconhece.
+    """
+    j = _http('GET', '/api/v3/asset_assets',
+              {'list_info': {'row_count': linhas, 'start_index': inicio, 'get_total_count': True}}, timeout=25)
+    info = j.get('list_info') or {}
+    return (j.get('asset_assets') or []), bool(info.get('has_more_rows'))
+
+
 def achar_ativo(hostname):
     r = _http('GET', '/api/v3/asset_assets', _busca('name', hostname))
     lst = r.get('asset_assets') or []

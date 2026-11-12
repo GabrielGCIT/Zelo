@@ -2,7 +2,9 @@
 {% block title %}Itens{% endblock %}
 {% block content %}
 <div class="d-flex flex-wrap align-items-center gap-2"><div><h1 class="z-titulo">Itens</h1><p class="z-sub">Equipamentos (ativos) cadastrados. A situação sai do Histórico. Marque vários para lançar de uma vez ou imprimir etiquetas.</p></div>
-{% if pode('lancar') %}<div class="ms-auto"><a class="btn btn-sm btn-zelo" href="{{ url_for('consulta.item_novo') }}"><i class="fa fa-plus me-1"></i>Cadastrar ativo</a></div>{% endif %}</div>
+{% if pode('lancar') %}<div class="ms-auto d-flex gap-2">
+ <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('importar.itens') }}"><i class="fa fa-scale-balanced me-1"></i>Conferir com o Service Desk</a>
+ <a class="btn btn-sm btn-zelo" href="{{ url_for('consulta.item_novo') }}"><i class="fa fa-plus me-1"></i>Cadastrar ativo</a></div>{% endif %}</div>
 <form class="z-card row g-2 align-items-end" method="get">
   <div class="col-md-3"><label class="form-label small">Buscar</label><input class="form-control form-control-sm" name="q" value="{{ f.q }}" placeholder="código, tag, modelo, pessoa..."></div>
   {% for k, rot, lista in [('categoria','Categoria',categorias),('situacao','Situação',situacoes),('site','Site',sites),('finalidade','Finalidade',finalidades),('propriedade','Propriedade',propriedades)] %}

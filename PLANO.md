@@ -141,11 +141,13 @@ Com isso: importar do SD preenche só o que está **vazio** no Zelo e nunca sobr
 completado à mão; e o Zelo escreve no SD só os campos de que é dono.
 
 ## Oportunidades, da que mais rende para a que menos
-**A. Importar ativos do SD** (pedido: botão na tela de Itens)
-`GET /api/v3/asset_assets` paginado → mostra o que existe no SD e não no Zelo, com o que o SD sabe
-(hostname, serial, produto, tipo, site). Marca e importa. Casa pelo hostname; o que já existe no Zelo
-só completa campo vazio. Resolve a pergunta 5 do Gabriel: o cadastro do Zelo continua sendo dele, e
-reimportar não apaga o que você completou.
+**A + D. Ativos × Service Desk** — FEITAS (v1.11.0), em Itens → Conferir com o Service Desk
+Uma busca responde as duas perguntas, então moram na mesma tela. Casa por hostname, depois service
+tag, depois plaqueta. Grupos: falta no Zelo (cadastrar, opt-in), completa o cadastro (só campo vazio),
+**quem está com ele difere**, **situação difere**, dado diferente, cadastro repetido no Zelo, e só no
+Zelo (apenas máquina com hostname — monitor e celular nunca estiveram no SD).
+Nada é corrigido sozinho: divergência de pessoa ou situação leva ao Ajustar cadastro, e quem decide é
+você. Chave que aponta para dois itens do Zelo não vira palpite: vira o grupo "cadastro repetido".
 
 **B. Importar pessoas do SD** — FEITA (v1.10.0), em Pessoas → Importar do Service Desk
 Decisão do Gabriel: as pessoas vêm do Service Desk, não do AD direto — é a mesma base e o SD já tem
@@ -158,11 +160,6 @@ Cadastrar quem não está no Zelo é opt-in linha a linha, com matrícula provis
 Plaqueta (`asset_tag`/`barcode`), site, departamento, garantia (`warranty_expiry`), fornecedor,
 data de aquisição, custo. É a resposta à Giselly por outro caminho: o SD fica certo porque o Zelo o
 alimenta, em vez de a gestão de ativos mudar de casa.
-
-**D. Conferência Zelo × Service Desk (reconciliação)** — *o que mais vale a longo prazo, e é barato*
-Uma tela que lista só as divergências: ativo que existe de um lado só, usuário diferente, estado
-diferente, service tag diferente. Sem corrigir nada sozinha — com um botão por linha para dizer quem
-está certo. É o inventário que hoje ninguém faz.
 
 **E. Mais estados do ativo**
 Hoje só In Use e In Store. Dá para cobrir: Manutenção → `In Repair`; baixa → `Expired/Disposed`;

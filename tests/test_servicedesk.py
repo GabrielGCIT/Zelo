@@ -29,9 +29,17 @@ class SimuladorSD:
         dados = json.loads((q.get('input_data') or ['{}'])[0]) if q else (
             json.loads(urllib.parse.parse_qs(corpo.decode())['input_data'][0]) if corpo and b'input_data' in corpo else {})
         if cam == '/api/v3/asset_assets' and metodo == 'GET':
-            v = dados['list_info']['search_criteria']['value']
-            return 200, json.dumps({'asset_assets': [a for a in self.ativos.values() if a['name'] == v],
-                                    'response_status': [{'status': 'success'}]})
+            li = dados['list_info']
+            if 'search_criteria' in li:
+                v = li['search_criteria']['value']
+                return 200, json.dumps({'asset_assets': [a for a in self.ativos.values() if a['name'] == v],
+                                        'response_status': [{'status': 'success'}]})
+            todos = list(self.ativos.values())                      # listagem paginada
+            ini, n = li.get('start_index', 1), li.get('row_count', 100)
+            pagina = todos[ini - 1:ini - 1 + n]
+            return 200, json.dumps({'asset_assets': pagina, 'response_status': [{'status': 'success'}],
+                                    'list_info': {'has_more_rows': ini - 1 + n < len(todos),
+                                                  'row_count': len(pagina)}})
         ma = re.match(r'^/api/v3/asset_assets/(\d+)$', cam)
         if ma and metodo == 'PUT':
             a = self.ativos_por_id[ma.group(1)]
