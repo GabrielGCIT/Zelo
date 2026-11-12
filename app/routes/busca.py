@@ -25,6 +25,8 @@ TELAS = [
     ('Novo lançamento', 'fa-pen-to-square', 'lancar.grade', 'lancar', 'lancar entregar devolver emprestar reservar'),
     ('Lançamento em lote', 'fa-table-cells', 'lancar.lote', 'lancar', 'grade varios rollout'),
     ('Acompanhar', 'fa-route', 'acompanhar.inicio', 'lancar', 'entregas preparacao reserva termo quadro'),
+    ('Assinaturas', 'fa-pen-nib', 'assinar.lista', 'ver',
+     'assinar assinatura digital termo caneta dedo link aceite eletronica assinador'),
     ('Manutenção', 'fa-screwdriver-wrench', 'manutencao.inicio', 'lancar', 'os ocorrencia defeito conserto'),
     ('Consumíveis', 'fa-boxes-stacked', 'estoque.consumiveis', 'lancar', 'mouse teclado fonte saldo estoque'),
     ('Cadastrar ativo', 'fa-laptop-medical', 'consulta.item_novo', 'lancar', 'novo item notebook celular monitor cadastro'),
@@ -157,17 +159,21 @@ def api():
 
 
 def _grupo_telas(k):
+    # por palavra, não pela frase inteira: "assinar termo" tem que achar a tela de Assinaturas
+    # mesmo que essas duas palavras não estejam grudadas na lista de sinônimos
+    palavras = [p for p in k.split() if p]
     linhas = []
     for rotulo, ico, endpoint, perm, extras in TELAS:
         if perm and not pode(perm):
             continue
-        if k and k not in _chave(rotulo) and k not in extras:
+        texto = _chave(rotulo) + ' ' + extras
+        if palavras and not all(p in texto for p in palavras):
             continue
         try:
             u = url_for(endpoint)
         except Exception:
             continue
         linhas.append({'titulo': rotulo, 'cod': '', 'sub': '', 'url': u, 'icone': ico, 'acoes': []})
-        if not k and len(linhas) >= 8:
+        if not palavras and len(linhas) >= 8:
             break
-    return {'titulo': 'Ir para', 'icone': 'fa-arrow-right', 'linhas': linhas[:8 if not k else LIMITE]}
+    return {'titulo': 'Ir para', 'icone': 'fa-arrow-right', 'linhas': linhas[:8 if not palavras else LIMITE]}

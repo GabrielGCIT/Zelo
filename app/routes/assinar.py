@@ -70,6 +70,28 @@ def traco(aid):
     return Response(a.traco, mimetype='image/png', headers={'Cache-Control': 'private, max-age=600'})
 
 
+# ------------------------------------------------------------------ porta de entrada
+@assinar_bp.route('/assinaturas')
+@exige('ver')
+def lista():
+    """Tudo que está esperando assinatura, mais as últimas colhidas, e um campo para abrir pelo Nº."""
+    from app.assinatura import local, pendentes
+    from app.models import Assinatura
+    num = (request.args.get('n') or '').strip()
+    if num.isdigit() and db.session.get(Movimentacao, int(num)):
+        return redirect(url_for('assinar.painel', num=int(num)))
+    abertas = pendentes(300)
+    movs = {m.id: m for m in Movimentacao.query.filter(Movimentacao.id.in_([a.mov_id for a in abertas])).all()} \
+        if abertas else {}
+    feitas = (Assinatura.query.filter(Assinatura.assinado.isnot(None))
+              .order_by(Assinatura.assinado.desc()).limit(25).all())
+    movs.update({m.id: m for m in Movimentacao.query.filter(Movimentacao.id.in_([a.mov_id for a in feitas])).all()}
+                if feitas else {})
+    return render_template('assinaturas_lista.html', abertas=abertas, feitas=feitas, movs=movs, rotulo=ROTULO,
+                           num=num, erro=('Não achei o lançamento Nº ' + num) if num else '',
+                           so_local=any(local(link(a)) for a in abertas[:1]))
+
+
 # ------------------------------------------------------------------ painel dentro do lançamento
 @assinar_bp.route('/lancamento/<int:num>/assinaturas', methods=['GET', 'POST'])
 @exige('ver')
