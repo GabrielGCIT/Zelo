@@ -25,6 +25,7 @@ from app import db
 from app.models import Assinatura, Movimentacao, cfg, cfg_lista
 
 PAPEIS = ('colaborador', 'empresa')
+TEM_TERMO = ('Entrega', 'Empréstimo', 'Devolução')   # os tipos de lançamento que geram termo
 ROTULO = {'colaborador': 'Colaborador(a)', 'empresa': 'Pela empresa'}
 MAX_PNG = 400 * 1024                 # um traço de assinatura não passa disso
 MIN_TINTA = 120                      # pixels com tinta: abaixo disso é risco acidental ou tela em branco
@@ -74,7 +75,7 @@ def pedir(m, papel, nome=None, quem='', contato='', dias=None):
     """Cria (ou refaz) o pedido de uma via. Devolve (assinatura, mensagem)."""
     if papel not in PAPEIS:
         return None, 'Via desconhecida'
-    if m.tipo not in ('Entrega', 'Empréstimo', 'Devolução'):
+    if m.tipo not in TEM_TERMO:
         return None, 'Esse tipo de lançamento não tem termo para assinar'
     atual = vias(m)[papel]
     if atual and atual.assinado:

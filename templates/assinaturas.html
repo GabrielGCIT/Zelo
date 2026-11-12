@@ -18,6 +18,13 @@
  {%- if pode('admin') %} em <a href="{{ url_for('admin.config') }}">Configurações</a>{% else %} em Configurações{% endif %}
  (ex.: <span class="z-mono">http://servidor-ti:5001</span>).</div>{% endif %}
 
+{% if not tem_termo %}
+<div class="z-card"><div class="z-vazio"><i class="fa fa-file-circle-xmark"></i>
+ <div>{{ m.tipo }} não gera termo</div>
+ <small>Termo existe em {{ tipos_com_termo|join(', ') }} — são os lançamentos em que um equipamento muda de mãos.
+  Abra o lançamento certo para colher a assinatura.</small></div>
+ <div class="text-center"><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('assinar.lista') }}">Ver as assinaturas em aberto</a></div></div>
+{% else %}
 <div class="row g-3">
 {% for p in papeis %}{% set a = vias[p] %}
  <div class="col-lg-6"><div class="z-card h-100 z-via {{ 'assinada' if a and a.assinado else ('aberta' if a else '') }}">
@@ -59,10 +66,12 @@
   {% elif pode('lancar') %}
    <form method="post" class="row g-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="acao" value="pedir"><input type="hidden" name="papel" value="{{ p }}">
-    <div class="col-12"><label class="form-label small mb-0">Quem assina</label>
-     {% if p == 'empresa' and assinantes %}
-     <select class="form-select form-select-sm" name="nome">{% for n in assinantes %}<option>{{ n }}</option>{% endfor %}</select>
-     {% else %}<input class="form-control form-control-sm" name="nome" value="{{ sugerido[p] }}">{% endif %}</div>
+    <div class="col-12"><label class="form-label small mb-0" for="n-{{ p }}">Quem assina (nome completo)</label>
+     <input class="form-control form-control-sm z-pessoa" id="n-{{ p }}" name="nome" value="{{ sugerido[p] }}"
+            list="dl-{{ p }}" autocomplete="off" required
+            placeholder="{{ 'Digite para buscar no cadastro' if p == 'colaborador' else 'Quem assina pela empresa' }}">
+     <datalist id="dl-{{ p }}">{% if p == 'empresa' %}{% for n in assinantes %}<option value="{{ n }}"></option>{% endfor %}{% endif %}</datalist>
+     <div class="form-text">Vem do cadastro conforme você digita, mas pode escrever um nome que não está lá.</div></div>
     <div class="col-12"><label class="form-label small mb-0">Anotar para onde foi mandado (opcional)</label>
      <input class="form-control form-control-sm" name="contato" placeholder="e-mail, WhatsApp, entregue na mão..."></div>
     <div class="col-12"><button class="btn btn-sm btn-zelo"><i class="fa fa-link me-1"></i>Gerar o link desta via</button></div>
@@ -74,6 +83,7 @@
  </div></div>
 {% endfor %}
 </div>
+{% endif %}
 
 <div class="z-card">
  <h2 class="h6">Assinou no papel?</h2>
@@ -92,6 +102,27 @@
 {% endblock %}
 {% block scripts %}
 <script>
+/* Autocompletar pelo cadastro sem travar o campo: o datalist sugere, mas o que vale é o que está
+   digitado — tem gente que assina e não está no cadastro (terceiro, gestor de outra área). */
+const URL_PESSOAS = '{{ url_for("lancar.api_pessoas") }}';
+document.querySelectorAll('.z-pessoa').forEach(campo => {
+  const dl = document.getElementById(campo.getAttribute('list'));
+  const fixas = [...dl.querySelectorAll('option')].map(o => o.outerHTML).join('');
+  let t;
+  campo.addEventListener('input', () => {
+    clearTimeout(t);
+    const q = campo.value.trim();
+    if (q.length < 2) { dl.innerHTML = fixas; return; }
+    t = setTimeout(async () => {
+      try {
+        const ps = await (await fetch(URL_PESSOAS + '?inativos=1&q=' + encodeURIComponent(q))).json();
+        dl.innerHTML = fixas + ps.map(p =>
+          `<option value="${p.nome.replace(/"/g, '&quot;')}">${(p.detalhe || '').replace(/</g, '')}</option>`).join('');
+      } catch (e) { /* sem sugestão, o campo continua valendo */ }
+    }, 220);
+  });
+});
+
 document.querySelectorAll('.z-copiar').forEach(b => b.onclick = async () => {
   const campo = b.closest('.input-group').querySelector('.z-link');
   try { await navigator.clipboard.writeText(campo.value); } catch (e) { campo.select(); document.execCommand('copy'); }

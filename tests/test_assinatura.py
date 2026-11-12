@@ -357,3 +357,39 @@ def test_busca_acha_a_tela_de_assinatura(app, cli):
         j = cli.get('/api/busca?q=' + q).json
         ir = next((x for x in j['grupos'] if x['titulo'] == 'Ir para'), None)
         assert ir and any(l['titulo'] == 'Assinaturas' for l in ir['linhas']), q
+
+
+# ------------------------------------------------------------------ preencher o nome
+def test_autocomplete_de_pessoas(app, cli):
+    p = Pessoa.query.filter_by(situacao='Ativo').first()
+    j = cli.get('/api/pessoas?q=' + p.nome.split(' ')[0]).json
+    achou = next(x for x in j if x['id'] == p.id)
+    assert achou['nome'] == p.nome                             # o valor da sugestão é o nome completo
+    assert p.id in achou['detalhe']                            # a matrícula fica no rótulo, fora do valor
+
+    saiu = Pessoa.query.filter_by(situacao='Desligado').first()
+    pedaco = saiu.nome.split(' ')[0]
+    assert not any(x['id'] == saiu.id for x in cli.get('/api/pessoas?q=' + pedaco).json)
+    com = cli.get('/api/pessoas?inativos=1&q=' + pedaco).json
+    desligado = next(x for x in com if x['id'] == saiu.id)
+    assert 'DESLIGADO' in desligado['detalhe']                 # termo antigo pode ser de quem já saiu
+
+
+def test_campo_do_nome_aceita_cadastro_e_digitado(app, cli, entrega):
+    h = cli.get(f'/lancamento/{entrega.id}/assinaturas').data.decode()
+    assert 'list="dl-colaborador"' in h and 'z-pessoa' in h
+    assert 'pode escrever um nome que não está lá' in h
+    assert 'Giselly Oliveira' in h                             # os da empresa já vêm na lista
+
+    r = cli.post(f'/lancamento/{entrega.id}/assinaturas',
+                 data={'acao': 'pedir', 'papel': 'colaborador', 'nome': 'NOME QUE NAO ESTA NO CADASTRO'},
+                 follow_redirects=True)
+    assert r.status_code == 200
+    assert vias(entrega)['colaborador'].nome == 'NOME QUE NAO ESTA NO CADASTRO'
+
+
+def test_lancamento_sem_termo_explica_em_vez_de_oferecer(app, cli):
+    m = Movimentacao.query.filter(~Movimentacao.tipo.in_(('Entrega', 'Empréstimo', 'Devolução'))).first()
+    h = cli.get(f'/lancamento/{m.id}/assinaturas').data.decode()
+    assert 'não gera termo' in h and 'Gerar o link desta via' not in h
+    assert pedir(m, 'colaborador', quem='T')[0] is None

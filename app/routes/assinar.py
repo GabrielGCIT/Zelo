@@ -116,9 +116,11 @@ def painel(num):
             else:
                 flash('Não há pedido em aberto nessa via.', 'danger')
         return redirect(url_for('assinar.painel', num=num))
+    from app.assinatura import TEM_TERMO
     v = vias(m)
     links = {p: (link(a) if a and not a.assinado else '') for p, a in v.items()}
     return render_template('assinaturas.html', m=m, vias=v, papeis=PAPEIS, rotulo=ROTULO,
+                           tem_termo=m.tipo in TEM_TERMO, tipos_com_termo=TEM_TERMO,
                            sugerido={p: quem_assina(m, p) for p in PAPEIS},
                            assinantes=cfg_lista('assinantes_empresa'), avisos=conferir(m), links=links,
                            so_local=any(local(u) for u in links.values() if u),

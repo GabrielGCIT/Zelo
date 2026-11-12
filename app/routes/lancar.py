@@ -125,9 +125,14 @@ def api_pessoas():
     if len(q) < 2:
         return jsonify([])
     like = f'%{q}%'
-    ps = (Pessoa.query.filter(Pessoa.situacao != 'Desligado', (Pessoa.nome.ilike(like)) | (Pessoa.id.ilike(like)))
-          .order_by(Pessoa.nome).limit(15).all())
-    return jsonify([{'id': p.id, 'nome': p.nome, 'rotulo': f'{p.nome} · {p.id}'} for p in ps])
+    qy = Pessoa.query.filter((Pessoa.nome.ilike(like)) | (Pessoa.id.ilike(like)))
+    if request.args.get('inativos') != '1':         # assinatura de termo antigo pode ser de quem já saiu
+        qy = qy.filter(Pessoa.situacao != 'Desligado')
+    ps = qy.order_by(Pessoa.nome).limit(15).all()
+    return jsonify([{'id': p.id, 'nome': p.nome, 'rotulo': f'{p.nome} · {p.id}',
+                     'detalhe': ' · '.join([x for x in (p.id, p.cc, p.site,
+                                                        'DESLIGADO' if p.situacao == 'Desligado' else '') if x])}
+                    for p in ps])
 
 
 @lancar_bp.route('/api/item')
