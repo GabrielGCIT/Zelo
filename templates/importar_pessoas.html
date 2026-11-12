@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+{% block title %}Importar pessoas do Service Desk{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+ <h1 class="z-titulo m-0">Pessoas do Service Desk</h1>
+ <a class="btn btn-sm btn-outline-secondary ms-auto" href="{{ url_for('consulta.pessoas') }}">Voltar para Pessoas</a></div>
+<p class="z-sub">Traz <b>nome, e-mail e login</b>, e nada mais — cargo, centro de custo e matrícula do AD não são
+ confiáveis. O e-mail é o que faz o Zelo achar a pessoa no Service Desk na hora de atribuir o ativo: sem ele,
+ a atribuição só funciona quando o nome bate exato e não se repete.</p>
+
+{% if not ligado %}
+<div class="alert alert-warning"><i class="fa fa-plug-circle-xmark me-1"></i>
+ A integração com o Service Desk está desligada ou sem chave.
+ {% if pode('admin') %}Ligue em <a href="{{ url_for('admin.servicedesk') }}">Administração → Service Desk</a>.{% endif %}</div>
+{% endif %}
+
+<form method="post" id="f-imp">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="acao" value="buscar">
+<input type="hidden" name="escolhas" id="escolhas">
+
+{% if not buscou %}
+<div class="z-card"><div class="z-vazio"><i class="fa fa-cloud-arrow-down"></i>
+ <div>Buscar as pessoas no Service Desk</div>
+ <small>O Zelo baixa a lista (até {{ '{:,}'.format(teto).replace(',', '.') }} usuários), compara com o cadastro e mostra
+  o que dá para completar. Nada é alterado antes de você marcar.</small></div>
+ <div class="text-center"><button class="btn btn-zelo btn-lg" {{ 'disabled' if not ligado }}>
+  <i class="fa fa-cloud-arrow-down me-1"></i>Buscar no Service Desk</button></div></div>
+{% else %}
+
+{% if erro %}<div class="alert alert-danger"><i class="fa fa-triangle-exclamation me-1"></i>{{ erro }}</div>{% endif %}
+{% if truncou %}<div class="alert alert-warning py-2">A lista passou de {{ '{:,}'.format(teto).replace(',', '.') }} usuários
+ e foi cortada aí. O que veio já dá para trabalhar; repita depois de aplicar para pegar o resto.</div>{% endif %}
+
+{% if resumo %}
+<div class="z-kpis mb-3">
+ <div class="z-kpi"><div class="r">Vieram do SD</div><div class="v">{{ resumo.total }}</div></div>
+ <div class="z-kpi alerta"><div class="r">Completam o e-mail</div><div class="v">{{ resumo.completa }}</div></div>
+ <div class="z-kpi"><div class="r">Já conferem</div><div class="v">{{ resumo.confere }}</div></div>
+ <div class="z-kpi"><div class="r">E-mail diferente</div><div class="v">{{ resumo.conflito }}</div></div>
+ <div class="z-kpi"><div class="r">Nome repetido</div><div class="v">{{ resumo.ambiguo }}</div></div>
+ <div class="z-kpi"><div class="r">Não estão no Zelo</div><div class="v">{{ resumo.novo }}</div></div>
+</div>
+<p class="small text-muted">Hoje {{ resumo.sem_email_no_zelo }} pessoa(s) ativa(s) no Zelo estão sem e-mail.</p>
+{% endif %}
+
+{% for caso, (titulo, porque) in casos.items() %}{% set grupo = linhas|selectattr('caso', 'equalto', caso)|list %}
+{% if grupo %}
+<div class="z-card">
+ <div class="d-flex flex-wrap align-items-baseline gap-2 mb-1">
+  <h2 class="h6 m-0">{{ titulo }}</h2><span class="badge text-bg-secondary">{{ grupo|length }}</span>
+  {% if caso in ('completa', 'conflito', 'novo') %}
+  <button type="button" class="btn btn-sm btn-link p-0 ms-auto" data-todos="{{ caso }}">marcar todos</button>{% endif %}</div>
+ <p class="small text-muted">{{ porque }}
+  {%- if caso in ('completa', 'conflito') %} O login só entra onde o Zelo está sem nenhum — trocar login já preenchido
+  é edição na ficha da pessoa.{% endif %}</p>
+ <div class="table-responsive"><table class="table table-sm table-hover align-middle">
+  <thead><tr>
+   <th style="width:2rem"></th><th>No Service Desk</th><th>E-mail</th>
+   {% if caso == 'novo' %}<th>Login</th><th>Matrícula a usar</th>
+   {% elif caso == 'ambiguo' %}<th>Qual pessoa do Zelo?</th>
+   {% else %}<th>No Zelo</th><th>{{ 'E-mail que será trocado' if caso == 'conflito' else 'E-mail no Zelo' }}</th>{% endif %}</tr></thead>
+  <tbody>{% for l in grupo %}
+  <tr class="z-lin" data-caso="{{ caso }}" data-nome="{{ l.nome }}" data-email="{{ l.email }}" data-login="{{ l.login }}">
+   <td>{% if caso != 'confere' %}<input class="form-check-input z-mk" type="checkbox"
+        {{ 'checked' if caso == 'completa' and l.email }} {{ 'disabled' if caso == 'completa' and not l.email }}>{% endif %}</td>
+   <td>{{ l.nome }}{% if not l.ativo_sd %} <span class="z-tag">inativo no SD</span>{% endif %}</td>
+   <td class="small {{ 'text-muted' if not l.email }}">{{ l.email or '— sem e-mail no SD —' }}</td>
+   {% if caso == 'novo' %}
+    <td class="small text-muted">{{ l.login }}</td>
+    <td><input class="form-control form-control-sm z-mono z-mat" placeholder="deixe vazio para SD-NOME" style="max-width:12rem"></td>
+   {% elif caso == 'ambiguo' %}
+    <td><select class="form-select form-select-sm z-cand"><option value="">deixar de fora</option>
+     {% for c in l.candidatos %}<option value="{{ c.id }}">{{ c.nome }} · {{ c.id }}{% if c.cc %} · {{ c.cc }}{% endif %}
+      {%- if c.situacao != 'Ativo' %} ({{ c.situacao }}){% endif %}</option>{% endfor %}</select></td>
+   {% else %}
+    <td class="z-alvo" data-pessoa="{{ l.pessoa }}">{{ l.pessoa_nome }} <span class="z-mono small text-muted">{{ l.pessoa }}</span>
+     {%- if l.pessoa_situacao and l.pessoa_situacao != 'Ativo' %} <span class="z-tag">{{ l.pessoa_situacao }}</span>{% endif %}</td>
+    <td class="small {{ 'z-aviso' if caso == 'conflito' }}">{{ l.pessoa_email or '(vazio)' }}</td>
+   {% endif %}
+  </tr>{% endfor %}</tbody></table></div>
+</div>
+{% endif %}{% endfor %}
+
+<div class="z-selbar" id="barra" hidden>
+ <span><b id="conta">0</b> marcada(s)</span>
+ <button class="btn btn-sm btn-light" id="b-aplicar"><i class="fa fa-check me-1"></i>Trazer o que está marcado</button>
+ <button class="btn btn-sm btn-outline-light" name="acao" value="buscar"><i class="fa fa-rotate me-1"></i>Buscar de novo</button>
+ <button class="btn btn-sm btn-link ms-auto" type="button" id="b-zera">limpar</button></div>
+{% endif %}
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+const F = document.getElementById('f-imp'), BARRA = document.getElementById('barra');
+function marcadas() { return [...F.querySelectorAll('.z-lin')].filter(tr => { const c = tr.querySelector('.z-mk'); return c && c.checked; }); }
+function conta() {
+  if (!BARRA) return;
+  const n = marcadas().length;
+  document.getElementById('conta').textContent = n; BARRA.hidden = !n;
+}
+F.querySelectorAll('.z-mk').forEach(c => c.addEventListener('change', conta));
+F.querySelectorAll('[data-todos]').forEach(b => b.onclick = () => {
+  const alvo = [...F.querySelectorAll(`.z-lin[data-caso="${b.dataset.todos}"] .z-mk:not(:disabled)`)];
+  const todos = alvo.every(c => c.checked);
+  alvo.forEach(c => c.checked = !todos); conta(); });
+const zera = document.getElementById('b-zera');
+if (zera) zera.onclick = () => { F.querySelectorAll('.z-mk').forEach(c => c.checked = false); conta(); };
+
+const aplicar = document.getElementById('b-aplicar');
+if (aplicar) aplicar.onclick = e => {
+  e.preventDefault();
+  const escolhas = marcadas().map(tr => {
+    const caso = tr.dataset.caso, d = {nome: tr.dataset.nome, email: tr.dataset.email, login: tr.dataset.login};
+    if (caso === 'novo') { d.criar = true; d.pessoa = (tr.querySelector('.z-mat')?.value || '').trim(); }
+    else if (caso === 'ambiguo') d.pessoa = tr.querySelector('.z-cand')?.value || '';
+    else d.pessoa = tr.querySelector('.z-alvo')?.dataset.pessoa || '';
+    return d;
+  }).filter(d => d.criar || d.pessoa);
+  if (!escolhas.length) { zAviso('Marque ao menos uma pessoa com destino definido.', 'aviso'); return; }
+  document.getElementById('escolhas').value = JSON.stringify(escolhas);
+  F.querySelector('input[name=acao]').value = 'aplicar';
+  F.submit();
+};
+conta();
+</script>
+{% endblock %}

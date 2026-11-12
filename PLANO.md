@@ -147,10 +147,12 @@ completado à mão; e o Zelo escreve no SD só os campos de que é dono.
 só completa campo vazio. Resolve a pergunta 5 do Gabriel: o cadastro do Zelo continua sendo dele, e
 reimportar não apaga o que você completou.
 
-**B. Importar pessoas do SD** (pedido: botão na tela de Pessoas) — *maior ganho por esforço*
-`GET /api/v3/users` → nome, e-mail e login, só isso. Além de cadastrar quem falta, **preenche o e-mail
-de quem já está no Zelo**, que é exatamente o que falta hoje para a atualização do ativo funcionar.
-Hoje, pessoa sem e-mail = envio de ativo com erro na fila.
+**B. Importar pessoas do SD** — FEITA (v1.10.0), em Pessoas → Importar do Service Desk
+Decisão do Gabriel: as pessoas vêm do Service Desk, não do AD direto — é a mesma base e o SD já tem
+API. Traz nome, e-mail e login, nada mais. Casa por e-mail e, na falta dele, por nome exato e único;
+nome repetido vira escolha na tela, nunca palpite. O e-mail só entra onde está vazio (divergência
+fica num grupo à parte que você marca de propósito) e o login só onde o Zelo não tem nenhum.
+Cadastrar quem não está no Zelo é opt-in linha a linha, com matrícula provisória SD-NOME.
 
 **C. O Zelo escrever no SD o que ele sabe melhor**
 Plaqueta (`asset_tag`/`barcode`), site, departamento, garantia (`warranty_expiry`), fornecedor,

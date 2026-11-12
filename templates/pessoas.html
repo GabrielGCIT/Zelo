@@ -2,7 +2,9 @@
 {% block title %}Pessoas{% endblock %}
 {% block content %}
 <div class="d-flex align-items-center"><div><h1 class="z-titulo">Pessoas</h1><p class="z-sub">Colaboradores, terceiros e postos que recebem ativos.</p></div>
-{% if pode('lancar') %}<a class="btn btn-sm btn-zelo ms-auto" href="{{ url_for('lancar.pessoa') }}"><i class="fa fa-user-plus me-1"></i>Cadastrar / desligar</a>{% endif %}</div>
+{% if pode('lancar') %}<div class="ms-auto d-flex gap-2">
+ <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('importar.pessoas') }}"><i class="fa fa-cloud-arrow-down me-1"></i>Importar do Service Desk</a>
+ <a class="btn btn-sm btn-zelo" href="{{ url_for('lancar.pessoa') }}"><i class="fa fa-user-plus me-1"></i>Cadastrar / desligar</a></div>{% endif %}</div>
 <form class="z-card row g-2 align-items-end" method="get">
   <div class="col-md-4"><label class="form-label small">Buscar</label><input class="form-control form-control-sm" name="q" value="{{ f.q }}" placeholder="nome, matrícula, e-mail, CPF"></div>
   <div class="col-md"><label class="form-label small">Tipo</label><select class="form-select form-select-sm" name="tipo" onchange="this.form.submit()"><option value="">Todos</option>{% for o in tipos %}<option {{ 'selected' if f.tipo==o }}>{{ o }}</option>{% endfor %}</select></div>

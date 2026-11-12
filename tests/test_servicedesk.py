@@ -40,9 +40,16 @@ class SimuladorSD:
             a['state'] = novo['state']
             return 200, json.dumps({'asset_asset': a, 'response_status': {'status': 'success'}})
         if cam == '/api/v3/users':
-            sc = dados['list_info']['search_criteria']
-            achados = [x for x in self.usuarios if x.get(sc['field'], '').lower() == sc['value'].lower()]
-            return 200, json.dumps({'users': achados, 'response_status': [{'status': 'success'}]})
+            li = dados['list_info']
+            if 'search_criteria' in li:
+                sc = li['search_criteria']
+                achados = [x for x in self.usuarios if x.get(sc['field'], '').lower() == sc['value'].lower()]
+                return 200, json.dumps({'users': achados, 'response_status': [{'status': 'success'}]})
+            ini, n = li.get('start_index', 1), li.get('row_count', 100)     # listagem paginada
+            pagina = self.usuarios[ini - 1:ini - 1 + n]
+            return 200, json.dumps({'users': pagina, 'response_status': [{'status': 'success'}],
+                                    'list_info': {'has_more_rows': ini - 1 + n < len(self.usuarios),
+                                                  'row_count': len(pagina)}})
         m = re.match(r'^/api/v3/requests/(\d+)(/upload|/notes)?$', cam)
         if cam == '/api/v3/requests':
             return 200, json.dumps({'requests': [{'id': '1'}], 'response_status': [{'status': 'success'}]})

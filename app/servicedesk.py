@@ -178,6 +178,20 @@ def achar_ativo(hostname):
     return lst[0] if lst else None
 
 
+def listar_usuarios(inicio=1, linhas=100):
+    """Uma página de usuários do Service Desk. Devolve (lista, tem_mais).
+
+    Só nome, e-mail e login: cargo, CC e matrícula do AD não são fonte confiável (decisão do
+    Gabriel), e pedir menos campo deixa a listagem bem mais leve.
+    """
+    j = _http('GET', '/api/v3/users',
+              {'list_info': {'row_count': linhas, 'start_index': inicio, 'get_total_count': True,
+                             'fields_required': ['id', 'name', 'email_id', 'login_name', 'is_active']}},
+              timeout=20)
+    info = j.get('list_info') or {}
+    return (j.get('users') or []), bool(info.get('has_more_rows'))
+
+
 def achar_usuario(email=None, nome=None):
     """Id do usuário no Service Desk: pelo e-mail; senão pelo nome exato (só se for único)."""
     if email:
