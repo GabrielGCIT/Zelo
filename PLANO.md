@@ -100,3 +100,97 @@ que libera o ativo. Quem não está presencial recebe um link e assina de onde e
 - Linhas: base de centro de custo (Gabriel traz), validação da Easy nas contas Claro 196073995 e
   196074081, pedidos de bloqueio.
 - Virada: importar a planilha mais recente no dia; 3106 lançamentos antigos sem data vêm assim da planilha.
+
+---
+
+# Levantamento: onde a API do Service Desk pode render mais (nov/2026)
+
+Pedido do Gabriel: entender como aproveitar a integração ao máximo. Abaixo, o que já funciona, o
+que dá para fazer, e a decisão que precisa vir antes de tudo.
+
+## O que já está ligado hoje
+| O quê | Quando acontece | Precisa de |
+|---|---|---|
+| Lê o chamado na conferência em tempo real (solicitante, assunto, status) | ao digitar o Nº no lançamento | `sd_ativo=Sim` |
+| Anexa o PDF do termo ao chamado + grava nota | lançamento com Nº de chamado | idem |
+| Anexa o termo **assinado** e nota | quando as duas vias assinam, ou ao anexar o digitalizado | idem |
+| Põe o ativo **In Use** com o usuário | Entrega/Empréstimo marcados como Entregue | `sd_ativos=Sim` + item com **hostname** |
+| Põe o ativo **In Store** e tira o usuário | Devolução (inclusive pela fila do desligamento) | idem |
+
+Limites conhecidos, provados no laboratório (SDP 16 on-premises):
+- o ativo é achado pelo **hostname** (`name`), então item sem hostname no Zelo não sincroniza;
+- o usuário é achado por **e-mail**; sem e-mail, pelo nome exato, e só se for único. É a causa nº 1
+  de erro na fila — ver oportunidade **B**;
+- `PUT /api/v3/asset_assets/{id}` funciona; o formato em lote (`?ids=`) devolve "Internal Error".
+  Toda escrita é um ativo por chamada, logo tudo que for em massa tem que ser fila, não botão síncrono;
+- a documentação pública fala em `/api/v3/assets`; o que responde nesse build é `/api/v3/asset_assets`.
+  Qualquer endpoint novo daqui precisa de um teste no laboratório antes de virar promessa.
+
+## A decisão que vem antes de tudo: quem é dono de qual campo
+A base do SD vem do agente e do AD. A do Zelo vem da planilha. Elas vão discordar muito no primeiro
+encontro, e sem regra de dono a sincronização fica trocando os dados de um lado para o outro.
+Proposta:
+
+| Campo | Dono | Por quê |
+|---|---|---|
+| hostname, service tag, serial, modelo, SO, memória, disco | **Service Desk** (agente) | a máquina se descreve sozinha, melhor que digitação |
+| com quem está, estado (In Use/In Store), plaqueta, CC, site, finalidade, contrato, garantia, propriedade | **Zelo** | é o que o processo de entrega controla, e o que a planilha sempre controlou |
+| nome e e-mail da pessoa | **Service Desk/AD** só para achar o usuário | cargo, CC e matrícula do AD não são confiáveis (decisão do Gabriel) |
+
+Com isso: importar do SD preenche só o que está **vazio** no Zelo e nunca sobrescreve o que foi
+completado à mão; e o Zelo escreve no SD só os campos de que é dono.
+
+## Oportunidades, da que mais rende para a que menos
+**A. Importar ativos do SD** (pedido: botão na tela de Itens)
+`GET /api/v3/asset_assets` paginado → mostra o que existe no SD e não no Zelo, com o que o SD sabe
+(hostname, serial, produto, tipo, site). Marca e importa. Casa pelo hostname; o que já existe no Zelo
+só completa campo vazio. Resolve a pergunta 5 do Gabriel: o cadastro do Zelo continua sendo dele, e
+reimportar não apaga o que você completou.
+
+**B. Importar pessoas do SD** (pedido: botão na tela de Pessoas) — *maior ganho por esforço*
+`GET /api/v3/users` → nome, e-mail e login, só isso. Além de cadastrar quem falta, **preenche o e-mail
+de quem já está no Zelo**, que é exatamente o que falta hoje para a atualização do ativo funcionar.
+Hoje, pessoa sem e-mail = envio de ativo com erro na fila.
+
+**C. O Zelo escrever no SD o que ele sabe melhor**
+Plaqueta (`asset_tag`/`barcode`), site, departamento, garantia (`warranty_expiry`), fornecedor,
+data de aquisição, custo. É a resposta à Giselly por outro caminho: o SD fica certo porque o Zelo o
+alimenta, em vez de a gestão de ativos mudar de casa.
+
+**D. Conferência Zelo × Service Desk (reconciliação)** — *o que mais vale a longo prazo, e é barato*
+Uma tela que lista só as divergências: ativo que existe de um lado só, usuário diferente, estado
+diferente, service tag diferente. Sem corrigir nada sozinha — com um botão por linha para dizer quem
+está certo. É o inventário que hoje ninguém faz.
+
+**E. Mais estados do ativo**
+Hoje só In Use e In Store. Dá para cobrir: Manutenção → `In Repair`; baixa → `Expired/Disposed`;
+transferência → o site novo. Baixo esforço, fecha os buracos do ciclo.
+
+**F. Anexar o ativo ao chamado** (`assets` no POST/PUT de request)
+Fazer o ativo entregue aparecer **dentro do chamado**, não só na nota. Outra resposta ao pedido da
+Giselly, e não precisa customizar o SD.
+
+**G. Abrir chamado a partir do Zelo** (`POST /api/v3/requests`)
+Casos que valem: recolhimento no desligamento (um chamado com a lista do que a pessoa tem), abertura
+de manutenção com o ativo anexado, e devolução pendente que ninguém atende. Precisa combinar
+template, categoria e grupo antes.
+
+**H. Service tag quando vem vazia no SD**
+Já estava na lista: o Zelo preenche o que a planilha tem. Depende de testar o endereço do tipo
+Computador no laboratório.
+
+**I. Garantia e contrato vindos do SD**
+`warranty_expiry`, `vendor`, `acquisition_date`, `purchase_cost` alimentam os lembretes de garantia
+vencendo que o Painel já mostra.
+
+**J. Ordens de compra** (`/api/v3/purchase_orders`)
+Leitura do que está comprado e ainda não chegou, para dar entrada no estoque. Prioridade baixa: a
+decisão do Gabriel é que compra e rollout vão para o Jira.
+
+## Ordem sugerida
+1. **B** (pessoas/e-mail) — destrava o que já existe e quebra hoje.
+2. **A** (importar ativos) — o pedido, e base para o resto.
+3. **D** (reconciliação) — mostra o tamanho real do problema antes de automatizar correção.
+4. **E** + **F** — baratos, fecham o ciclo.
+5. **C** — depois que a reconciliação mostrar que o Zelo é confiável naqueles campos.
+6. **G**, **H**, **I** — conforme a necessidade aparecer.
