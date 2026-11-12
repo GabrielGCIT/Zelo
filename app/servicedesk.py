@@ -29,6 +29,7 @@ from app.models import Config
 ACCEPT = 'application/vnd.manageengine.sdp.v3+json'
 CHAVES = ('sd_url', 'sd_chave', 'sd_ssl', 'sd_ativo', 'sd_ativos')
 TIPOS_ENVIO = ('Entrega', 'Empréstimo', 'Devolução')
+NOMES_TIPO = {'chamado': 'Termo + nota', 'ativo': 'Ativo', 'termo': 'Termo assinado'}
 _cache = {}            # chamado → (quando, dados)
 CACHE_SEG = 300
 
@@ -234,6 +235,43 @@ def enviar_ativo(envio, m):
     return f'{host} → {estado}' + (f' com {m.nome}' if uid else '') + aviso
 
 
+def enviar_termo_assinado(envio, m):
+    """Anexa ao chamado o termo ASSINADO guardado no Zelo e grava a nota apontando para ele."""
+    from app.termo_arquivo import MIME, caminho
+    c = caminho(m)
+    if not c:
+        raise ErroSD('O termo assinado não está mais guardado no Zelo')
+    ext = c.rsplit('.', 1)[-1].lower()
+    nome = f'Termo_assinado_Zelo_{m.id}.{ext}'
+    if not envio.anexo_ok:
+        with open(c, 'rb') as fh:
+            anexar(envio.chamado, nome, fh.read(), MIME.get(ext, 'application/octet-stream'))
+        envio.anexo_ok = True
+    nota(envio.chamado, f'[Zelo] Termo ASSINADO do lançamento Nº {m.id} anexado ao chamado: {nome}')
+    return f'{nome} anexado ao chamado {envio.chamado}'
+
+
+def enfileirar_termo(movs):
+    """Envio do termo assinado para os lançamentos que já têm chamado e arquivo guardado."""
+    from app.models import EnvioSD
+    novos = []
+    for m in movs:
+        if not (m.chamado and m.termo_arquivo):
+            continue
+        n = ''.join(c for c in m.chamado if c.isdigit())
+        if not n:
+            continue
+        ja = EnvioSD.query.filter_by(mov_id=m.id, tipo='termo', chamado=n, status='Enviado').first()
+        if ja:
+            continue
+        e = EnvioSD(mov_id=m.id, tipo='termo', chamado=n, alvo=m.termo_arquivo, status='Pendente',
+                    criado=datetime.now().isoformat(timespec='seconds'), tentativas=0)
+        db.session.add(e)
+        novos.append(e)
+    db.session.commit()
+    return [e.id for e in novos]
+
+
 def enfileirar_ativos(movs):
     from app.models import EnvioSD, Item
     novos = []
@@ -274,6 +312,11 @@ def enviar(envio):
             raise ErroSD('Integração com o Service Desk desligada ou sem chave')
         if not m:
             raise ErroSD('Lançamento não existe mais (foi desfeito)')
+        if envio.tipo == 'termo':
+            envio.erro = enviar_termo_assinado(envio, m)
+            envio.status, envio.enviado = 'Enviado', datetime.now().isoformat(timespec='seconds')
+            db.session.commit()
+            return True
         if envio.tipo == 'ativo':
             if not ativos_ligado():
                 raise ErroSD('Atualização de ativos desligada')
@@ -325,6 +368,7 @@ def enfileirar_tudo(app, movs):
     if not configurado():
         return 0
     ids = enfileirar(movs)
+    ids += enfileirar_termo(movs)
     if ativos_ligado():
         ids += enfileirar_ativos(movs)
     if ids:

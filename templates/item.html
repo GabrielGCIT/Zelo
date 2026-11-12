@@ -39,5 +39,20 @@
    {% if pode('lancar') %}<button class="btn btn-sm btn-zelo mt-3">Salvar cadastro</button>{% endif %}
   </form></div></div>
 </div>
-<div class="z-card"><h2>Histórico do item</h2>{{ mov_tabela(movs, mostra_item=False) }}</div>
+<div class="z-card"><div class="d-flex align-items-baseline gap-2"><h2 class="m-0">Linha do tempo</h2>
+ <span class="small text-muted">{{ tempo|length }} evento{{ 's' if tempo|length != 1 }}</span>
+ <button class="btn btn-sm btn-link ms-auto p-0" type="button" data-bs-toggle="collapse" data-bs-target="#tab-hist">ver como tabela</button></div>
+{% if not tempo %}<div class="z-vazio"><i class="fa fa-clock-rotate-left"></i><div>Este item nunca teve lançamento</div>
+ <small>Ele veio da planilha sem histórico.</small>{% if pode('lancar') %}<a class="btn btn-sm btn-zelo mt-2" href="{{ url_for('lancar.grade', item=it.codigo) }}">Fazer o primeiro lançamento</a>{% endif %}</div>
+{% else %}<ol class="z-tl mt-3">{% for e in tempo %}
+ <li><span class="z-tl-p z-{{ e.cor }}"><i class="fa {{ e.ico }}"></i></span>
+  <div class="z-tl-c"><div class="z-tl-h"><b>{{ e.titulo }}</b>
+   {% if e.quem %}<span>{{ pessoa_link(e.matricula, e.quem) }}</span>{% endif %}
+   <a class="z-tl-r" href="{{ e.href }}">{{ e.ref }}</a>
+   {% if e.termo %}<a href="{{ e.termo }}" target="_blank" title="Termo assinado"><i class="fa fa-paperclip"></i></a>{% endif %}
+   <time>{{ e.data|data or 'sem data' }}{% if e.data %} · {{ dias_desde(e.data) }} d{% endif %}</time></div>
+   {% if e.detalhe %}<div class="z-tl-d">{{ e.detalhe }}</div>{% endif %}
+   {% if e.resp %}<div class="z-tl-d text-muted">lançado por {{ e.resp }}</div>{% endif %}</div></li>
+{% endfor %}</ol>{% endif %}
+<div class="collapse mt-3" id="tab-hist">{{ mov_tabela(movs, mostra_item=False) }}</div></div>
 {% endblock %}

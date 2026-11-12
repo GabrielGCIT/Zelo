@@ -19,14 +19,15 @@
 <div class="col-lg-6"><div class="z-card"><h2>O que vai para o chamado</h2><ul class="small mb-0">
  <li>Entrega, empréstimo ou devolução com Nº de chamado → anexo <code>Termo_Zelo_&lt;Nº&gt;.pdf</code> + nota com o item, a pessoa, o CC e o Nº do lançamento.</li>
  <li>Reserva que vira Entregue no Acompanhar → novo termo (agora assinado) + nota.</li>
- <li>Chamado informado depois, no Acompanhar → envia na hora.</li>
+ <li>Chamado informado depois, no Acompanhar → envia na hora (inclusive o termo assinado já guardado).</li>
+ <li>Termo assinado guardado no Zelo → o arquivo vai como anexo do chamado, com nota apontando para ele.</li>
  <li>Com "Atualizar o ativo" ligado: a máquina (pelo hostname) passa a aparecer associada à pessoa, inclusive no campo Ativos dos chamados dela.</li>
  <li>Nada vem do Service Desk além do solicitante (nome, e-mail e usuário) do chamado.</li></ul></div></div></div>
 <div class="z-card"><div class="d-flex align-items-center gap-2"><h2 class="m-0">Envios</h2>{% if pendentes %}<span class="badge text-bg-warning">{{ pendentes }} sem enviar</span>
 <form method="post" class="ms-auto"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="reenviar"><button class="btn btn-sm btn-outline-secondary"><i class="fa fa-rotate me-1"></i>Reenviar pendentes</button></form>{% endif %}</div>
 {% if not envios %}<p class="text-muted mt-2">Nenhum envio ainda.</p>{% else %}
 <div class="table-responsive mt-2"><table class="table table-sm z-tab small"><thead><tr><th>Quando</th><th>Lançamento</th><th>O quê</th><th>Chamado / ativo</th><th>Status</th><th>Tentativas</th><th>Detalhe</th></tr></thead><tbody>
-{% for e in envios %}<tr><td>{{ e.criado|replace('T',' ') }}</td><td><a href="{{ url_for('termo.inicio', n=e.mov_id) }}">Nº {{ e.mov_id }}</a></td><td>{{ 'Ativo' if e.tipo=='ativo' else 'Termo + nota' }}</td><td class="z-mono">{{ e.alvo if e.tipo=='ativo' else e.chamado }}</td>
+{% for e in envios %}<tr><td>{{ e.criado|replace('T',' ') }}</td><td><a href="{{ url_for('termo.inicio', n=e.mov_id) }}">Nº {{ e.mov_id }}</a></td><td>{{ {'ativo': 'Ativo', 'termo': 'Termo assinado'}.get(e.tipo, 'Termo + nota') }}</td><td class="z-mono">{{ e.alvo if e.tipo=='ativo' else e.chamado }}</td>
 <td><span class="badge text-bg-{{ 'success' if e.status=='Enviado' else ('danger' if e.status=='Erro' else 'secondary') }}">{{ e.status }}</span></td><td>{{ e.tentativas }}</td><td>{{ e.erro or (e.enviado|replace('T',' ') if e.enviado else '') }}</td></tr>{% endfor %}
 </tbody></table></div>{% endif %}</div>
 {% endblock %}

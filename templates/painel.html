@@ -1,23 +1,113 @@
 {% extends 'base.html' %}{% from '_macros.html' import sit, item_link, linha_link, pessoa_link %}
 {% block title %}Painel{% endblock %}
 {% block content %}
-<h1 class="z-titulo">Painel</h1><p class="z-sub">{{ total }} itens cadastrados. Tudo calculado a partir do Histórico.</p>
+<div class="d-flex flex-wrap align-items-end gap-2 mb-3"><div><h1 class="z-titulo">Painel</h1>
+<p class="z-sub">{{ '{:,}'.format(total).replace(',', '.') }} itens cadastrados. Tudo calculado a partir do Histórico.</p></div>
+<div class="ms-auto d-flex gap-2"><a class="btn btn-sm btn-zelo" href="{{ url_for('lancar.grade') }}"><i class="fa fa-plus me-1"></i>Novo lançamento</a>
+<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('painel.fila') }}"><i class="fa fa-list-check me-1"></i>Minha fila</a></div></div>
+
 <div class="z-kpis">{% for r, v, url, alerta in kpis %}
   <a class="z-kpi {{ 'alerta' if alerta and v else '' }}" href="{{ url }}"><div class="r">{{ r }}</div><div class="v">{{ '{:,}'.format(v).replace(',', '.') }}</div></a>
 {% endfor %}</div>
+
+{% if achados %}
+<div class="z-card z-qual">
+ <div class="d-flex flex-wrap align-items-baseline gap-2 mb-1"><h2 class="m-0"><i class="fa fa-triangle-exclamation me-2 text-warning"></i>Qualidade do cadastro</h2>
+  <span class="badge text-bg-warning">{{ '{:,}'.format(n_achados).replace(',', '.') }} pontos</span>
+  <span class="small text-muted ms-auto">Nada disso trava o sistema. Cada item leva direto ao lugar de corrigir.</span></div>
+ <div class="z-qual-grade">
+ {% for a in achados %}
+  <details class="z-ach {{ 'grave' if a.grave }}" {{ 'open' if loop.first }}>
+   <summary><span class="z-ach-n">{{ a.n }}</span><span class="z-ach-t">{{ a.titulo }}</span><i class="fa fa-chevron-down z-seta"></i></summary>
+   <p class="z-ach-p">{{ a.porque }}</p>
+   <ul class="z-ach-l">{% for l in a.linhas %}<li><span>{{ l.texto }}</span><a class="btn btn-sm btn-outline-secondary py-0" href="{{ l.href }}">{{ l.botao }}</a></li>{% endfor %}
+    {% if a.mais %}<li class="text-muted small">e mais {{ '{:,}'.format(a.mais).replace(',', '.') }}…</li>{% endif %}</ul>
+  </details>
+ {% endfor %}</div>
+</div>
+{% endif %}
+
 <div class="row g-3">
-  <div class="col-xl-8"><div class="z-card"><h2>Itens por categoria e situação</h2>
+ <div class="col-xl-7"><div class="z-card h-100">
+  <h2>Entregas e devoluções por semana</h2>
+  <p class="z-leg"><span class="z-sw" style="background:var(--s1)"></span>Entregas e empréstimos <b>{{ semanas.total_e }}</b>
+   <span class="z-sw ms-3" style="background:var(--s2)"></span>Devoluções <b>{{ semanas.total_d }}</b>
+   <span class="text-muted ms-2">· últimas 12 semanas</span></p>
+  <div class="z-gr"><canvas id="g-semanas" height="190" aria-label="Entregas e devoluções por semana"></canvas></div>
+  <table class="visually-hidden"><caption>Entregas e devoluções por semana</caption><tr><th>Semana</th><th>Entregas</th><th>Devoluções</th></tr>
+   {% for r in semanas.rotulos %}<tr><td>{{ r }}</td><td>{{ semanas.entregas[loop.index0] }}</td><td>{{ semanas.devolucoes[loop.index0] }}</td></tr>{% endfor %}</table>
+ </div></div>
+ <div class="col-xl-5"><div class="z-card h-100"><h2>Parque por situação</h2>
+  {% set maior = sit_barras[0].n if sit_barras else 1 %}
+  <div class="z-barras">{% for b in sit_barras %}
+   <a class="z-barra-l" href="{{ b.url }}" title="Ver os {{ b.n }} itens"><span class="z-barra-r">{{ b.rotulo }}</span>
+    <span class="z-barra-t"><i style="width:{{ (100 * b.n / maior)|round(1) }}%"></i></span><b>{{ '{:,}'.format(b.n).replace(',', '.') }}</b></a>
+  {% endfor %}</div></div></div>
+</div>
+
+<div class="row g-3">
+ <div class="col-xl-5"><div class="z-card h-100"><h2>Garantia do parque</h2>
+  {% set tg = garantias|sum(attribute='n') or 1 %}
+  <div class="z-seg">{% for g in garantias if g.n %}<a class="z-seg-p z-{{ g.cor }}" href="{{ g.url }}" style="flex:{{ g.n }}" title="{{ g.rotulo }}: {{ g.n }}">{% if 100 * g.n / tg > 9 %}{{ (100 * g.n / tg)|round|int }}%{% endif %}</a>{% endfor %}</div>
+  <ul class="z-leg-l">{% for g in garantias %}<li><span class="z-sw z-{{ g.cor }}"></span>{{ g.rotulo }}<b>{{ '{:,}'.format(g.n).replace(',', '.') }}</b></li>{% endfor %}</ul>
+  {% if garantias[3].n > tg // 2 %}<p class="small text-muted mb-0">A maior parte do parque está sem data de garantia: preencha no cadastro do item para o Zelo avisar antes de vencer.</p>{% endif %}
+ </div></div>
+ <div class="col-xl-7"><div class="z-card h-100"><h2>Estoque do EC × mínimo</h2>
+  {% if not estoque %}<div class="z-vazio"><i class="fa fa-bell-slash"></i><div>Nenhum consumível tem mínimo definido</div>
+   <small>Com o mínimo preenchido, o Zelo avisa quando o estoque do EC cair abaixo dele.</small>
+   <a class="btn btn-sm btn-outline-secondary mt-2" href="{{ url_for('estoque.consumiveis') }}">Definir mínimos</a></div>
+  {% else %}<ul class="z-med">{% for e in estoque %}<li><span class="z-med-n">{{ e.nome }}</span>
+   <span class="z-med-t"><i class="{{ 'baixo' if e.pct < 100 }}" style="width:{{ e.pct }}%"></i></span>
+   <b class="{{ 'z-erro' if e.pct < 100 }}">{{ e.tem }}<span class="text-muted fw-normal">/{{ e.minimo }}</span></b></li>{% endfor %}</ul>
+  <p class="small text-muted mb-0 mt-2"><a href="{{ url_for('estoque.consumiveis') }}">Ver todos os consumíveis</a></p>{% endif %}
+ </div></div>
+</div>
+
+<div class="row g-3">
+ <div class="col-xl-8"><div class="z-card h-100"><h2>Itens por categoria e situação</h2>
     <div class="table-responsive"><table class="table table-sm table-hover text-end">
       <thead><tr><th class="text-start">Categoria</th>{% for c in cols %}<th>{{ c }}</th>{% endfor %}<th>Total</th></tr></thead>
       <tbody>{% for cat in cats %}<tr><td class="text-start fw-semibold">{{ cat }}</td>
         {% for c in cols %}<td>{% set n = matriz[cat][c] %}{% if n %}<a class="z-link" href="{{ url_for('consulta.itens', categoria=cat, situacao=c) }}">{{ n }}</a>{% else %}<span class="text-muted">·</span>{% endif %}</td>{% endfor %}
         <td class="fw-bold">{{ matriz[cat].values()|sum }}</td></tr>{% endfor %}</tbody>
     </table></div></div></div>
-  <div class="col-xl-4"><div class="z-card"><h2>Em estoque por site</h2>
+  <div class="col-xl-4"><div class="z-card h-100"><h2>Em estoque por site</h2>
     <table class="table table-sm">{% for s, n in por_site %}<tr><td>{{ s or '(sem site)' }}</td><td class="text-end"><a class="z-link" href="{{ url_for('consulta.itens', situacao='Em estoque', site=s or '') }}">{{ n }}</a></td></tr>{% endfor %}</table></div></div>
 </div>
 <div class="z-card"><h2>Últimos lançamentos</h2>
   <div class="table-responsive"><table class="table table-sm table-hover"><thead><tr><th>Nº</th><th>Data</th><th>Tipo</th><th>Item</th><th>Linha</th><th>Pessoa</th><th>Resp.</th></tr></thead>
-  <tbody>{% for m in ultimas %}<tr><td class="z-mono">{{ m.id }}</td><td>{{ m.data|data }}</td><td>{{ m.tipo }}{% if m.etapa and m.etapa!='Entregue' %} <small class="text-muted">({{ m.etapa }})</small>{% endif %}</td><td>{{ item_link(m.item) }}</td><td>{{ linha_link(m.linha) }}</td><td>{{ pessoa_link(m.matricula, m.nome or m.local) }}</td><td>{{ m.resp or '' }}</td></tr>{% endfor %}</tbody></table></div>
+  <tbody>{% for m in ultimas %}<tr><td class="z-mono"><a class="z-link" href="{{ url_for('lancar.lancamento', num=m.id) }}">{{ m.id }}</a></td><td>{{ m.data|data }}</td><td>{{ m.tipo }}{% if m.etapa and m.etapa!='Entregue' %} <small class="text-muted">({{ m.etapa }})</small>{% endif %}</td><td>{{ item_link(m.item) }}</td><td>{{ linha_link(m.linha) }}</td><td>{{ pessoa_link(m.matricula, m.nome or m.local) }}</td><td>{{ m.resp or '' }}</td></tr>{% endfor %}</tbody></table></div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chartjs-4.4.0/chart.umd.min.js') }}"></script>
+<script>
+const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const gSemanas = new Chart(document.getElementById('g-semanas'), {
+  type: 'line',
+  data: {labels: {{ semanas.rotulos|tojson }}, datasets: [
+    {label: 'Entregas', data: {{ semanas.entregas|tojson }}, borderColor: tok('--s1'), backgroundColor: tok('--s1'),
+     borderWidth: 2, tension: .3, pointRadius: 3, pointHoverRadius: 6, pointHoverBorderWidth: 2, pointHoverBorderColor: tok('--surface-0')},
+    {label: 'Devoluções', data: {{ semanas.devolucoes|tojson }}, borderColor: tok('--s2'), backgroundColor: tok('--s2'),
+     borderWidth: 2, tension: .3, pointRadius: 3, pointHoverRadius: 6, pointHoverBorderWidth: 2, pointHoverBorderColor: tok('--surface-0')}]},
+  options: {responsive: true, maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+    plugins: {legend: {display: false}, tooltip: {backgroundColor: '#0d1628', padding: 10, boxPadding: 4, cornerRadius: 8,
+      titleFont: {weight: '700'}, callbacks: {title: c => 'Semana de ' + c[0].label}}},
+    scales: {x: {grid: {display: false}, ticks: {font: {size: 11}}},
+             y: {beginAtZero: true, border: {display: false}, ticks: {font: {size: 11}, precision: 0}}}}
+});
+// as cores vêm dos tokens do tema; ao trocar claro/escuro o gráfico se repinta
+function pintaGrafico() {
+  const eixo = tok('--texto-2'), grade = tok('--grade');
+  gSemanas.data.datasets[0].borderColor = gSemanas.data.datasets[0].backgroundColor = tok('--s1');
+  gSemanas.data.datasets[1].borderColor = gSemanas.data.datasets[1].backgroundColor = tok('--s2');
+  gSemanas.data.datasets.forEach(d => d.pointHoverBorderColor = tok('--surface-0'));
+  gSemanas.options.scales.x.ticks.color = eixo;
+  gSemanas.options.scales.y.ticks.color = eixo;
+  gSemanas.options.scales.y.grid = {color: grade};
+  gSemanas.update('none');
+}
+pintaGrafico();
+document.addEventListener('zelo:tema', pintaGrafico);
+</script>
 {% endblock %}

@@ -162,18 +162,16 @@ def assinado(num):
     ok, msg = salvar(m, request.files.get('arquivo'), g.usuario.nome)
     if ok:
         registrar_log('termo assinado guardado', f'Nº {num}: {m.termo_arquivo}')
+        from flask import current_app
         from app import servicedesk as sd
         if m.chamado and sd.configurado():
-            try:
-                c = caminho(m)
-                ext = c.rsplit('.', 1)[-1].lower()
-                n = ''.join(x for x in m.chamado if x.isdigit())
-                with open(c, 'rb') as fh:
-                    sd.anexar(n, f'Termo_assinado_Zelo_{num}.{ext}', fh.read(), MIME.get(ext))
-                sd.nota(n, f'[Zelo] Termo assinado do lançamento Nº {num} anexado ao chamado: Termo_assinado_Zelo_{num}.{ext}')
-                msg += ' e anexado ao chamado ' + n
-            except sd.ErroSD as e:
-                msg += f' (não consegui anexar ao chamado: {e})'
+            ids = sd.enfileirar_termo([m])
+            if ids:
+                sd.processar(current_app._get_current_object(), ids)
+                from app.models import EnvioSD
+                e = db.session.get(EnvioSD, ids[0])
+                msg += (f' e anexado ao chamado {m.chamado}' if e and e.status == 'Enviado'
+                        else '. O envio ao chamado falhou e ficou na fila (Administração → Service Desk)')
     if request.headers.get('X-Requested-With') == 'fetch':
         from app.pendencias import texto
         return jsonify(ok=ok, msg=msg, pend=texto(m) if ok else [])

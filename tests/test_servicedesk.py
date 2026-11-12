@@ -8,7 +8,7 @@ import pytest
 from app import db
 from app import servicedesk as sd
 from app.lancamento import gravar
-from app.models import EnvioSD, Item, Pessoa
+from app.models import EnvioSD, Item, Movimentacao, Pessoa
 
 
 class SimuladorSD:
@@ -205,3 +205,58 @@ def test_migracao_acrescenta_colunas(tmp_path):
     create_app(f'sqlite:///{caminho}', testing=True)
     cols = {r[1] for r in sqlite3.connect(caminho).execute('PRAGMA table_info(envios_sd)')}
     assert {'tipo', 'alvo'} <= cols
+
+
+def _entrega_com_termo(cli, p, chamado='777001'):
+    """Entrega gravada, com o termo assinado guardado no Zelo."""
+    import io
+    it = Item.query.filter(Item.situacao == 'Em estoque', Item.categoria == 'Notebook',
+                           Item.finalidade != 'Pool de empréstimo').first()
+    r = cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'chamado': chamado, 'acess': 'Nenhum'}]})
+    num = r.json['resultados'][0]['nums'][0]
+    cli.post(f'/termo/{num}/assinado', data={'arquivo': (io.BytesIO(b'%PDF-1.4 assinado'), 'termo.pdf')},
+             content_type='multipart/form-data', headers={'X-Requested-With': 'fetch'})
+    return num
+
+
+def test_termo_assinado_vai_para_o_chamado(app, cli, sim):
+    from app.models import EnvioSD
+    s, p = sim
+    num = _entrega_com_termo(cli, p)
+    assert ('777001', f'Termo_assinado_Zelo_{num}.pdf') in s.anexos
+    assert any('Termo ASSINADO' in t for _n, t in s.notas)
+    assert EnvioSD.query.filter_by(mov_id=num, tipo='termo').one().status == 'Enviado'
+
+
+def test_termo_assinado_com_o_sd_fora_fica_na_fila(app, cli, sim):
+    from app.models import EnvioSD
+    s, p = sim
+    s.fora = True
+    num = _entrega_com_termo(cli, p)
+    e = EnvioSD.query.filter_by(mov_id=num, tipo='termo').one()
+    assert e.status == 'Erro' and db.session.get(Movimentacao, num).termo_arquivo      # o termo ficou guardado
+    s.fora = False
+    adm = app.test_client()
+    adm.post('/login', data={'email': 'admin@teste', 'senha': 'senha-forte-1'})
+    adm.post('/admin/servicedesk', data={'acao': 'reenviar'})
+    db.session.refresh(e)
+    assert e.status == 'Enviado' and ('777001', f'Termo_assinado_Zelo_{num}.pdf') in s.anexos
+
+
+def test_chamado_informado_depois_leva_o_termo_assinado(app, cli, sim):
+    import io
+    from app.models import EnvioSD
+    s, p = sim
+    it = Item.query.filter(Item.situacao == 'Em estoque', Item.categoria == 'Notebook',
+                           Item.finalidade != 'Pool de empréstimo').first()
+    r = cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}]})
+    num = r.json['resultados'][0]['nums'][0]
+    cli.post(f'/termo/{num}/assinado', data={'arquivo': (io.BytesIO(b'%PDF-1.4 assinado'), 't.pdf')},
+             content_type='multipart/form-data', headers={'X-Requested-With': 'fetch'})
+    assert not s.anexos                                        # sem chamado, nada foi enviado
+    assert cli.post('/api/acompanhar/marca', json={'id': num, 'campo': 'chamado', 'valor': '777001'}).json['ok']
+    tipos = {e.tipo for e in EnvioSD.query.filter_by(mov_id=num)}
+    assert {'chamado', 'termo'} <= tipos
+    assert ('777001', f'Termo_assinado_Zelo_{num}.pdf') in s.anexos

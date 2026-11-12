@@ -107,9 +107,7 @@ def api_marca():
         from flask import current_app
         from app import servicedesk as sd
         if campo == 'chamado' and m.chamado and not antes and sd.configurado():
-            ids = sd.enfileirar([m])
-            if ids:
-                sd.processar(current_app._get_current_object(), ids)
+            sd.enfileirar_tudo(current_app._get_current_object(), [m])
     return jsonify(ok=True, msg='; '.join(mudou), pend=texto(m), termo=m.termo, chamado=m.chamado or '')
 
 

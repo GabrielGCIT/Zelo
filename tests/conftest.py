@@ -28,6 +28,7 @@ def app():
     caminho = os.path.join(tmp, 'z.db')
     shutil.copy(_CACHE, caminho)
     a = create_app('sqlite:///' + caminho, testing=True)
+    a.config['SERVER_NAME'] = 'localhost'      # deixa url_for funcionar fora de uma requisição
     with a.app_context():
         yield a
         db.session.remove()

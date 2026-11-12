@@ -54,8 +54,74 @@ def inicio():
     por_site = (db.session.query(Item.site, func.count()).filter(Item.situacao == 'Em estoque', ~pool)
                 .group_by(Item.site).order_by(func.count().desc()).all())
     ultimas = Movimentacao.query.order_by(Movimentacao.id.desc()).limit(12).all()
+    from app.qualidade import tudo as qualidade
+    achados, n_achados = qualidade()
     return render_template('painel.html', kpis=kpis, matriz=matriz, cats=cats, cols=cols, por_site=por_site,
-                           ultimas=ultimas, total=sum(sit.values()))
+                           ultimas=ultimas, total=sum(sit.values()), achados=achados, n_achados=n_achados,
+                           sit_barras=_barras_situacao(sit), semanas=_por_semana(), garantias=_garantias(),
+                           estoque=_estoque_minimo())
+
+
+# ------------------------------------------------------------------ dados dos gráficos
+def _barras_situacao(sit):
+    """Situações do parque, da maior para a menor (barra horizontal, uma cor só)."""
+    return [dict(rotulo=s, n=sit[s], url=url_for('consulta.itens', situacao=s))
+            for s in sorted(sit, key=lambda x: -sit[x]) if sit[s]]
+
+
+def _por_semana(semanas=12):
+    """Entregas (inclui empréstimo) e devoluções por semana, das últimas 12 semanas."""
+    hoje = date.today()
+    ini = hoje - timedelta(days=hoje.weekday() + 7 * (semanas - 1))
+    rotulos, chaves = [], []
+    for i in range(semanas):
+        d = ini + timedelta(days=7 * i)
+        chaves.append(d.isoformat())
+        rotulos.append(f'{d:%d/%m}')
+    ent = dict.fromkeys(chaves, 0)
+    dev = dict.fromkeys(chaves, 0)
+    movs = Movimentacao.query.filter(Movimentacao.data >= ini.isoformat(),
+                                     Movimentacao.tipo.in_(('Entrega', 'Empréstimo', 'Devolução'))).all()
+    for m in movs:
+        try:
+            d = date.fromisoformat(m.data)
+        except (TypeError, ValueError):
+            continue
+        k = (d - timedelta(days=d.weekday())).isoformat()
+        alvo = dev if m.tipo == 'Devolução' else ent
+        if k in alvo:
+            alvo[k] += 1
+    return dict(rotulos=rotulos, entregas=[ent[k] for k in chaves], devolucoes=[dev[k] for k in chaves],
+                total_e=sum(ent.values()), total_d=sum(dev.values()))
+
+
+def _garantias():
+    """Como está a garantia do parque ativo (uma barra dividida)."""
+    hoje = _hoje()
+    em90 = (date.today() + timedelta(days=90)).isoformat()
+    base = Item.query.filter(Item.situacao != 'Baixada')
+    vigente = base.filter(Item.garantia > em90).count()
+    vence = base.filter(Item.garantia > hoje, Item.garantia <= em90).count()
+    vencida = base.filter(Item.garantia.isnot(None), Item.garantia != '', Item.garantia <= hoje).count()
+    sem = base.filter((Item.garantia.is_(None)) | (Item.garantia == '')).count()
+    return [dict(rotulo='Em garantia', n=vigente, cor='ok', url=url_for('consulta.contratos')),
+            dict(rotulo='Vence em 90 dias', n=vence, cor='aviso', url=url_for('consulta.contratos')),
+            dict(rotulo='Garantia vencida', n=vencida, cor='erro', url=url_for('consulta.contratos')),
+            dict(rotulo='Sem data de garantia', n=sem, cor='neutro', url=url_for('consulta.itens'))]
+
+
+def _estoque_minimo(quantos=8):
+    """Consumíveis do EC com mínimo definido: saldo contra o mínimo (lista de medidores)."""
+    from app.estoque import saldos
+    from app.models import Consumivel
+    sal = saldos()
+    linhas = []
+    for c in Consumivel.query.filter(Consumivel.minimo.isnot(None), Consumivel.minimo > 0):
+        tem = sal.get(c.nome, {}).get('EC', 0)
+        linhas.append(dict(nome=c.nome, tem=tem, minimo=c.minimo, pct=min(100, round(100 * tem / c.minimo)),
+                           falta=max(0, c.minimo - tem)))
+    linhas.sort(key=lambda x: x['pct'])
+    return linhas[:quantos]
 
 
 @painel_bp.route('/fila')

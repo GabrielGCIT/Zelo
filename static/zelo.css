@@ -177,3 +177,66 @@ a.z-link:hover { text-decoration: underline; }
 .z-col-corpo.z-grade .z-col-vazio { grid-column: 1 / -1; }
 a.z-tic { text-decoration: none; } button.z-tic:disabled { opacity: .7; }
 .z-mini { border: 0; outline: 0; background: transparent; color: inherit; font: inherit; width: 70px; padding: 0; }
+
+/* ---------- gráficos (palette validada: slots 1-2 categóricos; rampa ordinal azul) ---------- */
+:root { --s1: #2a78d6; --s2: #eb6834; --ok: #2f7d32; --aviso: #b26a00; --erro: #c23b31; --neutro: #98a1ab; --grade: #e9ecef; }
+[data-bs-theme=dark] { --s1: #3987e5; --s2: #d95926; --ok: #5fb762; --aviso: #e0a33a; --erro: #ef6b60; --neutro: #6b747e; --grade: #34363b; }
+.z-gr { position: relative; height: 190px; }
+.z-leg { font-size: .82rem; color: var(--texto-2); margin: -4px 0 10px; }
+.z-leg b { color: var(--bs-body-color); margin-left: 4px; }
+.z-sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; background: var(--s1); }
+.z-sw.z-ok { background: var(--ok); } .z-sw.z-aviso { background: var(--aviso); } .z-sw.z-erro { background: var(--erro); } .z-sw.z-neutro { background: var(--neutro); }
+/* barras horizontais ordenadas (uma cor só: o tamanho já codifica a grandeza) */
+.z-barras { display: flex; flex-direction: column; gap: 7px; }
+.z-barra-l { display: grid; grid-template-columns: 1fr 42% auto; align-items: center; gap: 10px; text-decoration: none; color: inherit; font-size: .84rem; }
+.z-barra-l:hover .z-barra-t > i { filter: brightness(1.12); }
+.z-barra-l:hover .z-barra-r { color: var(--accent-fg); }
+.z-barra-r { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.z-barra-t { background: var(--surface-1); border-radius: 4px; height: 12px; overflow: hidden; }
+.z-barra-t > i { display: block; height: 100%; background: var(--s1); border-radius: 0 4px 4px 0; transition: width .5s ease, filter .15s; }
+.z-barra-l b { font-variant-numeric: tabular-nums; min-width: 42px; text-align: right; }
+/* barra dividida (uma parte por estado) */
+.z-seg { display: flex; gap: 2px; height: 34px; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+.z-seg-p { display: flex; align-items: center; justify-content: center; color: #fff; font-size: .74rem; font-weight: 700; text-decoration: none;
+  min-width: 3px; transition: filter .15s; }
+.z-seg-p:hover { filter: brightness(1.15); color: #fff; }
+.z-seg-p.z-ok { background: var(--ok); } .z-seg-p.z-aviso { background: var(--aviso); } .z-seg-p.z-erro { background: var(--erro); } .z-seg-p.z-neutro { background: var(--neutro); }
+.z-leg-l { list-style: none; padding: 0; margin: 0; font-size: .84rem; }
+.z-leg-l li { display: flex; align-items: center; gap: 2px; padding: 2px 0; } .z-leg-l b { margin-left: auto; font-variant-numeric: tabular-nums; }
+/* medidores (saldo × mínimo) */
+.z-med { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.z-med li { display: grid; grid-template-columns: 1fr 38% auto; align-items: center; gap: 10px; font-size: .84rem; }
+.z-med-n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.z-med-t { background: var(--surface-1); border-radius: 4px; height: 10px; overflow: hidden; }
+.z-med-t > i { display: block; height: 100%; background: var(--ok); transition: width .5s ease; }
+.z-med-t > i.baixo { background: var(--erro); }
+.z-med b { font-variant-numeric: tabular-nums; }
+/* qualidade do cadastro */
+.z-qual-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; align-items: start; }
+.z-ach { border: 1px solid var(--borda); border-radius: 10px; padding: 8px 12px; background: var(--surface-0); }
+.z-ach.grave { border-color: color-mix(in srgb, var(--erro) 45%, transparent); }
+.z-ach summary { display: flex; align-items: center; gap: 9px; cursor: pointer; list-style: none; font-size: .88rem; }
+.z-ach summary::-webkit-details-marker { display: none; }
+.z-ach-n { background: var(--surface-2); border-radius: 999px; padding: 1px 9px; font-weight: 700; font-size: .78rem; font-variant-numeric: tabular-nums; }
+.z-ach.grave .z-ach-n { background: color-mix(in srgb, var(--erro) 16%, transparent); color: var(--erro); }
+.z-ach-t { font-weight: 600; } .z-seta { margin-left: auto; color: var(--texto-2); font-size: .7rem; transition: transform .2s; }
+.z-ach[open] .z-seta { transform: rotate(180deg); }
+.z-ach-p { font-size: .78rem; color: var(--texto-2); margin: 8px 0 6px; }
+.z-ach-l { list-style: none; padding: 0; margin: 0; font-size: .8rem; max-height: 280px; overflow-y: auto; }
+.z-ach-l li { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-top: 1px solid var(--borda); }
+.z-ach-l li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.z-ach-l li a { white-space: nowrap; }
+
+/* ---------- linha do tempo do item ---------- */
+.z-tl { list-style: none; margin: 0; padding: 0 0 0 4px; position: relative; }
+.z-tl::before { content: ''; position: absolute; left: 15px; top: 6px; bottom: 6px; width: 2px; background: var(--borda); }
+.z-tl li { position: relative; display: flex; gap: 12px; padding: 0 0 14px 0; }
+.z-tl-p { flex: none; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: .68rem; color: #fff; background: var(--neutro); box-shadow: 0 0 0 3px var(--surface-0); z-index: 1; }
+.z-tl-p.z-ok { background: var(--ok); } .z-tl-p.z-aviso { background: var(--aviso); } .z-tl-p.z-erro { background: var(--erro); }
+.z-tl-c { flex: 1; min-width: 0; padding-top: 1px; }
+.z-tl-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: .86rem; }
+.z-tl-h time { margin-left: auto; color: var(--texto-2); font-size: .76rem; white-space: nowrap; }
+.z-tl-r { font-size: .74rem; color: var(--texto-2); text-decoration: none; border: 1px solid var(--borda); border-radius: 999px; padding: 0 7px; }
+.z-tl-r:hover { border-color: var(--accent); color: var(--accent-fg); }
+.z-tl-d { font-size: .78rem; color: var(--texto-2); margin-top: 2px; overflow-wrap: anywhere; }

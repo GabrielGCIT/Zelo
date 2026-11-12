@@ -298,10 +298,8 @@ def lancamento(num):
             registrar_log('lançamento corrigido', f'Nº {num}: ' + '; '.join(mudou))
             from flask import current_app
             from app import servicedesk as sd
-            if any(x.startswith('Nº do chamado') for x in mudou) and m.chamado and sd.configurado():
-                ids = sd.enfileirar([m])
-                if ids:
-                    sd.processar(current_app._get_current_object(), ids)
+            if any(x.startswith('Nº do chamado') for x in mudou) and m.chamado:
+                sd.enfileirar_tudo(current_app._get_current_object(), [m])
         flash('Corrigido: ' + '; '.join(mudou) if mudou else 'Nada mudou.', 'success')
         return redirect(url_for('lancar.lancamento', num=num))
     it = db.session.get(Item, m.item) if m.item else None

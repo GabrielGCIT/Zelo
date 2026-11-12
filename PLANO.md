@@ -30,7 +30,7 @@
 - Preparação: Devolvido → Em preparação → Liberado, com as marcas salvando sozinhas.
 - Manutenção: quadro por status da OS.
 
-## Etapa 3 — Painel e fichas
+## Etapa 3 — Painel e fichas (FEITA, v1.6.0)
 - Pedido do Gabriel (11/11): o sistema tem de APONTAR o que está errado (cadastro, lançamento) e INDUZIR o
   fluxo certo; aparência conta; seguir o melhor padrão de mercado. Incluir "Qualidade do cadastro":
   pessoas duplicadas/sem CC/tipo "A confirmar", itens sem hostname/tag, em uso sem termo, desligado com item,
@@ -50,6 +50,7 @@
 ## Feito em 11/11 (v1.5.0), a pedido do Gabriel
 - Quadro das entregas com 2 colunas (Reservado → Entregue); termo e chamado são marcas no cartão.
 - Termo assinado guardado no próprio Zelo (instance/termos, vai no backup); a ideia de "link" foi abandonada.
+- Termo assinado vai ao chamado pela fila do Service Desk (reenviável); informar o chamado depois leva o termo junto.
 
 ## Etapa 5 — Aceite digital do termo (aprovado pelo Gabriel)
 - O PDF aceito deve ser gravado no mesmo lugar do termo assinado (termo_arquivo).

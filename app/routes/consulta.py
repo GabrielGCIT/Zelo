@@ -130,7 +130,8 @@ def item(codigo):
     card = card_do_item(it)
     acoes, recado = acoes_possiveis(it, None, card)
     acoes_est = acoes_possiveis(it, None, 'estoque')[0]
-    return render_template('item.html', card=card, acoes=acoes, acoes_est=acoes_est, recado=recado, it=it, movs=movs, linha=linha, manut=manut, campos=CAMPOS_ITEM,
+    from app.qualidade import linha_do_tempo
+    return render_template('item.html', tempo=linha_do_tempo(movs, manut), card=card, acoes=acoes, acoes_est=acoes_est, recado=recado, it=it, movs=movs, linha=linha, manut=manut, campos=CAMPOS_ITEM,
                            opcoes=OPCOES, contrato=contrato)
 
 
