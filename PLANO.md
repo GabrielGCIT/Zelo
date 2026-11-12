@@ -51,6 +51,8 @@
 - Quadro das entregas com 2 colunas (Reservado → Entregue); termo e chamado são marcas no cartão.
 - Termo assinado guardado no próprio Zelo (instance/termos, vai no backup); a ideia de "link" foi abandonada.
 - Termo assinado vai ao chamado pela fila do Service Desk (reenviável); informar o chamado depois leva o termo junto.
+- "Ajustar cadastro" (v1.7.0): corrige quem está com o item / situação / linha no aparelho; entra no Histórico
+  como tipo "Ajuste" com motivo e autor, sem inventar movimentação. Botão na ficha do item e da linha.
 
 ## Etapa 5 — Aceite digital do termo (aprovado pelo Gabriel)
 - O PDF aceito deve ser gravado no mesmo lugar do termo assinado (termo_arquivo).

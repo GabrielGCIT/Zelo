@@ -305,3 +305,30 @@ def lancamento(num):
     it = db.session.get(Item, m.item) if m.item else None
     return render_template('lancamento.html', m=m, it=it, pend=texto(m, it), editaveis=EDITAVEIS,
                            pode_desfazer=pode_desfazer(m), **_listas())
+
+
+# ------------------------------------------------------------------ ajuste de cadastro
+@lancar_bp.route('/ajuste', methods=['GET', 'POST'])
+@exige('lancar')
+def ajuste():
+    """Corrigir o que a planilha trouxe errado (quem está com o item, situação, linha no aparelho)."""
+    from app.ajuste import MOTIVOS_AJUSTE, SIT_AJUSTE, achar, atual, conferir, gravar
+    from app.models import SITUACOES_LINHA
+    campos = ('item', 'linha', 'situacao', 'para', 'motivo', 'data', 'obs')
+    d = {k: (request.form.get(k) if request.method == 'POST' else request.args.get(k, '')) or '' for k in campos}
+    it, ln = achar(d['item'], d['linha'])
+    if request.method == 'POST':
+        ok, msg, m = gravar(it, ln, d, g.usuario.nome)
+        if ok:
+            registrar_log('ajuste de cadastro', f'Nº {m.id} · {it.codigo if it else ln.numero}: {msg} · {d["motivo"]}')
+            flash(msg, 'success')
+            return redirect(url_for('consulta.item', codigo=it.codigo) if it else url_for('linhas.ficha', numero=ln.numero))
+        flash(msg, 'danger')
+    aviso, previa = (None, [])
+    if (it or ln) and d['situacao']:
+        aviso, previa = conferir(it, ln, d)
+    if it and not d['situacao'] and request.method == 'GET':
+        d['situacao'] = it.situacao if it.situacao in SIT_AJUSTE else ''
+        d['para'] = f'{it.com_quem} · {it.matricula}' if it.com_quem and it.matricula else (it.com_quem or '')
+    return render_template('ajuste.html', d=d, it=it, ln=ln, agora=atual(it, ln), previa=previa, aviso=aviso,
+                           situacoes=SIT_AJUSTE if it else SITUACOES_LINHA, motivos=MOTIVOS_AJUSTE)

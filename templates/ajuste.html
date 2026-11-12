@@ -1,0 +1,70 @@
+{% extends 'base.html' %}{% from '_macros.html' import sit, item_link, linha_link, pessoa_link %}
+{% block title %}Ajustar cadastro{% endblock %}
+{% block content %}
+<h1 class="z-titulo">Ajustar cadastro</h1>
+<p class="z-sub">Para quando o Zelo mostra uma coisa e a realidade é outra — herança da planilha, entrega que ninguém lançou,
+linha que está em outro aparelho. Não inventa movimentação: registra no Histórico um <b>Ajuste</b> com o que é verdade, quem ajustou e por quê.</p>
+
+<div class="row g-3"><div class="col-lg-7"><div class="z-card">
+<form method="get" class="row g-2 align-items-end mb-3 pb-3 border-bottom">
+ <div class="col-md-6"><label class="form-label small mb-0">Item (plaqueta, tag, hostname ou IMEI)</label><input class="form-control form-control-sm z-mono" name="item" value="{{ d.item }}" autofocus></div>
+ <div class="col-md-4"><label class="form-label small mb-0">Linha (opcional)</label><input class="form-control form-control-sm z-mono" name="linha" value="{{ d.linha }}"></div>
+ <div class="col-md-2"><button class="btn btn-sm btn-outline-secondary w-100">Buscar</button></div>
+ {% if d.item and not it %}<div class="col-12 z-erro small">Item não encontrado.</div>{% endif %}
+ {% if d.linha and not ln %}<div class="col-12 z-erro small">Linha não cadastrada.</div>{% endif %}
+</form>
+{% if it or ln %}
+<form method="post" class="row g-2">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="item" value="{{ d.item }}"><input type="hidden" name="linha" value="{{ d.linha }}">
+ <div class="col-md-5"><label class="form-label small mb-0">Como realmente está</label>
+  <select class="form-select form-select-sm" name="situacao" onchange="this.form.requestSubmit(this.form.querySelector('[value=conferir]'))"><option value=""></option>
+  {% for s in situacoes %}<option {{ 'selected' if d.situacao == s }} data-pessoa="{{ 1 if s in ('Em uso', 'Emprestado', 'Reservada', 'Pendente devolução') else 0 }}">{{ s }}</option>{% endfor %}</select></div>
+ <div class="col-md-7"><label class="form-label small mb-0">Com quem está de verdade</label>
+  <input class="form-control form-control-sm" name="para" id="f-para" value="{{ d.para }}" list="dl-pessoas" placeholder="Nome ou matrícula"><datalist id="dl-pessoas"></datalist>
+  <div class="form-text" id="ajuda-para"></div></div>
+ <div class="col-md-6"><label class="form-label small mb-0">Por que está ajustando</label>
+  <select class="form-select form-select-sm" name="motivo"><option value=""></option>{% for m in motivos %}<option {{ 'selected' if d.motivo == m }}>{{ m }}</option>{% endfor %}</select></div>
+ <div class="col-md-3"><label class="form-label small mb-0">Data</label><input type="date" class="form-control form-control-sm" name="data" value="{{ d.data }}"></div>
+ <div class="col-12"><label class="form-label small mb-0">Observação</label><input class="form-control form-control-sm" name="obs" value="{{ d.obs }}" placeholder="Ex.: conferido com o técnico do site"></div>
+ <div class="col-12 d-flex gap-2 align-items-center mt-2">
+  <button class="btn btn-zelo" {{ 'disabled' if aviso }}><i class="fa fa-wrench me-1"></i>Registrar ajuste</button>
+  <button class="btn btn-link text-secondary" value="conferir" formmethod="get" formaction="{{ url_for('lancar.ajuste') }}">Conferir</button>
+  <a class="btn btn-link text-secondary" href="{{ url_for('consulta.item', codigo=it.codigo) if it else url_for('linhas.ficha', numero=ln.numero) }}">Cancelar</a></div>
+</form>
+{% else %}<div class="z-vazio"><i class="fa fa-wrench"></i><div>Informe o item ou a linha para ajustar</div></div>{% endif %}
+</div></div>
+
+<div class="col-lg-5">
+ {% if it %}<div class="z-card"><h2>Como o Zelo mostra hoje</h2><dl class="z-def">
+  <dt>Item</dt><dd>{{ item_link(it.codigo) }} <span class="text-muted small">{{ it.categoria or '' }} {{ it.modelo or '' }}</span></dd>
+  <dt>Situação</dt><dd>{{ sit(agora.situacao) }}</dd>
+  <dt>Com quem</dt><dd>{{ pessoa_link(agora.matricula, agora.quem) or '—' }}</dd>
+  <dt>Linha no aparelho</dt><dd>{{ linha_link(agora.linha) or '—' }}</dd></dl></div>{% endif %}
+ {% if ln %}<div class="z-card"><h2>A linha hoje</h2><dl class="z-def">
+  <dt>Linha</dt><dd>{{ linha_link(ln.numero) }} <span class="text-muted small">{{ ln.operadora or '' }}</span></dd>
+  <dt>Situação</dt><dd>{{ sit(agora.sit_linha) }}</dd>
+  <dt>Com quem</dt><dd>{{ pessoa_link(ln.matricula, agora.linha_quem) or '—' }}</dd>
+  <dt>Aparelho</dt><dd>{{ item_link(agora.linha_aparelho) or '—' }}</dd></dl></div>{% endif %}
+ {% if aviso %}<div class="z-card z-esp-at"><div class="z-esp-tit"><i class="fa fa-triangle-exclamation me-1"></i>Conferir</div><div class="small">{{ aviso }}</div></div>
+ {% elif previa %}<div class="z-card" style="border-color:var(--accent)"><div class="z-esp-tit"><i class="fa fa-arrow-right-arrow-left me-1"></i>O que vai mudar</div>
+  <ul class="mb-0 ps-3 small">{% for m in previa %}<li>{{ m }}</li>{% endfor %}</ul>
+  <div class="small text-muted mt-2">Entra no Histórico como <b>Ajuste</b>, assinado por você.</div></div>{% endif %}
+</div></div>
+{% endblock %}
+{% block scripts %}<script>
+// a situação escolhida decide se o campo "com quem" faz sentido
+const selSit = document.querySelector('select[name=situacao]'), campoPara = document.getElementById('f-para');
+function sincroniza() {
+  if (!selSit || !campoPara) return;
+  const op = selSit.selectedOptions[0], com = op && op.dataset.pessoa === '1';
+  campoPara.disabled = !!selSit.value && !com;
+  if (campoPara.disabled) campoPara.value = '';
+  document.getElementById('ajuda-para').textContent = !selSit.value ? '' :
+    com ? 'Obrigatório: é essa pessoa que fica no cadastro e no próximo termo.' : `"${selSit.value}" não fica com ninguém.`;
+}
+selSit?.addEventListener('change', sincroniza); sincroniza();
+let t; document.addEventListener('input', ev => { const e = ev.target; if (e.name !== 'para') return; clearTimeout(t);
+  t = setTimeout(async () => { const q = e.value; if (q.length < 2 || q.includes(' · ')) return;
+    const ps = await (await fetch('{{ url_for("lancar.api_pessoas") }}?q=' + encodeURIComponent(q))).json();
+    document.getElementById('dl-pessoas').innerHTML = ps.map(p => `<option value="${p.rotulo.replace(/"/g,'&quot;')}">`).join(''); }, 250); });
+</script>{% endblock %}

@@ -142,7 +142,7 @@ ICONE = {'Entrada': ('fa-box-open', 'neutro'), 'Entrega': ('fa-hand-holding-hand
          'Preparação': ('fa-screwdriver-wrench', 'neutro'), 'Liberação': ('fa-circle-check', 'ok'),
          'Transferência': ('fa-arrows-left-right', 'neutro'), 'A localizar': ('fa-magnifying-glass', 'erro'),
          'Separar p/ baixa': ('fa-box-archive', 'erro'), 'Baixa': ('fa-ban', 'erro'),
-         'Manutenção': ('fa-wrench', 'aviso')}
+         'Ajuste': ('fa-wrench', 'aviso'), 'Manutenção': ('fa-wrench', 'aviso')}
 
 
 def linha_do_tempo(movs, manuts):

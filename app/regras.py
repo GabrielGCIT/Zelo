@@ -4,6 +4,10 @@ Situação do item = o que o ÚLTIMO lançamento que o afeta diz, com duas exce�
 - ocorrência de manutenção aberta → "Manutenção" (por cima de tudo);
 - notebook de uso definitivo devolvido a partir da data do fluxo → "Devolvido"
   (vai para a preparação antes de voltar ao estoque).
+
+O lançamento do tipo "Ajuste" é a correção de cadastro: não conta uma movimentação que
+aconteceu, declara como a coisa REALMENTE está. A situação declarada fica no campo `etapa`
+(do item quando o ajuste tem item; da linha quando é só de linha).
 """
 from app import db
 from app.models import Item, Linha, Manutencao, Movimentacao, cfg
@@ -19,7 +23,7 @@ SIT_LINHA_TIPO = {
     'Entrega': 'Em uso', 'Empréstimo': 'Em uso', 'Devolução': 'Livre', 'Ativar linha': 'Em uso',
     'Desativar linha': 'Livre', 'Cancelar linha': 'Cancelada', 'Baixa': 'Livre',
 }
-TIPOS = list(SIT_ITEM_TIPO) + ['Entrega', 'Empréstimo', 'Ativar linha', 'Desativar linha', 'Cancelar linha']
+TIPOS = list(SIT_ITEM_TIPO) + ['Entrega', 'Empréstimo', 'Ativar linha', 'Desativar linha', 'Cancelar linha', 'Ajuste']
 COM_QUEM_SIT = ('Em uso', 'Reservada', 'Emprestado', 'Pendente devolução', 'Em trânsito para o EC')
 
 
@@ -28,6 +32,9 @@ def sit_item_da_mov(m, categoria=None, finalidade=None):
     if not m.item:
         return ''
     t = m.tipo
+    if t == 'Ajuste':
+        from app.models import SITUACOES
+        return m.etapa if m.etapa in SITUACOES else ''
     if t in ('Entrega', 'Empréstimo'):
         if m.etapa == 'Entregue':
             return 'Em uso' if t == 'Entrega' else 'Emprestado'
@@ -41,6 +48,11 @@ def sit_item_da_mov(m, categoria=None, finalidade=None):
 def sit_linha_da_mov(m):
     if not m.linha:
         return ''
+    if m.tipo == 'Ajuste':
+        from app.models import SITUACOES_LINHA
+        if not m.item:                      # ajuste só de linha: a situação declarada é a dela
+            return m.etapa if m.etapa in SITUACOES_LINHA else ''
+        return 'Em uso' if m.etapa in COM_QUEM_SIT else 'Livre'
     if m.tipo in ('Entrega', 'Empréstimo') and m.etapa == 'Cancelado':
         return 'Livre'
     return SIT_LINHA_TIPO.get(m.tipo, '')
