@@ -23,7 +23,7 @@
  <div>{{ m.tipo }} não gera termo</div>
  <small>Termo existe em {{ tipos_com_termo|join(', ') }} — são os lançamentos em que um equipamento muda de mãos.
   Abra o lançamento certo para colher a assinatura.</small></div>
- <div class="text-center"><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('assinar.lista') }}">Ver as assinaturas em aberto</a></div></div>
+ <div class="text-center"><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('termo.inicio') }}">Ir para a tela Termo</a></div></div>
 {% else %}
 <div class="row g-3">
 {% for p in papeis %}{% set a = vias[p] %}

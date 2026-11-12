@@ -260,3 +260,27 @@ def test_chamado_informado_depois_leva_o_termo_assinado(app, cli, sim):
     tipos = {e.tipo for e in EnvioSD.query.filter_by(mov_id=num)}
     assert {'chamado', 'termo'} <= tipos
     assert ('777001', f'Termo_assinado_Zelo_{num}.pdf') in s.anexos
+
+
+def test_desligamento_avisa_o_service_desk(app, cli, sim):
+    """Devolução pela fila do desligamento vale como qualquer outra: solta o ativo no Service Desk."""
+    from app.models import EnvioSD, Pessoa
+    s, p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim'})
+    it = Item.query.filter(Item.situacao == 'Em estoque', Item.categoria == 'Notebook', Item.hostname.isnot(None),
+                           Item.finalidade != 'Pool de empréstimo').first()
+    a = {'id': '70', 'name': it.hostname.upper(), 'user': None, 'state': {'name': 'In Store'}}
+    s.ativos[a['name']] = a
+    s.ativos_por_id['70'] = a
+    s.usuarios.append({'id': '71', 'name': p.nome, 'email_id': ''})
+    r = cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}]})
+    assert r.json['gravadas'] == 1 and a['state']['name'] == 'In Use'
+
+    p.situacao = 'Desligado'
+    db.session.commit()
+    r = cli.post(f'/desligamento/{p.id}', data={'item': [it.codigo]}, follow_redirects=True)
+    assert r.status_code == 200
+    assert a['user'] is None and a['state']['name'] == 'In Store'       # saiu do nome de quem foi desligado
+    env = EnvioSD.query.filter_by(tipo='ativo').order_by(EnvioSD.id.desc()).first()
+    assert env.status == 'Enviado' and 'In Store' in (env.erro or '')

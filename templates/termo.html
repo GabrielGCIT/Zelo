@@ -14,10 +14,9 @@
 </style>{% endblock %}
 {% block content %}
 <div class="no-print">
-<div class="d-flex flex-wrap align-items-center gap-2">
- <div><h1 class="z-titulo">Termo</h1><p class="z-sub">Digite o Nº do lançamento (ou EA-0001 para acessório). O tipo de termo sai sozinho.
-  Dá para imprimir para assinar no papel ou colher a assinatura na tela.</p></div>
- <a class="btn btn-sm btn-outline-secondary ms-auto" href="{{ url_for('assinar.lista') }}"><i class="fa fa-pen-nib me-1"></i>Assinaturas em aberto</a></div>
+<h1 class="z-titulo">Termo</h1>
+<p class="z-sub">Digite o Nº do lançamento (ou EA-0001 para acessório). O tipo de termo sai sozinho.
+ Dá para imprimir e assinar no papel, ou colher a assinatura na tela — do colaborador e de quem responde pela empresa.</p>
 <form class="z-card row g-2 align-items-end" method="get">
  <div class="col-md-3"><label class="form-label small">Nº do lançamento</label><input class="form-control" name="n" value="{{ num }}" autofocus></div>
  <div class="col-md-4"><label class="form-label small">Trocar o tipo (opcional)</label><select class="form-select" name="tipo"><option value="">Automático{% if d %} ({{ d.tipo_auto }}){% endif %}</option>{% for t in tipos %}<option {{ 'selected' if request.args.get('tipo')==t }}>{{ t }}</option>{% endfor %}</select></div>
@@ -31,6 +30,45 @@
  <a class="btn btn-zelo" href="{{ url_for('assinar.painel', num=num) }}">Abrir as assinaturas do Nº {{ num }}</a></div>
 {% endif %}
 {% if erro %}<div class="alert alert-danger">{{ erro }}</div>{% endif %}
+
+{% if so_local %}<div class="alert alert-warning py-2"><i class="fa fa-triangle-exclamation me-1"></i>
+ Os links de assinatura estão saindo com o endereço <b>deste computador</b>, então só abrem aqui. Preencha o
+ <b>endereço do Zelo na rede</b>{% if pode('admin') %} em <a href="{{ url_for('admin.config') }}">Configurações</a>{% else %} em Configurações{% endif %}.</div>{% endif %}
+
+<div class="z-card">
+ <div class="d-flex align-items-baseline gap-2 mb-2"><h2 class="h6 m-0"><i class="fa fa-pen-nib me-1 text-secondary"></i>Esperando assinatura</h2>
+  {% if abertas %}<span class="badge text-bg-warning">{{ abertas|length }}</span>{% endif %}
+  <span class="small text-muted ms-auto">Cada termo precisa de duas vias: a de quem recebe e a de quem responde pela empresa.</span></div>
+ {% if not abertas %}
+  <div class="z-vazio"><i class="fa fa-circle-check text-success"></i><div>Nenhuma via esperando</div>
+   <small>Gere um termo acima e use <b>Assinar sem papel</b> para colher a assinatura na tela ou mandar o link.</small></div>
+ {% else %}
+ <div class="table-responsive"><table class="table table-sm table-hover align-middle">
+  <thead><tr><th>Nº</th><th>Quem recebeu</th><th>Via</th><th>Quem assina</th><th>Pedido em</th><th>Vale até</th><th></th></tr></thead>
+  <tbody>{% for a in abertas %}{% set m = movs.get(a.mov_id) %}<tr>
+   <td class="z-mono"><a href="{{ url_for('assinar.painel', num=a.mov_id) }}">{{ a.mov_id }}</a></td>
+   <td>{% if m %}{{ m.nome or m.local or '' }}{% if m.item %} <span class="small text-muted">· {{ m.item }}</span>{% endif %}{% endif %}</td>
+   <td>{{ rotulo.get(a.papel, a.papel) }}</td>
+   <td>{{ a.nome }}{% if a.contato %} <span class="small text-muted">· {{ a.contato }}</span>{% endif %}</td>
+   <td>{{ a.criado|data }}{% if a.criado %} <span class="small text-muted">· há {{ dias_desde(a.criado) }} dia(s)</span>{% endif %}</td>
+   <td class="{{ 'z-erro' if a.expira and a.expira < hoje() else '' }}">{{ a.expira|data }}</td>
+   <td><a class="btn btn-sm btn-zelo py-0" href="{{ url_for('assinar.painel', num=a.mov_id) }}">Abrir</a></td></tr>{% endfor %}
+  </tbody></table></div>
+ {% endif %}
+</div>
+
+{% if feitas %}
+<details class="z-card"><summary class="h6 mb-0">Últimas assinadas</summary>
+ <div class="table-responsive mt-2"><table class="table table-sm table-hover align-middle">
+  <thead><tr><th>Nº</th><th>Via</th><th>Quem assinou</th><th>Quando</th><th>IP</th><th></th></tr></thead>
+  <tbody>{% for a in feitas %}<tr>
+   <td class="z-mono"><a href="{{ url_for('assinar.painel', num=a.mov_id) }}">{{ a.mov_id }}</a></td>
+   <td>{{ rotulo.get(a.papel, a.papel) }}</td><td>{{ a.assinante }}</td>
+   <td>{{ a.assinado|quando }}</td><td class="small text-muted">{{ a.ip or '' }}</td>
+   <td><a class="btn btn-sm btn-outline-secondary py-0" href="{{ url_for('assinar.painel', num=a.mov_id) }}">Ver</a></td></tr>{% endfor %}
+  </tbody></table></div>
+</details>
+{% endif %}
 </div>
 {% if d %}
 <div class="termo">

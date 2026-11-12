@@ -124,9 +124,22 @@ def montar(num, trocar=None):
 @termo_bp.route('/termo')
 @exige('ver')
 def inicio():
+    """Uma tela só para o termo: gerar e imprimir, e o estado das assinaturas na tela."""
+    from app.assinatura import ROTULO, local
+    from app.assinatura import link as link_ass
+    from app.assinatura import pendentes
+    from app.models import Assinatura
     num = request.args.get('n', '')
     dados, erro = montar(num, request.args.get('tipo') or None)
-    return render_template('termo.html', num=num, d=dados, erro=erro, tipos=list(TIPOS_TERMO))
+    abertas = pendentes(300)
+    ids = {a.mov_id for a in abertas}
+    feitas = (Assinatura.query.filter(Assinatura.assinado.isnot(None))
+              .order_by(Assinatura.assinado.desc()).limit(15).all())
+    ids |= {a.mov_id for a in feitas}
+    movs = {m.id: m for m in Movimentacao.query.filter(Movimentacao.id.in_(ids)).all()} if ids else {}
+    return render_template('termo.html', num=num, d=dados, erro=erro, tipos=list(TIPOS_TERMO),
+                           abertas=abertas, feitas=feitas, movs=movs, rotulo=ROTULO,
+                           so_local=any(local(link_ass(a)) for a in abertas[:1]))
 
 
 @termo_bp.route('/termo/<num>.pdf')

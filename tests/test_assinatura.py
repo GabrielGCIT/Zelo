@@ -322,41 +322,42 @@ def test_etiqueta_do_estado_nao_mente(app, cli, entrega):
 
 
 # ------------------------------------------------------------------ como se chega até aqui
-def test_tela_de_assinaturas_no_menu(app, cli, entrega):
+def test_tela_termo_e_a_unica(app, cli, entrega):
+    """Gerar, imprimir e assinar moram na mesma tela — duas telas para o termo só confundiam."""
     h = cli.get('/').data.decode()
-    assert '/assinaturas' in h                                 # entrada na barra lateral
+    assert '/termo' in h and h.count('>Termo<') == 1            # uma entrada só no menu
 
-    r = cli.get('/assinaturas')
-    assert r.status_code == 200
-    assert 'Nenhuma via esperando' in r.data.decode()
+    h = cli.get('/termo').data.decode()
+    assert 'Nenhuma via esperando' in h
 
     a, _ = pedir(entrega, 'empresa', 'Giselly Oliveira', quem='T', contato='whats')
-    h = cli.get('/assinaturas').data.decode()
+    h = cli.get('/termo').data.decode()
     assert 'Giselly Oliveira' in h and f'/lancamento/{entrega.id}/assinaturas' in h
     assert entrega.nome in h                                   # dá para saber de quem é o termo
 
     assinar(a, entrega, _data_url(), 'Giselly Oliveira', '10.0.0.3')
-    h = cli.get('/assinaturas').data.decode()
+    h = cli.get('/termo').data.decode()
     assert 'Últimas assinadas' in h and '10.0.0.3' in h
 
 
-def test_abrir_pelo_numero(app, cli, entrega):
+def test_atalho_antigo_cai_na_tela_termo(app, cli, entrega):
+    r = cli.get('/assinaturas')
+    assert r.status_code == 302 and '/termo' in r.headers['Location']
     r = cli.get(f'/assinaturas?n={entrega.id}')
     assert r.status_code == 302 and f'/lancamento/{entrega.id}/assinaturas' in r.headers['Location']
-    assert 'Não achei o lançamento Nº 99999999' in cli.get('/assinaturas?n=99999999').data.decode()
 
 
 def test_tela_termo_leva_para_a_assinatura(app, cli, entrega):
     h = cli.get(f'/termo?n={entrega.id}').data.decode()
     assert 'Assinar sem papel' in h and f'/lancamento/{entrega.id}/assinaturas' in h
-    assert '/assinaturas' in cli.get('/termo').data.decode()
+    assert 'Esperando assinatura' in cli.get('/termo').data.decode()
 
 
 def test_busca_acha_a_tela_de_assinatura(app, cli):
     for q in ('assinatura digital', 'assinador', 'assinar termo'):
         j = cli.get('/api/busca?q=' + q).json
         ir = next((x for x in j['grupos'] if x['titulo'] == 'Ir para'), None)
-        assert ir and any(l['titulo'] == 'Assinaturas' for l in ir['linhas']), q
+        assert ir and any(l['titulo'] == 'Termo' for l in ir['linhas']), q
 
 
 # ------------------------------------------------------------------ preencher o nome

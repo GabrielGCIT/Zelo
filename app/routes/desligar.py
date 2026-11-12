@@ -32,9 +32,14 @@ def ficha(pid):
             'receb_por': (request.form.get('receb_por') or '').strip(),
             'obs': (request.form.get('obs') or '').strip(),
         }
-        ok, msg, detalhes = devolver_tudo(p, escolhas, g.usuario.nome)
+        ok, msg, detalhes, movs = devolver_tudo(p, escolhas, g.usuario.nome)
         if ok:
             registrar_log('desligamento', f'{p.id} {p.nome}: {msg}')
+            from flask import current_app
+            from app import servicedesk as sd
+            n = sd.enfileirar_tudo(current_app._get_current_object(), movs)
+            if n:
+                msg += f' · {n} aviso(s) a caminho do Service Desk'
         flash(msg, 'success' if ok else 'danger')
         for d in detalhes[:12]:
             if ': OK' not in d and 'voltou' not in d and 'devolvido' not in d:

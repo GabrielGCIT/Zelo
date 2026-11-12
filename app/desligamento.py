@@ -76,7 +76,8 @@ def _desligado_desde(pid):
 def devolver_tudo(p, escolhas, resp):
     """Devolve o que foi marcado. escolhas: {itens:[cod], linhas:{numero: ação}, kit:[(mov_id, consumível)], acess:[id]}.
 
-    Devolve (ok, mensagem, detalhes[]).
+    Devolve (ok, mensagem, detalhes[], lançamentos gravados) — os lançamentos vão para a fila do
+    Service Desk como os de qualquer outra tela.
     """
     hoje = date.today().isoformat()
     t = o_que_tem(p.id)
@@ -95,11 +96,16 @@ def devolver_tudo(p, escolhas, resp):
             it = db.session.get(Item, d['item'])
             if not (it and it.categoria == 'Notebook' and it.finalidade != 'Pool de empréstimo'):
                 d['receb_por'] = ''
+    movs = []
     if pedidos:
         res, n, _lote = gravar(pedidos, ABA_LIVRE, resp)
         for d, r in zip(pedidos, res):
             alvo = d.get('item') or f'linha {d.get("linha")}'
-            (feitos if r.status in ('ok', 'aviso') else erros).append(f'{alvo}: {r.msg}')
+            if r.status in ('ok', 'aviso'):
+                feitos.append(f'{alvo}: {r.msg}')
+                movs += [x for x in r.movs if x.id]
+            else:
+                erros.append(f'{alvo}: {r.msg}')
 
     for mov_id, cons in (escolhas.get('kit') or []):
         if not any(str(m) == str(mov_id) and c == cons for m, c, _q in t['kit']):
@@ -123,9 +129,10 @@ def devolver_tudo(p, escolhas, resp):
     db.session.commit()
 
     if not feitos and not erros:
-        return False, 'Nada marcado para devolver.', []
+        return False, 'Nada marcado para devolver.', [], []
     resta = total(o_que_tem(p.id))
     msg = f'{len(feitos)} devolução(ões) registrada(s)'
     msg += f'; {len(erros)} não deu(deram)' if erros else ''
     msg += '. Nada mais consta com a pessoa.' if not resta else f'. Ainda constam {resta} item(ns).'
-    return bool(feitos), msg, feitos + erros
+    # as devoluções daqui valem como qualquer outra: avisam o chamado e soltam o ativo no Service Desk
+    return bool(feitos), msg, feitos + erros, movs

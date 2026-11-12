@@ -238,7 +238,7 @@ def test_fila_do_desligamento_junta_tudo(app):
 def test_desligamento_devolve_tudo_de_uma_vez(app):
     p, nb, ln, ea = _desligado_com_tudo(app)
     t = o_que_tem(p.id)
-    ok, msg, det = devolver_tudo(p, {
+    ok, msg, det, movs = devolver_tudo(p, {
         'itens': [nb.codigo], 'linhas': {ln.numero: 'Devolver'},
         'kit': [(str(m), c) for m, c, _q in t['kit']], 'acess': [ea.id],
         'receb_por': 'Adriano Santos', 'obs': 'saída'}, 'T')
@@ -257,11 +257,12 @@ def test_desligamento_devolve_tudo_de_uma_vez(app):
 
 def test_desligamento_respeita_o_que_nao_foi_marcado(app):
     p, nb, ln, _ea = _desligado_com_tudo(app)
-    ok, msg, _d = devolver_tudo(p, {'itens': [nb.codigo], 'linhas': {ln.numero: 'Deixar com a pessoa'}}, 'T')
+    ok, msg, _d, movs = devolver_tudo(p, {'itens': [nb.codigo], 'linhas': {ln.numero: 'Deixar com a pessoa'}}, 'T')
     assert ok
     db.session.refresh(ln)
     assert ln.situacao == 'Em uso'                                 # ninguém pediu para devolver a linha
     assert 'Ainda constam' in msg
+    assert movs and all(m.id for m in movs)                        # viram lançamentos de verdade
     assert not devolver_tudo(p, {}, 'T')[0]                        # nada marcado
 
 

@@ -54,7 +54,6 @@
   {{ link('lancar.grade', 'fa-pen-to-square', 'Lançamentos', 'lancar.') }}
   {{ link('bipar.inicio', 'fa-barcode', 'Bipar', 'bipar.') }}
   {{ link('acompanhar.inicio', 'fa-route', 'Acompanhar', 'acompanhar.') }}
-  {{ link('assinar.lista', 'fa-pen-nib', 'Assinaturas', 'assinar.') }}
   {{ link('manutencao.inicio', 'fa-screwdriver-wrench', 'Manutenção', 'manutencao.') }}
   {{ link('estoque.consumiveis', 'fa-boxes-stacked', 'Consumíveis', 'estoque.') }}
   {% endif %}
@@ -64,9 +63,9 @@
   {{ link('linhas.lista', 'fa-sim-card', 'Linhas', 'linhas.') }}
   {{ link('consulta.historico', 'fa-clock-rotate-left', 'Histórico') }}
   {{ link('consulta.emprestimos', 'fa-hand-holding', 'Empréstimos') }}
+  {{ link('termo.inicio', 'fa-file-signature', 'Termo', 'assinar.') }}
   {{ link('desligar.lista', 'fa-door-open', 'Desligamentos', 'desligar.') }}
   {{ link('consulta.contratos', 'fa-file-contract', 'Contratos e garantias') }}
-  {{ link('termo.inicio', 'fa-file-signature', 'Termo') }}
   {% if pode('admin') %}
   <div class="z-grupo">Administração</div>
   {{ link('admin.usuarios', 'fa-user-shield', 'Usuários') }}
