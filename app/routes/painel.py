@@ -151,6 +151,9 @@ def fila():
         Item.query.filter(Item.situacao == 'Emprestado', Item.prazo <= em7).order_by(Item.prazo).all(), 'item')
     add('Termos pendentes', 'Itens entregues com termo ainda não assinado.',
         Item.query.filter(Item.situacao.in_(('Em uso', 'Emprestado')), Item.termo == 'Pendente').order_by(Item.desde).all(), 'item')
+    from app.assinatura import pendentes as ass_pendentes
+    add('Assinaturas pedidas e não assinadas', 'Reenvie o link ou colha a assinatura no balcão.',
+        ass_pendentes(), 'assinatura')
     acs = EmprestimoAcessorio.query.filter(EmprestimoAcessorio.devolvido.is_(None), EmprestimoAcessorio.prazo <= em7).all()
     add('Acessórios emprestados vencidos', 'Cobre a devolução (Lançamentos → acessório).', acs, 'acessorio')
     desl = (db.session.query(Pessoa, func.count(Item.codigo)).join(Item, Item.matricula == Pessoa.id)

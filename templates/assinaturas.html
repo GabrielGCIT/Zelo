@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% block title %}Assinaturas do Nº {{ m.id }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+ <h1 class="z-titulo m-0">Assinaturas do termo</h1>
+ <span class="badge text-bg-secondary">Nº {{ m.id }} · {{ m.tipo }}</span>
+ <span class="badge text-bg-{{ estado[0] }}">{{ estado[1] }}</span>
+ <div class="ms-auto d-flex gap-2">
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lancar.lancamento', num=m.id) }}">Abrir o lançamento</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('termo.inicio', n=m.id) }}" target="_blank"><i class="fa fa-print me-1"></i>Imprimir para assinar no papel</a></div></div>
+<p class="z-sub">{{ m.nome or m.local or '—' }}{% if m.item %} · {{ m.item }}{% endif %}{% if m.data %} · {{ m.data|data }}{% endif %}.
+ O termo só fica completo com as duas vias: a de quem recebe e a de quem responde pela empresa.</p>
+
+{% for av in avisos %}<div class="alert alert-warning py-2"><i class="fa fa-triangle-exclamation me-1"></i>{{ av }}</div>{% endfor %}
+{% if so_local %}<div class="alert alert-warning py-2"><i class="fa fa-triangle-exclamation me-1"></i>
+ O link está saindo com o endereço <b>deste computador</b>, então só abre aqui. Para mandar o link para alguém,
+ um administrador precisa preencher o <b>endereço do Zelo na rede</b>
+ {%- if pode('admin') %} em <a href="{{ url_for('admin.config') }}">Configurações</a>{% else %} em Configurações{% endif %}
+ (ex.: <span class="z-mono">http://servidor-ti:5001</span>).</div>{% endif %}
+
+<div class="row g-3">
+{% for p in papeis %}{% set a = vias[p] %}
+ <div class="col-lg-6"><div class="z-card h-100 z-via {{ 'assinada' if a and a.assinado else ('aberta' if a else '') }}">
+  <div class="d-flex align-items-center gap-2 mb-2">
+   <i class="fa {{ 'fa-user' if p == 'colaborador' else 'fa-building' }} z-via-i"></i>
+   <h2 class="h6 m-0">{{ rotulo[p] }}</h2>
+   {% if a and a.assinado %}<span class="badge text-bg-success ms-auto">assinada</span>
+   {% elif a %}<span class="badge text-bg-warning ms-auto">aguardando</span>
+   {% else %}<span class="badge text-bg-secondary ms-auto">não pedida</span>{% endif %}</div>
+
+  {% if a and a.assinado %}
+   <div class="z-traco">{% if a.traco %}<img src="{{ url_for('assinar.traco', aid=a.id) }}" alt="assinatura de {{ a.assinante }}">{% endif %}</div>
+   <div class="fw-semibold">{{ a.assinante }}</div>
+   <div class="small text-muted">assinou em {{ a.assinado|quando }}
+    {%- if a.ip %} · IP {{ a.ip }}{% endif %}</div>
+   <div class="small text-muted">código <b class="z-mono">{{ codigos[p] }}</b></div>
+
+  {% elif a %}
+   <div class="mb-2"><b>{{ a.nome }}</b>
+    <div class="small text-muted">pedido por {{ a.criado_por or '—' }}{% if a.expira %} · o link vale até {{ a.expira|data }}{% endif %}
+     {%- if a.contato %} · enviado para {{ a.contato }}{% endif %}</div></div>
+   <label class="form-label small mb-0">Link de assinatura</label>
+   <div class="input-group input-group-sm mb-2">
+    <input class="form-control z-mono z-link" value="{{ links[p] }}" readonly aria-label="Link de assinatura">
+    <button class="btn btn-outline-secondary z-copiar" type="button" title="Copiar"><i class="fa fa-copy"></i></button></div>
+   <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-sm btn-zelo" href="{{ links[p] }}"><i class="fa fa-pen-nib me-1"></i>Assinar aqui agora</a>
+    <a class="btn btn-sm btn-outline-secondary z-zap" href="#" target="_blank" rel="noopener"><i class="fa fa-share-nodes me-1"></i>Enviar</a>
+    {% if pode('lancar') %}
+    <form method="post" class="ms-auto"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+     <input type="hidden" name="acao" value="pedir"><input type="hidden" name="papel" value="{{ p }}">
+     <input type="hidden" name="nome" value="{{ a.nome }}">
+     <button class="btn btn-sm btn-link text-secondary p-0" title="Gera um link novo e invalida o atual">refazer link</button></form>
+    <form method="post" onsubmit="return confirm('Cancelar o pedido de assinatura desta via?')">
+     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+     <input type="hidden" name="acao" value="cancelar"><input type="hidden" name="papel" value="{{ p }}">
+     <button class="btn btn-sm btn-link text-danger p-0">cancelar</button></form>{% endif %}</div>
+
+  {% elif pode('lancar') %}
+   <form method="post" class="row g-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="acao" value="pedir"><input type="hidden" name="papel" value="{{ p }}">
+    <div class="col-12"><label class="form-label small mb-0">Quem assina</label>
+     {% if p == 'empresa' and assinantes %}
+     <select class="form-select form-select-sm" name="nome">{% for n in assinantes %}<option>{{ n }}</option>{% endfor %}</select>
+     {% else %}<input class="form-control form-control-sm" name="nome" value="{{ sugerido[p] }}">{% endif %}</div>
+    <div class="col-12"><label class="form-label small mb-0">Anotar para onde foi mandado (opcional)</label>
+     <input class="form-control form-control-sm" name="contato" placeholder="e-mail, WhatsApp, entregue na mão..."></div>
+    <div class="col-12"><button class="btn btn-sm btn-zelo"><i class="fa fa-link me-1"></i>Gerar o link desta via</button></div>
+   </form>
+   <p class="small text-muted mt-2 mb-0">{% if p == 'empresa' %}É esta via que libera o ativo. Se a pessoa não estiver no
+    balcão, mande o link — ela assina de onde estiver.{% else %}Abra o link no tablet para a pessoa assinar na hora, ou
+    mande para ela assinar do computador dela.{% endif %}</p>
+  {% else %}<p class="small text-muted mb-0">Nenhum pedido aberto nesta via.</p>{% endif %}
+ </div></div>
+{% endfor %}
+</div>
+
+<div class="z-card">
+ <h2 class="h6">Assinou no papel?</h2>
+ <p class="small text-muted">Quando as duas assinaturas acontecem na folha impressa, anexe o termo digitalizado: ele passa
+  a ser o termo assinado do lançamento e os pedidos de assinatura em aberto são encerrados.</p>
+ {% if pode('lancar') %}
+ <form method="post" enctype="multipart/form-data" action="{{ url_for('termo.assinado', num=m.id) }}" class="d-flex flex-wrap gap-2 align-items-center">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="volta" value="{{ url_for('assinar.painel', num=m.id) }}">
+  <input type="file" class="form-control form-control-sm" style="max-width:22rem" name="arquivo" accept=".pdf,.jpg,.jpeg,.png" required>
+  <button class="btn btn-sm btn-outline-secondary"><i class="fa fa-upload me-1"></i>{{ 'Trocar o arquivo' if m.termo_arquivo else 'Anexar termo digitalizado' }}</button>
+  {% if m.termo_arquivo %}<a class="btn btn-sm btn-zelo" href="{{ url_for('termo.assinado', num=m.id) }}" target="_blank"><i class="fa fa-file-circle-check me-1"></i>Abrir o termo guardado</a>{% endif %}
+ </form>{% elif m.termo_arquivo %}
+ <a class="btn btn-sm btn-zelo" href="{{ url_for('termo.assinado', num=m.id) }}" target="_blank"><i class="fa fa-file-circle-check me-1"></i>Abrir o termo guardado</a>{% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll('.z-copiar').forEach(b => b.onclick = async () => {
+  const campo = b.closest('.input-group').querySelector('.z-link');
+  try { await navigator.clipboard.writeText(campo.value); } catch (e) { campo.select(); document.execCommand('copy'); }
+  zAviso('Link copiado.', 'ok'); });
+document.querySelectorAll('.z-zap').forEach(a => {
+  const url = a.closest('.z-via').querySelector('.z-link').value;
+  const txt = 'Termo do Zelo para assinar: ' + url;
+  a.href = (navigator.share ? '#' : 'mailto:?subject=' + encodeURIComponent('Termo para assinar') + '&body=' + encodeURIComponent(txt));
+  if (navigator.share) a.onclick = e => { e.preventDefault(); navigator.share({title: 'Termo para assinar', text: txt, url}); }; });
+</script>
+{% endblock %}

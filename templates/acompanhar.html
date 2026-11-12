@@ -30,7 +30,8 @@
      <button type="button" class="z-tic z-m-cham {{ 'on' if m.chamado }}" {{ '' if pode('lancar') else 'disabled' }} title="Clique para informar o Nº do chamado"><i class="fa fa-ticket me-1"></i><span>{{ '#' ~ m.chamado if m.chamado else 'Chamado' }}</span></button>
      {% if m.termo_arquivo %}<a class="z-tic on z-m-arq" href="{{ url_for('termo.assinado', num=m.id) }}" target="_blank" title="Abrir o termo assinado"><i class="fa fa-paperclip"></i></a>
      {% elif pode('lancar') %}<label class="z-tic z-m-up mb-0" title="Guardar o termo assinado (PDF ou foto)"><i class="fa fa-paperclip"></i><input type="file" accept=".pdf,.jpg,.jpeg,.png" hidden></label>{% endif %}
-     <a class="z-tic" href="{{ url_for('termo.inicio', n=m.id) }}" target="_blank" title="Gerar o termo para assinar"><i class="fa fa-print"></i></a></div>
+     <a class="z-tic" href="{{ url_for('assinar.painel', num=m.id) }}" title="Colher assinatura na tela ou mandar o link"><i class="fa fa-pen-nib"></i></a>
+     <a class="z-tic" href="{{ url_for('termo.inicio', n=m.id) }}" target="_blank" title="Imprimir o termo para assinar no papel"><i class="fa fa-print"></i></a></div>
     <div class="z-kc-pe"><span class="z-dias {{ 'velho' if d is not none and d > 7 and c != 'Entregue' }}">{% if c == 'Entregue' %}{{ (m.data_ent or m.data)|data }}{% elif d is none %}sem data{% else %}{{ d }} dia{{ 's' if d != 1 }}{% endif %}</span>
      {% if m.tecnico %}<span class="z-dias" title="Técnico"><i class="fa fa-user-gear me-1"></i>{{ m.tecnico.split(' ')[0] }}</span>{% endif %}
      <span class="z-pends">{% for f in x.pend if f not in ('Nº do chamado', 'Termo assinado', 'Arquivo do termo') %}<span class="z-pend">falta {{ f }}</span> {% endfor %}</span></div>
@@ -39,7 +40,8 @@
   </div></div>{% endfor %}
  <div class="z-col z-perigo z-so-arrasto" data-col="Cancelado"><div class="z-col-topo text-danger"><i class="fa fa-ban"></i>Cancelar reserva</div><div class="z-col-corpo"><div class="z-col-vazio">Solte aqui para cancelar: o item e o kit voltam ao estoque</div></div></div>
 </div>
-<p class="small text-muted mt-2">A coluna é o que aconteceu com a máquina. Termo e chamado são marcas no cartão: clique para marcar, informe o chamado, e guarde o termo assinado pelo clipe.</p>
+<p class="small text-muted mt-2">A coluna é o que aconteceu com a máquina. Termo e chamado são marcas no cartão: clique para marcar, informe o chamado,
+ guarde o termo digitalizado pelo clipe, ou use a caneta para colher a assinatura na tela e mandar o link para quem assina pela empresa.</p>
 </section>
 
 <section data-painel="preparacao" hidden>

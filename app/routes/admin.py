@@ -18,6 +18,10 @@ ROTULOS_CONFIG = {
     'equipe': 'Equipe (responsáveis), separados por ;',
     'tecnicos': 'Técnicos, separados por ;',
     'recebido_por': 'Quem recebe devoluções no EC, separados por ;',
+    'assinantes_empresa': 'Quem pode assinar o termo pela empresa, separados por ;',
+    'dias_link_assinatura': 'Validade do link de assinatura (dias)',
+    'url_base': 'Endereço do Zelo na rede (ex.: http://servidor-ti:5001). Vazio = usa o endereço do navegador, '
+                'o que quebra o link de assinatura quando alguém abre o Zelo pelo próprio servidor',
 }
 
 

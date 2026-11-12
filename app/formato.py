@@ -21,6 +21,14 @@ def data_br(v):
     return s
 
 
+def quando_br(v):
+    """'2026-11-11T22:34:07' → '11/11/2026 às 22:34'. Serve para carimbo de assinatura e de envio."""
+    s = str(v or '').replace('T', ' ')
+    if len(s) < 16 or s[4] != '-':
+        return data_br(v)
+    return f'{s[8:10]}/{s[5:7]}/{s[0:4]} às {s[11:16]}'
+
+
 def fone_br(v):
     """11 dígitos → (11) 98765-4321. Qualquer outro tamanho sai como está."""
     d = ''.join(c for c in str(v or '') if c.isdigit())
@@ -45,6 +53,7 @@ def dias_desde(v):
 def registrar(app):
     app.jinja_env.filters['data'] = data_br
     app.jinja_env.filters['fone'] = fone_br
+    app.jinja_env.filters['quando'] = quando_br
     app.jinja_env.filters['cor'] = lambda s: COR_SITUACAO.get(s or '', 'secondary')
     app.jinja_env.globals['dias_desde'] = dias_desde
     app.jinja_env.globals['hoje'] = hoje_iso

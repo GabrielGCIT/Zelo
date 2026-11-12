@@ -303,7 +303,12 @@ def lancamento(num):
         flash('Corrigido: ' + '; '.join(mudou) if mudou else 'Nada mudou.', 'success')
         return redirect(url_for('lancar.lancamento', num=num))
     it = db.session.get(Item, m.item) if m.item else None
-    return render_template('lancamento.html', m=m, it=it, pend=texto(m, it), editaveis=EDITAVEIS,
+    vias_ass = None
+    if m.tipo in ('Entrega', 'Empréstimo', 'Devolução'):
+        from app.assinatura import vias
+        v = vias(m)
+        vias_ass = (sum(1 for a in v.values() if a and a.assinado), len(v))
+    return render_template('lancamento.html', m=m, it=it, pend=texto(m, it), editaveis=EDITAVEIS, vias_ass=vias_ass,
                            pode_desfazer=pode_desfazer(m), **_listas())
 
 

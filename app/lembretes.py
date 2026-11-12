@@ -21,7 +21,7 @@ from app import db
 from app.models import (Consumivel, Contrato, EmprestimoAcessorio, EnvioSD, Item, Manutencao, Movimentacao, Pessoa, cfg)
 
 # prazo (em dias) a partir do qual cada coisa passa a cobrar — ajustável em Configurações
-PRAZOS_PADRAO = {'reserva': 3, 'devolucao': 7, 'preparacao': 5, 'termo': 7, 'pendencia': 7, 'os': 15}
+PRAZOS_PADRAO = {'reserva': 3, 'devolucao': 7, 'preparacao': 5, 'termo': 7, 'pendencia': 7, 'os': 15, 'assinatura': 3}
 ORDEM = {'alta': 0, 'media': 1, 'baixa': 2}
 
 
@@ -97,6 +97,9 @@ def tudo():
                           Item.desde.isnot(None), Item.desde < _ate(d)).count(),
         'Sem termo assinado não há documento ligando o equipamento à pessoa.',
         url_for('acompanhar.inicio'), 'Ver entregas', 'alta')
+    add('assinatura_parada', f'Assinatura pedida há mais de {_dias("assinatura")} dias', _assinaturas_paradas(),
+        'O link de assinatura foi gerado e ninguém assinou. Sem as duas vias o termo não fecha e o ativo não é liberado.',
+        url_for('painel.fila') + '#assinaturas', 'Ver quem falta', 'media')
     add('pendencia_antiga', f'Lançamento incompleto há mais de {_dias("pendencia")} dias',
         _pendencias_antigas(_dias('pendencia')),
         'Campo que ficou para depois e ninguém voltou para preencher. Depois de um mês, ninguém lembra o que era.',
@@ -139,6 +142,13 @@ def tudo():
 
     L.sort(key=lambda x: (ORDEM[x['urgencia']], -x['n']))
     return L, sum(x['n'] for x in L)
+
+
+def _assinaturas_paradas():
+    from app.models import Assinatura
+    corte = _ate(_dias('assinatura'))
+    return (Assinatura.query.filter(Assinatura.assinado.is_(None), Assinatura.cancelado.is_(None),
+                                    Assinatura.criado < corte).count())
 
 
 def _pendencias_antigas(dias):

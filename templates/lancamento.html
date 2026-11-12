@@ -17,11 +17,13 @@
  <div class="d-flex flex-wrap gap-2 align-items-center">
   {% if m.termo_arquivo %}<a class="btn btn-sm btn-zelo" href="{{ url_for('termo.assinado', num=m.id) }}" target="_blank"><i class="fa fa-file-circle-check me-1"></i>Abrir o termo assinado</a>
   {% elif m.link %}<a class="btn btn-sm btn-outline-secondary" href="{{ m.link }}" target="_blank" rel="noopener"><i class="fa fa-arrow-up-right-from-square me-1"></i>Termo assinado (link antigo)</a>{% endif %}
-  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('termo.inicio', n=m.id) }}" target="_blank"><i class="fa fa-print me-1"></i>Gerar para assinar</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('termo.inicio', n=m.id) }}" target="_blank"><i class="fa fa-print me-1"></i>Imprimir</a>
   <span class="small text-muted">{{ m.termo or 'sem termo' }}{% if m.data_ass %} em {{ m.data_ass|data }}{% endif %}</span></div>
- {% if pode('lancar') %}<form method="post" enctype="multipart/form-data" action="{{ url_for('termo.assinado', num=m.id) }}" class="d-flex gap-2 mt-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <input type="file" class="form-control form-control-sm" name="arquivo" accept=".pdf,.jpg,.jpeg,.png" required><button class="btn btn-sm btn-outline-secondary text-nowrap"><i class="fa fa-upload me-1"></i>{{ 'Trocar o arquivo' if m.termo_arquivo else 'Guardar termo assinado' }}</button></form>
- <div class="small text-muted mt-1">PDF ou foto. Guardar o arquivo já marca o termo como assinado{% if m.chamado %} e anexa no chamado {{ m.chamado }}{% endif %}.</div>{% endif %}</div>{% endif %}
+ <a class="btn btn-sm {{ 'btn-outline-secondary' if m.termo == 'Assinado' else 'btn-zelo' }} mt-2" href="{{ url_for('assinar.painel', num=m.id) }}">
+  <i class="fa fa-pen-nib me-1"></i>Assinaturas
+  {%- if vias_ass %} <span class="badge text-bg-light ms-1">{{ vias_ass[0] }}/2</span>{% endif %}</a>
+ <div class="small text-muted mt-1">Colher na tela (caneta, dedo ou mouse), mandar o link para quem assina pela empresa,
+  ou anexar o termo digitalizado — tudo na mesma tela.</div></div>{% endif %}
 {% if pode('lancar') %}<form method="post" class="mt-3 pt-3 border-top" onsubmit="return confirm('Desfazer o lançamento Nº {{ m.id }}? Ele sai do Histórico e a situação do item volta ao que era.')">
  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="desfazer">
  <button class="btn btn-sm btn-outline-danger" {{ '' if pode_desfazer else 'disabled' }}><i class="fa fa-rotate-left me-1"></i>Desfazer este lançamento</button>

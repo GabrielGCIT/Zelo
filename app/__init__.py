@@ -103,8 +103,9 @@ def create_app(database_url=None, testing=False):
     from app.routes.bipar import bipar_bp
     from app.routes.busca import busca_bp
     from app.routes.desligar import desligar_bp
+    from app.routes.assinar import assinar_bp
     for bp in (auth_bp, painel_bp, consulta_bp, lancar_bp, acompanhar_bp, manutencao_bp, estoque_bp,
-               linhas_bp, termo_bp, admin_bp, bipar_bp, busca_bp, desligar_bp):
+               linhas_bp, termo_bp, admin_bp, bipar_bp, busca_bp, desligar_bp, assinar_bp):
         app.register_blueprint(bp)
     registrar_hooks(app)
 

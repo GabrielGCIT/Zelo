@@ -67,10 +67,28 @@
 - "Ajustar cadastro" (v1.7.0): corrige quem está com o item / situação / linha no aparelho; entra no Histórico
   como tipo "Ajuste" com motivo e autor, sem inventar movimentação. Botão na ficha do item e da linha.
 
-## Etapa 5 — Aceite digital do termo (aprovado pelo Gabriel)
-- O PDF aceito deve ser gravado no mesmo lugar do termo assinado (termo_arquivo).
-- Link de aceite para a pessoa, registro de quem/quando/IP, PDF assinado anexado ao chamado e ao
-  lançamento; termo passa a Assinado sozinho. Definir com o Gabriel: aceite por link interno ou e-mail.
+## Etapa 5 — Assinatura digital do termo (FEITA, v1.9.0)
+Decidido com o Gabriel: a pessoa abre o Zelo e assina na tela — caneta ou dedo no tablet, mouse no
+notebook. São DUAS vias: a de quem recebe e a de quem responde pela empresa (Giselly ou Sato), que é a
+que libera o ativo. Quem não está presencial recebe um link e assina de onde estiver.
+
+- **Quadro de assinatura** com Pointer Events (caneta, dedo e mouse pelo mesmo caminho), desenhado na
+  resolução real da tela e com traço suavizado; desfazer traço e limpar; o PNG vai recortado no desenho.
+- **Link por via**: token de 32 bytes, para um único termo e uma única via, com validade em dias
+  (`dias_link_assinatura`). A página não exige login e mostra só aquele termo. Serve para os dois casos:
+  abrir no tablet do balcão ou mandar para quem está fora.
+- **Registro**: nome confirmado, data, hora, IP, navegador e o **hash do texto do termo**. Se o lançamento
+  for corrigido depois, o hash deixa de bater e o Zelo avisa que o papel assinado não é mais o mesmo.
+- **Com as duas vias**, o Zelo monta o PDF com os dois desenhos e o bloco de conferência (quem, quando, IP,
+  código da via), guarda no mesmo lugar do termo digitalizado, marca o termo como Assinado e manda ao
+  chamado do Service Desk.
+- **Assinar no papel continua valendo**: anexar o termo digitalizado encerra os pedidos em aberto. As duas
+  formas convivem na mesma tela.
+- **Cobrança**: via pedida e não assinada vira lembrete no Painel e seção em Minha fila.
+- `url_base` em Configurações: sem ele, o link copiado sai com o endereço do navegador e só funciona na
+  máquina de quem copiou. O painel avisa quando isso acontece.
+- Falta combinar: mandar o link por e-mail automaticamente depende do mesmo relay SMTP da etapa 4; hoje o
+  link é copiado ou compartilhado pelo botão Enviar.
 
 ## Encaixes pendentes (sem etapa fixa)
 - Gabriel terminar o teste de ponta a ponta no laboratório (entrega com chamado → anexo, nota, ativo).

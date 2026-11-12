@@ -353,6 +353,39 @@ class EnvioSD(db.Model):
     enviado = db.Column(db.String(25))
 
 
+class Assinatura(db.Model):
+    """Uma via de assinatura do termo: a do colaborador e a de quem assina pela empresa.
+
+    O traço é um PNG desenhado na tela (caneta, dedo ou mouse). O que dá valor à via não é o
+    desenho — é o resto da linha: quem assinou, quando, de qual endereço e o hash do texto do
+    termo naquele momento. Se o lançamento for corrigido depois, o hash deixa de bater e o Zelo
+    avisa que o papel assinado não é mais o mesmo.
+    """
+    __tablename__ = 'assinaturas'
+    id = db.Column(db.Integer, primary_key=True)
+    mov_id = db.Column(db.Integer, index=True)
+    papel = db.Column(db.String(14), index=True)        # colaborador | empresa
+    nome = db.Column(db.String(150))                    # quem deve assinar
+    matricula = db.Column(db.String(30))
+    contato = db.Column(db.String(150))                 # para onde o link foi mandado (anotação)
+    token = db.Column(db.String(64), unique=True, index=True)
+    criado = db.Column(db.String(25))
+    criado_por = db.Column(db.String(100))
+    expira = db.Column(db.String(10))                   # data; depois dela o link não abre
+    assinado = db.Column(db.String(25))                 # vazio = ainda pendente
+    assinante = db.Column(db.String(150))               # o nome confirmado na hora de assinar
+    traco = db.Column(db.LargeBinary)                   # PNG do desenho
+    ip = db.Column(db.String(45))
+    agente = db.Column(db.String(200))
+    hash_termo = db.Column(db.String(64))
+    cancelado = db.Column(db.String(25))
+    motivo = db.Column(db.String(150))
+
+    @property
+    def pendente(self):
+        return not self.assinado and not self.cancelado
+
+
 class Config(db.Model):
     """Parâmetros (chave/valor): prazo padrão de empréstimo, data do fluxo de preparação etc."""
     __tablename__ = 'config'
@@ -369,6 +402,13 @@ CONFIG_PADRAO = {
     'equipe': 'Gabriel;Giselly Oliveira;Adriano Santos;Daniely Reis',
     'tecnicos': 'Diogo Mariano;Adriano Santos;Emilly Cosmo;Edvaldo Filho;Thomaz Jardim;Lucas Rodrigues;Michel Santos;Lara Vitoriano',
     'recebido_por': 'Adriano Santos;Diogo Mariano',
+    # quem pode assinar o termo em nome da empresa (a via que libera o ativo)
+    'assinantes_empresa': 'Giselly Oliveira;Cristiano Sato',
+    'dias_link_assinatura': '7',          # validade do link de assinatura
+    # Endereço do Zelo na rede, usado para montar o link de assinatura que vai para fora
+    # (ex.: http://servidor-ti:5001). Vazio = usa o endereço que o navegador está usando, o que
+    # dá errado quando alguém abre o Zelo pelo próprio servidor, como localhost.
+    'url_base': '',
 }
 
 

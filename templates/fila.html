@@ -25,6 +25,16 @@
 {% elif s.colunas == 'contrato' %}
 <table class="table table-sm"><thead><tr><th>Contrato</th><th>Locadora</th><th>Fim</th></tr></thead><tbody>
 {% for c in s.linhas %}<tr><td>{{ c.contrato }}</td><td>{{ c.locadora }}</td><td>{{ c.fim|data }}</td></tr>{% endfor %}</tbody></table>
+{% elif s.colunas == 'assinatura' %}
+<div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead><tr><th>Nº</th><th>Via</th><th>Quem assina</th><th>Pedido em</th><th>Dias</th><th>Vale até</th><th></th></tr></thead><tbody>
+{% for a in s.linhas[:150] %}<tr>
+ <td class="z-mono"><a class="z-link" href="{{ url_for('assinar.painel', num=a.mov_id) }}">{{ a.mov_id }}</a></td>
+ <td>{{ 'Colaborador(a)' if a.papel == 'colaborador' else 'Pela empresa' }}</td>
+ <td>{{ a.nome }}{% if a.contato %} <span class="small text-muted">· {{ a.contato }}</span>{% endif %}</td>
+ <td>{{ a.criado|data }}</td><td>{{ dias_desde(a.criado) if a.criado else '' }}</td>
+ <td class="{{ 'z-erro' if a.expira and a.expira < hoje else '' }}">{{ a.expira|data }}</td>
+ <td><a class="btn btn-sm btn-outline-secondary py-0" href="{{ url_for('assinar.painel', num=a.mov_id) }}">Abrir</a></td></tr>{% endfor %}
+</tbody></table></div>
 {% endif %}
 </div>
 {% endfor %}

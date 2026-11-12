@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+{% block title %}Assinar o termo{% endblock %}
+{% block content %}
+<div class="z-assinar">
+
+{% if not a %}
+ <div class="z-card text-center"><div class="z-vazio"><i class="fa fa-link-slash"></i>
+  <div>Link inválido</div><small>{{ erro }}</small></div></div>
+
+{% elif a.assinado %}
+ <div class="z-card">
+  <div class="d-flex align-items-start gap-3">
+   <div class="z-check z-grande"><i class="fa fa-check"></i></div>
+   <div class="flex-grow-1">
+    <h1 class="z-titulo mb-1">Assinatura registrada</h1>
+    <p class="z-sub mb-2">{{ a.assinante }} assinou como <b>{{ 'colaborador(a)' if a.papel == 'colaborador' else 'representante da ' ~ empresa }}</b>
+     em {{ a.assinado|quando }}.</p>
+    <p class="small text-muted mb-3">Código desta via: <b class="z-mono">{{ codigo }}</b>. Guarde o PDF se quiser uma cópia.</p>
+    <a class="btn btn-zelo" href="{{ url_for('assinar.pdf_do_link', token=a.token) }}" target="_blank">
+     <i class="fa fa-file-pdf me-1"></i>Abrir o termo</a>
+   </div></div>
+  {% set falta = outras.values() | select | rejectattr('assinado') | list %}
+  {% if falta %}<p class="small text-muted mt-3 mb-0 pt-3 border-top">
+   Ainda falta a outra via para o termo ficar completo. A equipe de TI acompanha isso pelo Zelo.</p>{% endif %}
+ </div>
+
+{% elif erro %}
+ <div class="z-card text-center"><div class="z-vazio"><i class="fa fa-hourglass-end"></i>
+  <div>Não dá para assinar por este link</div><small>{{ erro }}</small></div></div>
+
+{% else %}
+ <div class="z-card">
+  <h1 class="z-titulo mb-1">{{ d.titulo if d else 'Termo' }}</h1>
+  <p class="z-sub">Você está assinando como <b>{{ 'colaborador(a)' if a.papel == 'colaborador' else 'representante da ' ~ empresa }}</b>.
+   Leia o termo e assine no quadro abaixo. Vale caneta, o dedo na tela ou o mouse.</p>
+ </div>
+
+ {% if d %}
+ <div class="z-card z-termo-leitura">
+  <h2 class="h6 text-uppercase text-muted">O que você está assinando</h2>
+  <dl class="z-def">
+   <dt>Pessoa</dt><dd>{{ d.nome }}{% if d.matricula_fmt %} · matrícula {{ d.matricula_fmt }}{% endif %}</dd>
+   {% if d.equipamento %}<dt>Equipamento</dt><dd>{{ d.equipamento }}</dd>{% endif %}
+   {% if d.linha %}<dt>Linha</dt><dd>{{ d.linha }}</dd>{% endif %}
+   {% if d.acessorios %}<dt>Acessórios</dt><dd>{{ d.acessorios }}</dd>{% endif %}
+   {% if d.periodo %}<dt>Período</dt><dd>{{ d.periodo }}</dd>{% endif %}
+   {% if d.chamado %}<dt>Chamado</dt><dd>{{ d.chamado }}</dd>{% endif %}
+   {% if d.obs %}<dt>Observação</dt><dd>{{ d.obs }}</dd>{% endif %}
+  </dl>
+  <details class="z-termo-texto"><summary>Ler o texto completo do termo</summary>
+   <p>{{ d.abertura }}</p>{% if d.p1 %}<p>{{ d.p1 }}</p>{% endif %}{% if d.p2 %}<p>{{ d.p2 }}</p>{% endif %}
+   {% if d.fecho %}<p>{{ d.fecho }}</p>{% endif %}
+   <a href="{{ url_for('assinar.pdf_do_link', token=a.token) }}" target="_blank"><i class="fa fa-file-pdf me-1"></i>Abrir em PDF</a>
+  </details>
+ </div>
+ {% endif %}
+
+ <form class="z-card" id="f-ass" method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="desenho" id="desenho">
+  <label class="form-label fw-semibold mb-1" for="nome">Seu nome completo</label>
+  <input class="form-control mb-3" id="nome" name="nome" value="{{ a.nome or '' }}" autocomplete="name" required>
+
+  <div class="d-flex align-items-baseline gap-2 mb-1">
+   <label class="form-label fw-semibold mb-0">Assine aqui</label>
+   <span class="small text-muted ms-auto" id="dica">caneta, dedo ou mouse</span></div>
+  <div class="z-quadro-ass"><canvas id="quadro" aria-label="Quadro de assinatura"></canvas>
+   <div class="z-linha-ass"></div></div>
+  <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
+   <button type="button" class="btn btn-sm btn-outline-secondary" id="b-voltar"><i class="fa fa-rotate-left me-1"></i>Desfazer traço</button>
+   <button type="button" class="btn btn-sm btn-outline-secondary" id="b-limpar">Limpar</button>
+   <button class="btn btn-zelo btn-lg ms-auto" id="b-ok" disabled><i class="fa fa-pen-nib me-1"></i>Confirmar assinatura</button>
+  </div>
+  <p class="small text-muted mt-3 mb-0">Ao confirmar, o Zelo registra o seu nome, a data, a hora e o endereço de onde você
+   acessou, junto do termo. Este link vale só para esta assinatura{% if a.expira %} e até {{ a.expira|data }}{% endif %}.</p>
+ </form>
+{% endif %}
+
+</div>
+{% endblock %}
+{% block scripts %}
+{% if a and not a.assinado and not erro %}
+<script src="{{ url_for('static', filename='zelo-assinar.js') }}"></script>
+<script>
+const $ = id => document.getElementById(id);
+const ok = $('b-ok');
+const quadro = zAssinatura($('quadro'), tem => { ok.disabled = !tem; $('dica').textContent = tem ? 'pode confirmar' : 'caneta, dedo ou mouse'; });
+$('b-limpar').onclick = () => quadro.limpar();
+$('b-voltar').onclick = () => quadro.voltar();
+$('f-ass').addEventListener('submit', e => {
+  if (!quadro.temTinta()) { e.preventDefault(); zAviso('Assine no quadro antes de confirmar.', 'aviso'); return; }
+  if ($('nome').value.trim().length < 3) { e.preventDefault(); zAviso('Escreva o seu nome completo.', 'aviso'); return; }
+  $('desenho').value = quadro.png();
+  ok.disabled = true; ok.innerHTML = '<i class="fa fa-circle-notch fa-spin me-1"></i>Registrando...';
+});
+</script>
+{% endif %}
+{% endblock %}
