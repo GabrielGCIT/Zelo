@@ -40,12 +40,25 @@
 - Ficha do item com linha do tempo (pessoas, manutenções); ficha da pessoa em cards.
 - Visual: transições, respostas visuais, estados vazios, tema claro/escuro consistente.
 
-## Etapa 4 — Agilidade
-- Bipar código de barras/QR da plaqueta para entregar e devolver; etiqueta para imprimir.
-- Lembretes automáticos: empréstimo vencendo, termo pendente, pendências antigas.
-- Busca global com atalho (Ctrl+K) que também executa ações.
-- Ações em lote na lista de itens (devolver vários, mudar site, separar para baixa).
-- Fila única de devolução no desligamento.
+## Etapa 4 — Agilidade (FEITA, v1.8.0)
+- **Bipar**: tela com fila. Escolhe a ação uma vez (devolver, entregar, reservar, enviado ao EC, pedir
+  devolução, entrada no estoque, outro site, separar para baixa) e bipa tudo; cada leitura confere na hora
+  pelo mesmo motor dos lançamentos e grava num lote só. Campo comum vai só onde cabe, então notebook e
+  celular entram na mesma devolução. Modo "Conferir prateleira" não grava: compara o bipado com o que o
+  Zelo diz que está no site e lista o que não foi bipado.
+- **Etiqueta** com código de barras (Code 128 da plaqueta), 3 por linha em A4, com nº de vias. O código
+  foi conferido módulo a módulo contra a tabela padrão, para o leitor bipar de primeira.
+- **Busca rápida (Ctrl+K)** em qualquer tela: item, pessoa, linha, Nº do lançamento e nome de tela.
+  Tab abre as ações que cabem na situação daquele item — bipar a plaqueta e devolver sem abrir ficha.
+- **Lembretes** no alto do Painel e número ao lado de Minha fila: só o que passou do prazo (empréstimo
+  vencido, devolução cobrada, reserva e preparação paradas, termo não assinado, lançamento incompleto,
+  desligado com equipamento, OS parada, erro no envio ao Service Desk, estoque mínimo, garantia e
+  contrato vencendo). Cada prazo é ajustável em Configurações (`lembrete_*`).
+- **Ações em lote** na lista de Itens: marca vários (Shift marca o intervalo) e manda para a fila de
+  bipagem, ou imprime as etiquetas dos marcados.
+- **Desligamentos**: lista de quem saiu e ainda consta com alguma coisa, e uma fila por pessoa que
+  devolve equipamento, linha, kit do EC e acessório emprestado de uma vez, com motivo Desligamento.
+- Falta combinar: lembrete por e-mail precisa de um relay SMTP interno — hoje o Zelo cobra na tela.
 
 ## Feito em 11/11 (v1.5.0), a pedido do Gabriel
 - Quadro das entregas com 2 colunas (Reservado → Entregue); termo e chamado são marcas no cartão.

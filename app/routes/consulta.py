@@ -87,8 +87,9 @@ def itens():
     if 'site' in request.args:
         qy = qy.filter(Item.site == f['site']) if f['site'] else qy.filter(or_(Item.site.is_(None), Item.site == ''))
     pag = qy.order_by(Item.categoria, Item.codigo).paginate(page=_pagina(), per_page=POR_PAGINA, error_out=False)
+    from app.bipagem import MODOS
     return render_template('itens.html', pag=pag, f=f, categorias=CATEGORIAS, situacoes=SITUACOES, sites=SITES,
-                           finalidades=FINALIDADES, propriedades=PROPRIEDADES)
+                           finalidades=FINALIDADES, propriedades=PROPRIEDADES, modos=MODOS)
 
 
 @consulta_bp.route('/item/<path:codigo>', methods=['GET', 'POST'])

@@ -1,0 +1,173 @@
+{% extends 'base.html' %}
+{% block title %}Bipar{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-2"><div>
+ <h1 class="z-titulo">Bipar</h1>
+ <p class="z-sub">Escolha a ação uma vez e bipe tudo. O leitor de mão funciona como teclado: cada leitura entra na fila e confere sozinha.</p></div>
+ <div class="ms-auto d-flex gap-2">
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('consulta.itens') }}"><i class="fa fa-tags me-1"></i>Imprimir etiquetas</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lancar.grade') }}"><i class="fa fa-pen-to-square me-1"></i>Um item só</a></div></div>
+
+<div class="z-ops z-ops-sm" role="tablist">{% for k, (tit, ico, _a, _c, _d) in modos.items() %}
+ <button type="button" class="z-op {{ 'ativo' if k==modo }}" data-modo="{{ k }}"><i class="fa {{ ico }}"></i><span><b>{{ tit }}</b></span></button>{% endfor %}</div>
+<p class="small text-muted mt-1 mb-3" id="explica"></p>
+
+<div class="row g-3">
+ <div class="col-lg-5"><div class="z-card">
+  <label class="form-label fw-semibold mb-1" for="f-bipe"><i class="fa fa-barcode me-1"></i>Bipe ou digite</label>
+  <input class="form-control form-control-lg z-mono z-bipe" id="f-bipe" autocomplete="off" autofocus
+         placeholder="Plaqueta, tag, hostname, IMEI">
+  <div class="small text-muted mt-1">Enter adiciona à fila. O leitor já manda o Enter.</div>
+
+  <div class="row g-2 mt-3" id="comuns">
+   <div class="col-12 z-k" data-k="para"><label class="form-label small mb-0">Para quem (vale para a fila toda)</label>
+    <input class="form-control" id="k-para" list="dl-pessoas" autocomplete="off" placeholder="Nome ou matrícula"><datalist id="dl-pessoas"></datalist></div>
+   <div class="col-md-6 z-k" data-k="receb_por"><label class="form-label small mb-0">Recebido por</label>
+    <select class="form-select" id="k-receb_por"><option></option>{% for t in recebido %}<option>{{ t }}</option>{% endfor %}</select></div>
+   <div class="col-md-6 z-k" data-k="tecnico"><label class="form-label small mb-0">Técnico</label>
+    <select class="form-select" id="k-tecnico"><option></option>{% for t in tecnicos %}<option>{{ t }}</option>{% endfor %}</select></div>
+   <div class="col-md-6 z-k" data-k="motivo"><label class="form-label small mb-0">Motivo</label>
+    <select class="form-select" id="k-motivo"><option></option>{% for t in motivos %}<option>{{ t }}</option>{% endfor %}</select></div>
+   <div class="col-md-6 z-k" data-k="chamado"><label class="form-label small mb-0">Nº do chamado</label>
+    <input class="form-control" id="k-chamado"></div>
+   <div class="col-md-6 z-k" data-k="acess"><label class="form-label small mb-0">Mouse e teclado</label>
+    <select class="form-select" id="k-acess"><option value="">Automático</option>{% for t in kit %}<option>{{ t }}</option>{% endfor %}</select></div>
+   <div class="col-md-6 z-k" data-k="destino"><label class="form-label small mb-0">Site de destino</label>
+    <select class="form-select" id="k-destino"><option></option>{% for t in sites %}<option>{{ t }}</option>{% endfor %}</select></div>
+   <div class="col-md-6 z-k" data-k="site"><label class="form-label small mb-0">Prateleira de qual site?</label>
+    <select class="form-select" id="k-site"><option></option>{% for t in sites %}<option>{{ t }}</option>{% endfor %}</select></div>
+   <div class="col-12 z-k" data-k="obs"><label class="form-label small mb-0">Observação</label>
+    <input class="form-control" id="k-obs"></div>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2 align-items-center mt-3 pt-3 border-top">
+   <button class="btn btn-zelo btn-lg" id="btn-grav" disabled><i class="fa fa-check me-1"></i>Gravar fila</button>
+   <button class="btn btn-link text-secondary" id="btn-zera" type="button">Zerar</button>
+   <span class="small ms-auto" id="placar"></span></div>
+  <div id="feito" class="z-feito mt-2" hidden></div>
+ </div></div>
+
+ <div class="col-lg-7">
+  <div class="d-flex align-items-center gap-2 mb-1"><h2 class="h6 mb-0">Fila</h2>
+   <span class="small text-muted" id="conta"></span>
+   <button class="btn btn-sm btn-outline-secondary ms-auto" id="btn-etq" hidden><i class="fa fa-tags me-1"></i>Etiquetas da fila</button></div>
+  <form method="post" action="{{ url_for('bipar.etiquetas') }}" id="f-etq" target="_blank"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
+  <div id="lista" class="z-fila"></div>
+  <div id="faltando" class="mt-3" hidden></div>
+ </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const MODOS = {{ modos|tojson }}, MAXF = {{ max_fila }};
+const U = {fila: '{{ url_for("bipar.api_fila") }}', grav: '{{ url_for("bipar.api_gravar") }}',
+  pess: '{{ url_for("lancar.api_pessoas") }}', item: '{{ url_for("consulta.item", codigo="__") }}',
+  lanc: '{{ url_for("lancar.lancamento", num=0) }}'.slice(0, -1)};
+let S = {modo: {{ modo|tojson }}, codigos: {{ pre|tojson }}, ret: null, enviando: false};
+const $ = id => document.getElementById(id), esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ICO = {ok: 'fa-circle-check', aviso: 'fa-triangle-exclamation', erro: 'fa-circle-xmark', repetido: 'fa-clone'};
+
+function comum() { const c = {}; (MODOS[S.modo][3] || []).forEach(k => { const e = $('k-' + k); if (e) c[k] = e.value.trim(); }); return c; }
+function pintaModo() {
+  document.querySelectorAll('.z-op').forEach(b => b.classList.toggle('ativo', b.dataset.modo === S.modo));
+  const usa = new Set(MODOS[S.modo][3] || []);
+  document.querySelectorAll('.z-k').forEach(d => { const on = usa.has(d.dataset.k); d.hidden = !on; if (!on) d.querySelector('input,select').value = ''; });
+  $('explica').textContent = MODOS[S.modo][4];
+  $('btn-grav').innerHTML = S.modo === 'conferir' ? '<i class="fa fa-clipboard-check me-1"></i>Só confere, não grava'
+    : '<i class="fa fa-check me-1"></i>Gravar fila';
+  $('btn-grav').classList.toggle('d-none', S.modo === 'conferir');
+}
+document.querySelectorAll('.z-op').forEach(b => b.onclick = () => {
+  S.modo = b.dataset.modo; pintaModo(); history.replaceState(null, '', '?modo=' + S.modo); refaz(); $('f-bipe').focus(); });
+
+async function post(url, body) {
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': zCsrf()}, body: JSON.stringify(body)});
+  if (!r.ok) throw new Error('Erro ' + r.status); return r.json(); }
+
+async function refaz() {
+  if (!S.codigos.length) { S.ret = null; pinta(); return; }
+  try { S.ret = await post(U.fila, {modo: S.modo, codigos: S.codigos, comum: comum()}); }
+  catch (e) { zAviso(e.message, 'erro'); return; }
+  pinta();
+}
+let tR; function agRefaz() { clearTimeout(tR); tR = setTimeout(refaz, 250); }
+
+function cartao(l, i) {
+  const it = l.item, bad = l.status === 'erro', url = it ? U.item.replace('__', encodeURIComponent(it.codigo)) : null;
+  const nums = (l.nums || []).map(n => `<a class="z-mono" href="${U.lanc}${n}">Nº ${n}</a>`).join(' ');
+  return `<div class="z-fc z-${l.status}" data-i="${i}">
+   <i class="fa ${ICO[l.status]} z-fc-i"></i>
+   <div class="z-fc-m">
+    <div class="z-fc-t">${it ? `<b>${esc(it.categoria || 'Item')} ${esc(it.modelo || '')}</b> <span class="z-mono">${esc(it.codigo)}</span>`
+      : `<b class="z-mono">${esc(l.lido)}</b>`}
+     ${it && it.pool ? '<span class="z-tag">pool</span>' : ''}</div>
+    <div class="small">${it ? `${esc(it.situacao)}${it.com_quem ? ' com ' + esc(it.com_quem) : ''}${it.site ? ' · ' + esc(it.site) : ''}` : ''}</div>
+    <div class="small z-fc-msg">${esc(l.msg)} ${nums}</div></div>
+   ${url ? `<a class="btn btn-sm z-ico" href="${url}" title="Abrir a ficha"><i class="fa fa-arrow-up-right-from-square"></i></a>` : ''}
+   <button class="btn btn-sm z-ico z-tira" title="Tirar da fila"><i class="fa fa-xmark"></i></button></div>`;
+}
+
+function pinta() {
+  const r = S.ret, L = $('lista');
+  $('conta').textContent = S.codigos.length ? S.codigos.length + (S.codigos.length === 1 ? ' leitura' : ' leituras') : '';
+  $('btn-etq').hidden = !S.codigos.length;
+  if (!r || !r.linhas.length) {
+    L.innerHTML = '<div class="z-vazio"><i class="fa fa-barcode"></i><div>A fila está vazia</div><small>Bipe a plaqueta do equipamento. Cada leitura aparece aqui já conferida.</small></div>';
+    $('placar').textContent = ''; $('btn-grav').disabled = true; $('faltando').hidden = true; return;
+  }
+  L.innerHTML = r.linhas.map((l, i) => cartao(l, i)).reverse().join('');
+  L.querySelectorAll('.z-tira').forEach(b => b.onclick = () => {
+    S.codigos.splice(+b.closest('.z-fc').dataset.i, 1); refaz(); $('f-bipe').focus(); });
+  const q = r.resumo;
+  $('placar').innerHTML = [q.ok && `<span class="z-ok">${q.ok} ok</span>`, q.aviso && `<span class="z-aviso">${q.aviso} com aviso</span>`,
+    q.erro && `<span class="z-erro">${q.erro} com erro</span>`].filter(Boolean).join(' · ');
+  $('btn-grav').disabled = !(q.ok + q.aviso) || S.enviando;
+  if (r.faltando) {
+    $('faltando').hidden = false;
+    $('faltando').innerHTML = `<div class="z-card"><h2 class="h6">Não foi bipado${r.esperado != null ? ` · ${r.faltando.length} de ${r.esperado} em estoque nesse site` : ''}</h2>`
+      + (r.faltando.length ? '<div class="z-falta">' + r.faltando.map(i =>
+          `<a class="z-tag-l" href="${U.item.replace('__', encodeURIComponent(i.codigo))}"><span class="z-mono">${esc(i.codigo)}</span> ${esc(i.categoria || '')}</a>`).join('')
+        + '</div><p class="small text-muted mb-0 mt-2">Ou não está na prateleira, ou ficou de fora da contagem.</p>'
+        : '<p class="small z-ok mb-0"><i class="fa fa-circle-check me-1"></i>Tudo que o Zelo diz estar nesse site foi bipado.</p>') + '</div>';
+  } else $('faltando').hidden = true;
+}
+
+function bipa(v) {
+  v = (v || '').trim(); if (!v) return;
+  if (S.codigos.length >= MAXF) { zAviso('A fila chegou ao limite de ' + MAXF + '. Grave o que já tem.', 'aviso'); return; }
+  S.codigos.push(v); $('f-bipe').value = ''; refaz();
+}
+$('f-bipe').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); bipa(e.target.value); } });
+document.querySelectorAll('#comuns input, #comuns select').forEach(e => { e.addEventListener('change', agRefaz); e.addEventListener('input', agRefaz); });
+$('btn-zera').onclick = () => { S.codigos = []; S.ret = null; $('feito').hidden = true; pinta(); $('f-bipe').focus(); };
+$('btn-etq').onclick = () => { const f = $('f-etq'); f.querySelectorAll('input[name=codigo]').forEach(x => x.remove());
+  (S.ret ? S.ret.linhas.filter(l => l.item).map(l => l.item.codigo) : []).forEach(c => {
+    const i = document.createElement('input'); i.type = 'hidden'; i.name = 'codigo'; i.value = c; f.appendChild(i); });
+  f.submit(); };
+
+let tP; $('k-para') && $('k-para').addEventListener('input', e => { clearTimeout(tP);
+  tP = setTimeout(async () => { const q = e.target.value; if (q.length < 2 || q.includes(' · ')) return;
+    const ps = await (await fetch(U.pess + '?q=' + encodeURIComponent(q))).json();
+    $('dl-pessoas').innerHTML = ps.map(p => `<option value="${esc(p.rotulo)}">`).join(''); }, 250); });
+
+$('btn-grav').onclick = async () => {
+  if (S.enviando) return;
+  const q = S.ret && S.ret.resumo; if (!q || !(q.ok + q.aviso)) return;
+  S.enviando = true; $('btn-grav').disabled = true;
+  try {
+    const r = await post(U.grav, {modo: S.modo, codigos: S.codigos, comum: comum()});
+    const sobrou = r.linhas.filter(l => !l.gravada);
+    const nums = r.linhas.flatMap(l => l.nums || []);
+    $('feito').hidden = false;
+    $('feito').innerHTML = `<div class="z-check"><i class="fa fa-check"></i></div><div class="flex-grow-1">
+      <b>${r.gravadas} item(ns) gravado(s)</b><div class="small text-muted">${esc(MODOS[S.modo][0])}${sobrou.length ? ` · ${sobrou.length} ficaram de fora` : ''}</div>
+      <div class="small">${nums.slice(0, 12).map(n => `<a class="z-mono me-2" href="${U.lanc}${n}">Nº ${n}</a>`).join('')}${nums.length > 12 ? `e mais ${nums.length - 12}` : ''}</div></div>`;
+    S.codigos = sobrou.map(l => l.lido); S.ret = sobrou.length ? r : null;
+    if (sobrou.length) { S.ret.linhas = sobrou; S.ret.resumo = {ok: 0, aviso: 0, erro: sobrou.length, total: sobrou.length}; }
+    pinta(); $('f-bipe').focus();
+  } catch (e) { zAviso(e.message, 'erro'); }
+  S.enviando = false;
+};
+pintaModo(); refaz();
+</script>
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+{% block title %}Devolução de {{ p.nome }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3"><div>
+ <h1 class="z-titulo">Devolver tudo de {{ p.nome }}</h1>
+ <p class="z-sub"><span class="z-mono">{{ p.id }}</span> · {{ p.tipo or '' }}{% if p.cc %} · CC {{ p.cc }}{% endif %}
+  · <span class="{{ 'text-danger fw-semibold' if p.situacao == 'Desligado' }}">{{ p.situacao }}</span></p></div>
+ <div class="ms-auto d-flex gap-2">
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('consulta.pessoa', pid=p.id) }}"><i class="fa fa-id-card me-1"></i>Ficha</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('desligar.lista') }}">Todos os desligamentos</a></div></div>
+
+{% if not n %}
+<div class="z-card"><div class="z-vazio"><i class="fa fa-circle-check text-success"></i>
+ <div>Nada consta com {{ p.nome.split(' ')[0] }}</div>
+ <small>Nenhum equipamento, linha, kit ou acessório em aberto. A conta pode ser encerrada.</small></div></div>
+{% else %}
+<form method="post" id="f-dev">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="row g-3">
+ <div class="col-lg-8">
+
+ {% if t.itens %}
+ <div class="z-card mb-3"><div class="d-flex align-items-center gap-2 mb-2">
+  <h2 class="h6 mb-0"><i class="fa fa-laptop me-1 text-secondary"></i>Equipamentos <span class="badge text-bg-secondary">{{ t.itens|length }}</span></h2>
+  <button class="btn btn-sm btn-link ms-auto p-0" type="button" data-todos="item">marcar todos</button></div>
+  <div class="z-dl">{% for it in t.itens %}
+   <label class="z-dl-l">
+    <input class="form-check-input" type="checkbox" name="item" value="{{ it.codigo }}" checked>
+    <span class="z-dl-m">
+     <b>{{ it.categoria }} {{ it.modelo or '' }}</b> <span class="z-mono small">{{ it.codigo }}</span>
+     {% if it.finalidade == 'Pool de empréstimo' %}<span class="z-tag">pool</span>{% endif %}
+     <small class="d-block text-muted">{{ it.situacao }}{% if it.desde %} desde {{ it.desde|data }}{% endif %}
+      {%- if it.hostname %} · {{ it.hostname }}{% endif %}
+      {%- if t.linha_do_item.get(it.codigo) %} · leva a linha {{ t.linha_do_item[it.codigo].numero|fone }} junto{% endif %}</small></span>
+    <a class="z-dl-ir" href="{{ url_for('consulta.item', codigo=it.codigo) }}" title="Abrir a ficha"><i class="fa fa-arrow-up-right-from-square"></i></a>
+   </label>{% endfor %}</div>
+  <p class="small text-muted mb-0 mt-2">Notebook devolvido vai para a preparação em Acompanhar; o resto volta direto ao estoque.</p></div>
+ {% endif %}
+
+ {% if t.linhas %}
+ <div class="z-card mb-3"><h2 class="h6"><i class="fa fa-sim-card me-1 text-secondary"></i>Linhas sem aparelho em devolução <span class="badge text-bg-secondary">{{ t.linhas|length }}</span></h2>
+  <div class="z-dl">{% for ln in t.linhas %}
+   <label class="z-dl-l">
+    <input class="form-check-input" type="checkbox" name="linha" value="{{ ln.numero }}" checked>
+    <span class="z-dl-m"><b>{{ ln.numero|fone }}</b> <small class="text-muted">{{ ln.operadora or '' }}
+     {%- if ln.aparelho %} · aparelho {{ ln.aparelho }} (não está nesta lista){% endif %}</small></span>
+    <select class="form-select form-select-sm z-dl-sel" name="linha_acao_{{ ln.numero }}">
+     {% for a in acoes_linha %}<option {{ 'selected' if a=='Devolver' }}>{{ a }}</option>{% endfor %}</select>
+   </label>{% endfor %}</div>
+  <p class="small text-muted mb-0 mt-2">Devolver deixa a linha livre no Zelo. Desativar é para pedir o bloqueio à operadora.</p></div>
+ {% endif %}
+
+ {% if t.kit %}
+ <div class="z-card mb-3"><h2 class="h6"><i class="fa fa-computer-mouse me-1 text-secondary"></i>Mouse, teclado e fonte que saíram do EC <span class="badge text-bg-secondary">{{ t.kit|length }}</span></h2>
+  <div class="z-dl">{% for mov_id, cons, qtd in t.kit %}
+   <label class="z-dl-l">
+    <input class="form-check-input" type="checkbox" name="kit" value="{{ mov_id }}|{{ cons }}" checked>
+    <span class="z-dl-m">{{ cons }}{% if qtd > 1 %} <b>×{{ qtd }}</b>{% endif %}
+     <small class="d-block text-muted">saiu na entrega Nº {{ mov_id }}</small></span>
+    <a class="z-dl-ir" href="{{ url_for('lancar.lancamento', num=mov_id) }}"><i class="fa fa-arrow-up-right-from-square"></i></a>
+   </label>{% endfor %}</div>
+  <p class="small text-muted mb-0 mt-2">Marcado = voltou para a prateleira do EC. Desmarque o que a pessoa não devolveu.</p></div>
+ {% endif %}
+
+ {% if t.acess %}
+ <div class="z-card mb-3"><h2 class="h6"><i class="fa fa-plug me-1 text-secondary"></i>Acessórios emprestados <span class="badge text-bg-secondary">{{ t.acess|length }}</span></h2>
+  <div class="z-dl">{% for ea in t.acess %}
+   <label class="z-dl-l">
+    <input class="form-check-input" type="checkbox" name="acess" value="{{ ea.id }}" checked>
+    <span class="z-dl-m"><b class="z-mono">EA-{{ '%04d'|format(ea.id) }}</b> {{ ea.consumivel }}{% if ea.qtd > 1 %} ×{{ ea.qtd }}{% endif %}
+     <small class="d-block text-muted">desde {{ ea.data|data }}{% if ea.prazo %} · prazo {{ ea.prazo|data }}{% endif %}</small></span>
+   </label>{% endfor %}</div></div>
+ {% endif %}
+
+ </div>
+ <div class="col-lg-4"><div class="z-card z-cola">
+  <h2 class="h6">Fechar a devolução</h2>
+  <label class="form-label small mb-0">Recebido por</label>
+  <select class="form-select mb-2" name="receb_por"><option></option>{% for r in recebido %}<option>{{ r }}</option>{% endfor %}</select>
+  <label class="form-label small mb-0">Observação (vale para tudo)</label>
+  <input class="form-control mb-3" name="obs" placeholder="Ex.: entregue pelo gestor na portaria">
+  <div class="z-resumo-g mb-2"><span id="z-conta">{{ n }}</span> de {{ n }} marcado(s)</div>
+  <button class="btn btn-zelo btn-lg w-100"><i class="fa fa-check me-1"></i>Devolver o que está marcado</button>
+  <p class="small text-muted mb-0 mt-2">Cada linha vira um lançamento no Histórico, com o motivo Desligamento.
+   O que não passar continua aqui com o aviso do motivo.</p>
+ </div></div>
+</div>
+</form>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+const f = document.getElementById('f-dev');
+if (f) {
+  const cx = () => f.querySelectorAll('input[type=checkbox]');
+  const conta = () => { const n = [...cx()].filter(c => c.checked).length;
+    document.getElementById('z-conta').textContent = n;
+    f.querySelector('button[type=submit], .btn-zelo').disabled = !n; };
+  cx().forEach(c => c.addEventListener('change', conta));
+  f.querySelectorAll('[data-todos]').forEach(b => b.onclick = () => {
+    const alvo = f.querySelectorAll(`input[name="${b.dataset.todos}"]`);
+    const todos = [...alvo].every(c => c.checked);
+    alvo.forEach(c => c.checked = !todos); conta(); });
+  conta();
+}
+</script>
+{% endblock %}

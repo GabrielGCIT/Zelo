@@ -54,12 +54,14 @@ def inicio():
     por_site = (db.session.query(Item.site, func.count()).filter(Item.situacao == 'Em estoque', ~pool)
                 .group_by(Item.site).order_by(func.count().desc()).all())
     ultimas = Movimentacao.query.order_by(Movimentacao.id.desc()).limit(12).all()
+    from app.lembretes import tudo as lembretes
     from app.qualidade import tudo as qualidade
     achados, n_achados = qualidade()
+    lemb, n_lemb = lembretes()
     return render_template('painel.html', kpis=kpis, matriz=matriz, cats=cats, cols=cols, por_site=por_site,
                            ultimas=ultimas, total=sum(sit.values()), achados=achados, n_achados=n_achados,
                            sit_barras=_barras_situacao(sit), semanas=_por_semana(), garantias=_garantias(),
-                           estoque=_estoque_minimo())
+                           estoque=_estoque_minimo(), lembretes=lemb, n_lembretes=n_lemb)
 
 
 # ------------------------------------------------------------------ dados dos gráficos

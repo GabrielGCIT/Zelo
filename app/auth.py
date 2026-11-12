@@ -117,7 +117,19 @@ def registrar_hooks(app):
     @app.context_processor
     def _globais():
         from app.models import cfg
-        return dict(usuario=getattr(g, 'usuario', None), pode=pode, empresa=cfg('empresa'), versao=_versao())
+        return dict(usuario=getattr(g, 'usuario', None), pode=pode, empresa=cfg('empresa'), versao=_versao(),
+                    lembretes_n=_lembretes_n)
+
+    def _lembretes_n():
+        """(quantos, urgentes) para o número ao lado de Minha fila. Nunca derruba a tela."""
+        if not getattr(g, 'usuario', None):
+            return (0, 0)
+        try:
+            from app.lembretes import contagem
+            return contagem()
+        except Exception:                        # noqa: BLE001
+            app.logger.exception('Falha ao contar lembretes')
+            return (0, 0)
 
     @app.errorhandler(403)
     def _proibido(_e):

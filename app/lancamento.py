@@ -41,6 +41,10 @@ ABAS = {
     'estoque': ('Estoque', ['Entrada no estoque', 'Enviar para outro site', 'A localizar', 'Separar para baixa', 'Baixar']),
 }
 KIT_OPCOES = ['Mouse + teclado', 'Só mouse', 'Só teclado', 'Nenhum']
+# A "aba" só existe para o motor barrar ação de outra guia da grade. Telas que montam a própria
+# lista de ações (bipagem, desligamento) passam esta aba, que não está no catálogo: a conferência
+# acontece inteira, só o recorte por guia é que não se aplica.
+ABA_LIVRE = 'livre'
 
 # ------------------------------------------------------------------ lançamento em cards
 # card → (título, subtítulo, ícone, aba do motor)

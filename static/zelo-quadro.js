@@ -1,19 +1,6 @@
 /* Quadros de arrastar (kanban) do Zelo. Sem biblioteca: arrastar nativo + menu "Mover para" (toque e teclado).
    <div class="z-quadro" data-url="/api/..."> <div class="z-col" data-col="X"><div class="z-col-corpo"> cartões .z-kc[data-id] */
-function zAviso(msg, tipo, link) {
-  let box = document.getElementById('z-avisos');
-  if (!box) { box = document.createElement('div'); box.id = 'z-avisos'; document.body.appendChild(box); }
-  const t = document.createElement('div'); t.className = 'z-toast ' + (tipo || 'ok');
-  t.innerHTML = '<i class="fa ' + (tipo === 'erro' ? 'fa-circle-xmark' : tipo === 'aviso' ? 'fa-triangle-exclamation' : 'fa-circle-check') + '"></i><span></span>';
-  t.querySelector('span').textContent = msg;
-  if (link) { const a = document.createElement('a'); a.href = link.href; a.textContent = link.texto; t.appendChild(a); }
-  box.appendChild(t); setTimeout(() => { t.classList.add('sai'); setTimeout(() => t.remove(), 300); }, tipo === 'erro' ? 7000 : 4000);
-}
-async function zPost(url, body) {
-  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': zCsrf()}, body: JSON.stringify(body)});
-  if (!r.ok) throw new Error(r.status === 403 ? 'Seu perfil não permite essa ação' : 'Erro ' + r.status);
-  return r.json();
-}
+/* zAviso e zPost vêm do zelo.js, carregado pelo base.html. */
 function zContar(q) { q.querySelectorAll('.z-col').forEach(c => { const n = c.querySelectorAll('.z-kc').length; const b = c.querySelector('.z-col-n'); if (b) b.textContent = n;
   const v = c.querySelector('.z-col-vazio'); if (v) v.hidden = n > 0; }); }
 function zQuadro(q, aoMover) {

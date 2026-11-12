@@ -21,6 +21,16 @@ def data_br(v):
     return s
 
 
+def fone_br(v):
+    """11 dígitos → (11) 98765-4321. Qualquer outro tamanho sai como está."""
+    d = ''.join(c for c in str(v or '') if c.isdigit())
+    if len(d) == 11:
+        return f'({d[:2]}) {d[2:7]}-{d[7:]}'
+    if len(d) == 10:
+        return f'({d[:2]}) {d[2:6]}-{d[6:]}'
+    return str(v or '')
+
+
 def hoje_iso():
     return date.today().isoformat()
 
@@ -34,6 +44,7 @@ def dias_desde(v):
 
 def registrar(app):
     app.jinja_env.filters['data'] = data_br
+    app.jinja_env.filters['fone'] = fone_br
     app.jinja_env.filters['cor'] = lambda s: COR_SITUACAO.get(s or '', 'secondary')
     app.jinja_env.globals['dias_desde'] = dias_desde
     app.jinja_env.globals['hoje'] = hoje_iso

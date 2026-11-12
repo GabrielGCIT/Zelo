@@ -1,7 +1,7 @@
 {% extends 'base.html' %}{% from '_macros.html' import sit, item_link, pessoa_link, paginacao %}
 {% block title %}Itens{% endblock %}
 {% block content %}
-<div class="d-flex flex-wrap align-items-center gap-2"><div><h1 class="z-titulo">Itens</h1><p class="z-sub">Equipamentos (ativos) cadastrados. A situação sai do Histórico.</p></div>
+<div class="d-flex flex-wrap align-items-center gap-2"><div><h1 class="z-titulo">Itens</h1><p class="z-sub">Equipamentos (ativos) cadastrados. A situação sai do Histórico. Marque vários para lançar de uma vez ou imprimir etiquetas.</p></div>
 {% if pode('lancar') %}<div class="ms-auto"><a class="btn btn-sm btn-zelo" href="{{ url_for('consulta.item_novo') }}"><i class="fa fa-plus me-1"></i>Cadastrar ativo</a></div>{% endif %}</div>
 <form class="z-card row g-2 align-items-end" method="get">
   <div class="col-md-3"><label class="form-label small">Buscar</label><input class="form-control form-control-sm" name="q" value="{{ f.q }}" placeholder="código, tag, modelo, pessoa..."></div>
@@ -10,9 +10,60 @@
   {% endfor %}
   <div class="col-auto"><button class="btn btn-sm btn-zelo">Filtrar</button> <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('consulta.itens') }}">Limpar</a></div>
 </form>
+<form method="post" id="f-sel" action="{{ url_for('bipar.inicio') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="modo" id="sel-modo" value="devolver">
 <div class="z-card"><div class="table-responsive"><table class="table table-sm table-hover">
-<thead><tr><th>Código</th><th>Categoria</th><th>Modelo</th><th>Tag / IMEI</th><th>Site</th><th>Situação</th><th>Com quem</th><th>Desde</th><th>Propriedade</th></tr></thead>
-<tbody>{% for i in pag.items %}<tr><td>{{ item_link(i.codigo) }}</td><td>{{ i.categoria or '' }}</td><td>{{ i.modelo or '' }}</td><td class="z-mono small">{{ i.tag or i.imei1 or '' }}</td><td>{{ i.site or '' }}</td><td>{{ sit(i.situacao) }}{% if i.kit %} <small class="text-muted">kit {{ i.kit|lower }}</small>{% endif %}</td><td>{{ pessoa_link(i.matricula, i.com_quem) }}</td><td>{{ i.desde|data }}</td><td>{{ i.propriedade or '' }}</td></tr>
-{% else %}<tr><td colspan="9" class="z-vazio">Nenhum item com esses filtros.</td></tr>{% endfor %}</tbody></table></div>
+<thead><tr>
+  <th style="width:2rem"><input class="form-check-input" type="checkbox" id="sel-todos" title="Marcar a página"></th>
+  <th>Código</th><th>Categoria</th><th>Modelo</th><th>Tag / IMEI</th><th>Site</th><th>Situação</th><th>Com quem</th><th>Desde</th><th>Propriedade</th></tr></thead>
+<tbody>{% for i in pag.items %}<tr>
+  <td><input class="form-check-input z-sel" type="checkbox" name="codigo" value="{{ i.codigo }}" aria-label="Marcar {{ i.codigo }}"></td>
+  <td>{{ item_link(i.codigo) }}</td><td>{{ i.categoria or '' }}</td><td>{{ i.modelo or '' }}</td><td class="z-mono small">{{ i.tag or i.imei1 or '' }}</td><td>{{ i.site or '' }}</td><td>{{ sit(i.situacao) }}{% if i.kit %} <small class="text-muted">kit {{ i.kit|lower }}</small>{% endif %}</td><td>{{ pessoa_link(i.matricula, i.com_quem) }}</td><td>{{ i.desde|data }}</td><td>{{ i.propriedade or '' }}</td></tr>
+{% else %}<tr><td colspan="10" class="z-vazio">Nenhum item com esses filtros.</td></tr>{% endfor %}</tbody></table></div>
 {{ paginacao(pag, 'consulta.itens') }}</div>
+
+<div class="z-selbar" id="selbar" hidden>
+  <span><b id="sel-n">0</b> item(ns) marcado(s)</span>
+  {% if pode('lancar') %}
+  <label class="small mb-0" for="sel-acao">Lançar em lote:</label>
+  <select class="form-select form-select-sm" id="sel-acao">
+    {% for k, (tit, _i, _a, _c, _d) in modos.items() %}{% if k != 'conferir' %}<option value="{{ k }}">{{ tit }}</option>{% endif %}{% endfor %}
+  </select>
+  <button class="btn btn-sm btn-light" id="sel-ir"><i class="fa fa-arrow-right me-1"></i>Conferir na fila</button>
+  {% endif %}
+  <button class="btn btn-sm btn-outline-light" id="sel-etq" formaction="{{ url_for('bipar.etiquetas') }}" formtarget="_blank"><i class="fa fa-tags me-1"></i>Etiquetas</button>
+  <button class="btn btn-sm btn-link ms-auto" type="button" id="sel-zera">limpar seleção</button>
+</div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+const F = document.getElementById('f-sel'), BAR = document.getElementById('selbar');
+const marcados = () => [...F.querySelectorAll('.z-sel')].filter(c => c.checked);
+function conta() {
+  const n = marcados().length;
+  document.getElementById('sel-n').textContent = n; BAR.hidden = !n;
+  const t = document.getElementById('sel-todos'), todos = F.querySelectorAll('.z-sel').length;
+  t.checked = n > 0 && n === todos; t.indeterminate = n > 0 && n < todos;
+}
+F.querySelectorAll('.z-sel').forEach(c => c.addEventListener('change', conta));
+document.getElementById('sel-todos').onchange = e => {
+  F.querySelectorAll('.z-sel').forEach(c => c.checked = e.target.checked); conta(); };
+document.getElementById('sel-zera').onclick = () => { F.querySelectorAll('.z-sel').forEach(c => c.checked = false); conta(); };
+const ir = document.getElementById('sel-ir');
+if (ir) ir.onclick = () => { document.getElementById('sel-modo').value = document.getElementById('sel-acao').value; };
+// a seleção sobrevive ao clique com Shift (marcar um intervalo), que é o que se espera numa tabela
+let ancora = null;
+F.querySelectorAll('.z-sel').forEach((c, i) => c.addEventListener('click', e => {
+  const todas = [...F.querySelectorAll('.z-sel')];
+  if (e.shiftKey && ancora !== null) {
+    const [a, b] = [Math.min(ancora, i), Math.max(ancora, i)];
+    for (let k = a; k <= b; k++) todas[k].checked = c.checked;
+    conta();
+  }
+  ancora = i;
+}));
+conta();
+</script>
 {% endblock %}

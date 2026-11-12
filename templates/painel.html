@@ -6,6 +6,23 @@
 <div class="ms-auto d-flex gap-2"><a class="btn btn-sm btn-zelo" href="{{ url_for('lancar.grade') }}"><i class="fa fa-plus me-1"></i>Novo lançamento</a>
 <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('painel.fila') }}"><i class="fa fa-list-check me-1"></i>Minha fila</a></div></div>
 
+<div class="z-card">
+ <div class="d-flex flex-wrap align-items-baseline gap-2 mb-2"><h2 class="m-0"><i class="fa fa-bell me-2 text-secondary"></i>Precisa de alguém</h2>
+  {% if lembretes %}<span class="badge text-bg-{{ 'danger' if lembretes[0].urgencia == 'alta' else 'warning' }}">{{ '{:,}'.format(n_lembretes).replace(',', '.') }} em atraso</span>{% endif %}
+  <span class="small text-muted ms-auto">Só o que já passou do prazo. O que está em andamento fica em <a href="{{ url_for('painel.fila') }}">Minha fila</a>.</span></div>
+ {% if lembretes %}
+ <div class="z-lemb">{% for l in lembretes %}
+  <div class="z-lb {{ l.urgencia }}">
+   <div class="z-lb-n">{{ l.n }}</div>
+   <div class="z-lb-m"><div class="z-lb-t">{{ l.titulo }}</div><div class="z-lb-p">{{ l.porque }}</div>
+    <a class="z-lb-a" href="{{ l.url }}">{{ l.acao }} <i class="fa fa-arrow-right ms-1"></i></a></div>
+  </div>{% endfor %}</div>
+ {% else %}
+ <div class="z-lemb-vazio"><i class="fa fa-circle-check text-success"></i>
+  <span>Nada atrasado: empréstimos no prazo, devoluções em dia, termos assinados e nenhum desligado com equipamento.</span></div>
+ {% endif %}
+</div>
+
 <div class="z-kpis">{% for r, v, url, alerta in kpis %}
   <a class="z-kpi {{ 'alerta' if alerta and v else '' }}" href="{{ url }}"><div class="r">{{ r }}</div><div class="v">{{ '{:,}'.format(v).replace(',', '.') }}</div></a>
 {% endfor %}</div>

@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}Desligamentos{% endblock %}
+{% block content %}
+<h1 class="z-titulo">Desligamentos em aberto</h1>
+<p class="z-sub">Quem saiu da empresa e ainda consta com equipamento, linha ou acessório. Cada nome abre uma fila
+ única para devolver tudo de uma vez.</p>
+
+{% if not fila %}
+<div class="z-card"><div class="z-vazio"><i class="fa fa-circle-check text-success"></i>
+ <div>Nenhuma pendência de desligamento</div>
+ <small>Todo mundo marcado como Desligado já devolveu o que tinha.</small></div></div>
+{% else %}
+<div class="z-cards">{% for f in fila %}
+ <a class="z-dcard" href="{{ url_for('desligar.ficha', pid=f.p.id) }}">
+  <div class="d-flex align-items-start gap-2">
+   <div class="z-av">{{ f.p.nome[:1] }}</div>
+   <div class="flex-grow-1">
+    <div class="z-dcard-n">{{ f.p.nome }}</div>
+    <div class="small text-muted"><span class="z-mono">{{ f.p.id }}</span>{% if f.p.cc %} · CC {{ f.p.cc }}{% endif %}
+     {%- if f.p.site %} · {{ f.p.site }}{% endif %}</div>
+   </div>
+   <span class="badge text-bg-danger">{{ f.n }}</span></div>
+  <div class="z-dcard-l">
+   {% if f.t.itens %}<span><i class="fa fa-laptop"></i>{{ f.t.itens|length }} equipamento(s)</span>{% endif %}
+   {% if f.t.linhas %}<span><i class="fa fa-sim-card"></i>{{ f.t.linhas|length }} linha(s)</span>{% endif %}
+   {% if f.t.kit %}<span><i class="fa fa-computer-mouse"></i>{{ f.t.kit|length }} do kit</span>{% endif %}
+   {% if f.t.acess %}<span><i class="fa fa-plug"></i>{{ f.t.acess|length }} acessório(s)</span>{% endif %}</div>
+  {% if f.desde %}{% set d = dias_desde(f.desde) %}
+  <div class="small {{ 'z-erro' if d and d > 30 else 'z-aviso' if d and d > 7 else 'text-muted' }}">
+   devolução pedida em {{ f.desde|data }}{% if d %} · há {{ d }} dia(s){% endif %}</div>{% endif %}
+ </a>{% endfor %}</div>
+{% endif %}
+{% endblock %}

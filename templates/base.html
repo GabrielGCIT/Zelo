@@ -23,10 +23,11 @@
 <nav class="z-topbar">
   <button class="btn btn-sm z-ico d-lg-none" onclick="document.body.classList.toggle('z-menu-aberto')" aria-label="Menu"><i class="fa fa-bars"></i></button>
   <a class="z-marca" href="{{ url_for('painel.inicio') }}"><span class="z-logo">Z</span> Zelo <small>{{ empresa }}</small></a>
-  <form class="z-busca" action="{{ url_for('consulta.buscar') }}" method="get">
+  <button class="z-busca z-busca-b" type="button" onclick="zPaleta()" title="Busca rápida (Ctrl+K)">
     <i class="fa fa-magnifying-glass"></i>
-    <input name="q" placeholder="Plaqueta, tag, IMEI, linha, nome ou matrícula" value="{{ request.args.get('q','') if request.endpoint=='consulta.buscar' else '' }}">
-  </form>
+    <span>Busque ou bipe: item, pessoa, linha, Nº…</span>
+    <kbd class="d-none d-md-inline">Ctrl K</kbd>
+  </button>
   <div class="ms-auto d-flex align-items-center gap-2">
     <button class="btn btn-sm z-ico" onclick="zTema()" title="Tema claro/escuro"><i class="fa fa-circle-half-stroke"></i></button>
     <div class="dropdown">
@@ -43,12 +44,15 @@
   {% macro link(endpoint, icone, texto, prefixo=None) -%}
     <a href="{{ url_for(endpoint) }}" class="{{ 'ativo' if (ep == endpoint or (prefixo and ep.startswith(prefixo))) else '' }}"><i class="fa {{ icone }}"></i>{{ texto }}</a>
   {%- endmacro %}
+  {% set lb = lembretes_n() %}
   <div class="z-grupo">Visão geral</div>
   {{ link('painel.inicio', 'fa-gauge', 'Painel') }}
-  {{ link('painel.fila', 'fa-list-check', 'Minha fila') }}
+  <a href="{{ url_for('painel.fila') }}" class="{{ 'ativo' if ep == 'painel.fila' }}"><i class="fa fa-list-check"></i>Minha fila
+    {% if lb[0] %}<span class="z-badge {{ 'urg' if lb[1] }}" title="{{ lb[0] }} lembrete(s){{ ', ' ~ lb[1] ~ ' urgente(s)' if lb[1] }}">{{ lb[0] }}</span>{% endif %}</a>
   {% if pode('lancar') %}
   <div class="z-grupo">Lançar</div>
   {{ link('lancar.grade', 'fa-pen-to-square', 'Lançamentos', 'lancar.') }}
+  {{ link('bipar.inicio', 'fa-barcode', 'Bipar', 'bipar.') }}
   {{ link('acompanhar.inicio', 'fa-route', 'Acompanhar', 'acompanhar.') }}
   {{ link('manutencao.inicio', 'fa-screwdriver-wrench', 'Manutenção', 'manutencao.') }}
   {{ link('estoque.consumiveis', 'fa-boxes-stacked', 'Consumíveis', 'estoque.') }}
@@ -59,6 +63,7 @@
   {{ link('linhas.lista', 'fa-sim-card', 'Linhas', 'linhas.') }}
   {{ link('consulta.historico', 'fa-clock-rotate-left', 'Histórico') }}
   {{ link('consulta.emprestimos', 'fa-hand-holding', 'Empréstimos') }}
+  {{ link('desligar.lista', 'fa-door-open', 'Desligamentos', 'desligar.') }}
   {{ link('consulta.contratos', 'fa-file-contract', 'Contratos e garantias') }}
   {{ link('termo.inicio', 'fa-file-signature', 'Termo') }}
   {% if pode('admin') %}
@@ -77,12 +82,22 @@
   {% endwith %}
   {% block content %}{% endblock %}
 </main>
+{% if usuario %}
+<div class="z-paleta" id="z-paleta" hidden>
+  <div class="z-paleta-cx" role="dialog" aria-modal="true" aria-label="Busca rápida">
+    <div class="z-paleta-top"><i class="fa fa-magnifying-glass"></i>
+      <input id="z-pq" autocomplete="off" spellcheck="false" aria-controls="z-pr"
+             placeholder="Item, pessoa, linha, Nº do lançamento, nome da tela — ou bipe a plaqueta">
+      <button class="btn btn-sm z-ico" type="button" onclick="zPaleta(false)" aria-label="Fechar"><i class="fa fa-xmark"></i></button></div>
+    <div class="z-paleta-res" id="z-pr" role="listbox"></div>
+    <div class="z-paleta-pe"><span><kbd>↑</kbd><kbd>↓</kbd> navegar</span><span><kbd>Enter</kbd> abrir</span>
+      <span><kbd>Tab</kbd> ações do item</span><span><kbd>Esc</kbd> fechar</span></div>
+  </div>
+</div>
+{% endif %}
 <script src="{{ url_for('static', filename='vendor/bootstrap-5.3.0/js/bootstrap.bundle.min.js') }}"></script>
-<script>
-function zTema(){var a=document.documentElement.getAttribute('data-bs-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-bs-theme',a);localStorage.setItem('zelo-tema',a);
-document.dispatchEvent(new CustomEvent('zelo:tema',{detail:a}));}
-function zCsrf(){return document.querySelector('meta[name=csrf-token]').content;}
-</script>
+<script src="{{ url_for('static', filename='zelo.js') }}"></script>
+{% if usuario %}<script src="{{ url_for('static', filename='zelo-busca.js') }}" data-url="{{ url_for('busca.api') }}"></script>{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Etiquetas{% endblock %}
+{% block head %}
+<style>
+/* A folha: 3 colunas em A4 (3 × 60mm cabe nos 194mm úteis). Largura é o que decide se o leitor
+   bipa de primeira: numa etiqueta estreita a barra fina fica fina demais para o feixe. */
+.z-folha { display: grid; grid-template-columns: repeat(3, 60mm); gap: 2mm; }
+.z-etq { width: 60mm; height: 28mm; border: 1px dashed var(--grade); border-radius: 2mm; padding: 2mm;
+         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1mm;
+         overflow: hidden; background: #fff; }
+.z-etq svg { max-width: 100%; height: auto; }
+.z-etq .z-e-sub { font-size: 6.5pt; color: #333; text-align: center; line-height: 1.1; max-width: 100%;
+                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.z-etq .z-e-marca { font-size: 5.5pt; letter-spacing: .08em; color: #777; text-transform: uppercase; }
+@media print {
+  .z-nao-imprime, .z-topbar, .z-sidebar, .alert { display: none !important; }
+  .z-main { margin: 0 !important; padding: 0 !important; }
+  .z-etq { border-color: #e6e6e6; break-inside: avoid; }
+  @page { size: A4; margin: 8mm; }
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="z-nao-imprime">
+ <div class="d-flex flex-wrap align-items-center gap-2 mb-2"><div>
+  <h1 class="z-titulo">Etiquetas</h1>
+  <p class="z-sub">{{ n }} equipamento(s){% if copias > 1 %} · {{ copias }} vias de cada{% endif %}. O código de barras leva a plaqueta — é o que a tela de bipagem espera ler.</p></div>
+  <div class="ms-auto d-flex gap-2 align-items-center">
+   <form class="d-flex gap-2 align-items-center" method="get">
+    {% for c in codigos %}<input type="hidden" name="c" value="{{ c }}">{% endfor %}
+    <label class="small text-muted mb-0" for="copias">Vias de cada</label>
+    <select class="form-select form-select-sm" style="width:5rem" name="copias" id="copias" onchange="this.form.submit()">
+     {% for i in [1,2,3,4,6,10] %}<option value="{{ i }}" {{ 'selected' if i==copias }}>{{ i }}</option>{% endfor %}</select>
+   </form>
+   <button class="btn btn-zelo" onclick="window.print()"><i class="fa fa-print me-1"></i>Imprimir</button></div></div>
+ <div class="alert alert-light border small py-2">Papel comum serve para teste; para colar no equipamento use etiqueta de poliéster.
+  Antes de imprimir um lote grande, imprima uma folha e passe o leitor: se ele bipar de primeira, está na medida certa.</div>
+</div>
+
+<div class="z-folha">{% for it, svg in etq %}
+ <div class="z-etq">
+  <div class="z-e-marca">{{ empresa }}</div>
+  {{ svg|safe }}
+  <div class="z-e-sub">{{ it.hostname or it.tag or ((it.categoria or '') ~ ' ' ~ (it.modelo or '')) }}</div>
+ </div>{% endfor %}</div>
+{% endblock %}
