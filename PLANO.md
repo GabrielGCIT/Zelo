@@ -58,7 +58,6 @@
   bipagem, ou imprime as etiquetas dos marcados.
 - **Desligamentos**: lista de quem saiu e ainda consta com alguma coisa, e uma fila por pessoa que
   devolve equipamento, linha, kit do EC e acessório emprestado de uma vez, com motivo Desligamento.
-- Falta combinar: lembrete por e-mail precisa de um relay SMTP interno — hoje o Zelo cobra na tela.
 
 ## Feito em 11/11 (v1.5.0), a pedido do Gabriel
 - Quadro das entregas com 2 colunas (Reservado → Entregue); termo e chamado são marcas no cartão.
@@ -87,8 +86,8 @@ que libera o ativo. Quem não está presencial recebe um link e assina de onde e
 - **Cobrança**: via pedida e não assinada vira lembrete no Painel e seção em Minha fila.
 - `url_base` em Configurações: sem ele, o link copiado sai com o endereço do navegador e só funciona na
   máquina de quem copiou. O painel avisa quando isso acontece.
-- Falta combinar: mandar o link por e-mail automaticamente depende do mesmo relay SMTP da etapa 4; hoje o
-  link é copiado ou compartilhado pelo botão Enviar.
+- Decidido: o Zelo não dispara e-mail. O link é copiado ou compartilhado pelo botão Enviar, e quem precisar
+  mandar por e-mail manda na mão.
 
 ## Encaixes pendentes (sem etapa fixa)
 - Gabriel terminar o teste de ponta a ponta no laboratório (entrega com chamado → anexo, nota, ativo).

@@ -5,9 +5,9 @@ Lembrete é outra coisa: é o que já passou do ponto e está cobrando. A difere
 reserva de ontem é rotina, reserva de três semanas é problema. Por isso cada lembrete tem um
 prazo próprio e só aparece depois dele.
 
-Aparece no alto do Painel e como número ao lado de Minha fila, então o sistema cobra sozinho a
-cada vez que alguém abre o Zelo. Não há e-mail porque o servidor não tem relay configurado; se
-um dia tiver, `tudo()` já devolve pronto o que um resumo diário precisaria mandar.
+Aparece no alto do Painel e como número ao lado de Minha fila: a cobrança é na tela, toda vez que
+alguém abre o Zelo. É de propósito que não há disparo por fora — avisar fica onde o trabalho já
+acontece, sem mais um canal para manter.
 
 Cada lembrete é um dicionário com: chave, titulo, n, porque (por que isso importa), url,
 acao (o rótulo do botão) e urgencia ('alta' | 'media' | 'baixa'). n == 0 não entra na lista.
