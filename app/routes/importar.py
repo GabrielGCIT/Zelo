@@ -47,6 +47,7 @@ def itens():
     from app.conferir_sd import aplicar as aplicar_itens
     from app.conferir_sd import baixar as baixar_itens
     from app.conferir_sd import conferir as conferir_itens
+    from app.conferir_sd import duplicados as duplicados_sd
     from app.models import CATEGORIAS, SITES
     if request.method == 'POST' and request.form.get('acao') == 'aplicar':
         try:
@@ -62,12 +63,13 @@ def itens():
             flash(d, 'secondary')
         return redirect(url_for('importar.itens', de_novo='1'))
 
-    linhas, resumo, erro, truncou = [], {}, '', False
+    linhas, resumo, erro, truncou, repetidos_sd = [], {}, '', False, []
     buscou = bool(request.method == 'POST' or request.args.get('de_novo'))
     if buscou:
         ativos, truncou, erro = baixar_itens()
         if ativos:
             linhas, resumo = conferir_itens(ativos)
+            repetidos_sd = duplicados_sd(ativos)
     return render_template('conferir_itens.html', linhas=linhas, resumo=resumo, erro=erro, truncou=truncou,
                            grupos=GRUPOS, ligado=sd.configurado(), teto=MAX_PAGINAS * POR_PAGINA, buscou=buscou,
-                           categorias=CATEGORIAS, sites=SITES)
+                           categorias=CATEGORIAS, sites=SITES, repetidos_sd=repetidos_sd)

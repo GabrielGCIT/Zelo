@@ -64,7 +64,9 @@ def do_sd(a):
     return {
         'id': _campo(a, 'id'),
         'hostname': _campo(a, 'name'),
-        'tag': _campo(a, 'serial_number', 'service_tag'),
+        # `org_serial_number` entra na lista porque é onde a service tag mora no build da MB
+        # (ver CLAUDE.md): lendo só `serial_number` esta tela acha que o SD não tem tag nenhuma.
+        'tag': _campo(a, 'serial_number', 'org_serial_number', 'service_tag'),
         'plaqueta': _campo(a, 'asset_tag', 'barcode'),
         'modelo': _campo(a, 'product'),
         'tipo': _campo(a, 'product_type'),
@@ -171,6 +173,39 @@ def conferir(ativos):
     resumo['total'] = len(linhas)
     resumo['no_sd'] = len(ativos)
     return linhas, resumo
+
+
+def duplicados(ativos):
+    """Ativos repetidos DENTRO do Service Desk — a mesma máquina cadastrada duas vezes lá.
+
+    Diferente do grupo 'repetido', que é duplicidade no Zelo. Serve para duas coisas:
+
+    1. ler o teste do agente sem depender de olho: criado o ativo pelo Zelo e forçada a varredura,
+       ou o agente fundiu com o registro (1 ativo) ou criou outro (2);
+    2. a limpeza da base que o Gabriel quer fazer — no SDP isso se resolve em Actions → Reconcile,
+       que mantém o mais novo e carrega fornecedor, custo e PO do registro manual.
+
+    Só agrupa por service tag e hostname: plaqueta repetida no SD é comum e legítima (etiqueta
+    reaproveitada), e acusá-la encheria a tela de ruído.
+    """
+    grupos = []
+    for rotulo, chave in (('service tag', 'tag'), ('hostname', 'hostname')):
+        por_chave = {}
+        for s in ativos:
+            v = _up(s.get(chave))
+            if v:
+                por_chave.setdefault(v, []).append(s)
+        for v, iguais in sorted(por_chave.items()):
+            if len(iguais) > 1:
+                grupos.append({'por': rotulo, 'chave': iguais[0][chave], 'ativos': iguais})
+    # uma máquina com tag E hostname repetidos apareceria duas vezes; vale a mais específica
+    vistos, saida = set(), []
+    for g in grupos:
+        ids = tuple(sorted(a['id'] for a in g['ativos']))
+        if ids not in vistos:
+            vistos.add(ids)
+            saida.append(g)
+    return saida
 
 
 def _item(it):

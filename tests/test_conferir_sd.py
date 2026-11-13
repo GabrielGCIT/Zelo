@@ -245,3 +245,43 @@ def test_so_no_zelo_lista_so_maquina_com_hostname(app, sdl):
     sos = {x['item']['codigo'] for x in linhas if x['caso'] == 'so_zelo'}
     assert 'MAQUINA-SEM-SD' in sos
     assert 'MONITOR-SEM-HOST' not in sos and 'SUCATA' not in sos
+
+
+# ------------------------------------------------------------------ repetido DENTRO do Service Desk
+
+def _a(ident, host, tag=''):
+    return {'id': ident, 'hostname': host, 'tag': tag, 'plaqueta': '', 'modelo': '', 'tipo': '',
+            'estado': 'In Store', 'usuario': '', 'site': '', 'garantia': '', 'fornecedor': ''}
+
+
+def test_duplicados_acha_a_mesma_tag_em_dois_ativos(app):
+    from app.conferir_sd import duplicados
+    g = duplicados([_a('1', 'NB-A', 'ABC123'), _a('2', 'NB-A-NOVO', 'abc123'), _a('3', 'NB-B', 'XYZ')])
+    assert len(g) == 1 and g[0]['por'] == 'service tag'
+    assert sorted(x['id'] for x in g[0]['ativos']) == ['1', '2']
+
+
+def test_duplicados_acha_o_mesmo_hostname(app):
+    from app.conferir_sd import duplicados
+    g = duplicados([_a('1', 'NB-A', 'T1'), _a('2', 'nb-a', 'T2')])
+    assert len(g) == 1 and g[0]['por'] == 'hostname'
+
+
+def test_duplicados_nao_conta_o_mesmo_par_duas_vezes(app):
+    """Tag E hostname repetidos é um problema só, não dois."""
+    from app.conferir_sd import duplicados
+    g = duplicados([_a('1', 'NB-A', 'T1'), _a('2', 'NB-A', 'T1')])
+    assert len(g) == 1
+
+
+def test_duplicados_ignora_vazio(app):
+    from app.conferir_sd import duplicados
+    assert duplicados([_a('1', '', ''), _a('2', '', ''), _a('3', 'NB-C', 'T3')]) == []
+
+
+def test_tag_do_sd_tambem_sai_de_org_serial_number(app):
+    """No build da MB a service tag mora em org_serial_number; lendo só serial_number a tela
+    acharia que o SD não tem tag nenhuma."""
+    from app.conferir_sd import do_sd
+    assert do_sd({'id': '1', 'name': 'NB-X', 'org_serial_number': 'ABC123'})['tag'] == 'ABC123'
+    assert do_sd({'id': '2', 'name': 'NB-Y', 'serial_number': 'DEF456'})['tag'] == 'DEF456'

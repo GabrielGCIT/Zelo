@@ -45,6 +45,31 @@
 </div>
 {% endif %}
 
+{% if repetidos_sd %}
+{# Duplicidade dentro do PRÓPRIO Service Desk — outra coisa que o grupo "Cadastro repetido no Zelo". #}
+<div class="z-card">
+ <div class="d-flex flex-wrap align-items-baseline gap-2 mb-1">
+  <h2 class="h6 m-0">Repetido no Service Desk</h2><span class="badge text-bg-danger">{{ repetidos_sd|length }}</span>
+ </div>
+ <p class="small text-muted">A mesma máquina está cadastrada mais de uma vez lá. No SDP isso se resolve em
+  <b>Actions → Reconcile</b>, que mantém o mais novo e carrega fornecedor, custo e PO do registro manual.
+  Enquanto houver duas, o Zelo sincroniza com a que achar primeiro.</p>
+ <div class="table-responsive"><table class="table table-sm align-middle">
+  <thead><tr><th>Repetido por</th><th>Valor</th><th>Ativos no Service Desk</th></tr></thead>
+  <tbody>{% for g in repetidos_sd %}<tr>
+   <td>{{ g.por }}</td><td class="z-mono">{{ g.chave }}</td>
+   <td>{% for a in g.ativos %}<div class="small">
+     <span class="z-mono">#{{ a.id }}</span> {{ a.hostname or '(sem nome)' }}
+     {% if a.tag %}· tag {{ a.tag }}{% endif %}
+     {% if a.estado %}· {{ a.estado }}{% endif %}
+     {% if a.usuario %}· {{ a.usuario }}{% endif %}</div>{% endfor %}</td>
+  </tr>{% endfor %}</tbody>
+ </table></div>
+</div>
+{% elif buscou and not erro %}
+<p class="small text-muted">Nenhum ativo repetido dentro do Service Desk.</p>
+{% endif %}
+
 {% for caso, (titulo, porque) in grupos.items() %}{% set grupo = linhas|selectattr('caso', 'equalto', caso)|list %}
 {% if grupo and caso != 'confere' %}
 <div class="z-card">
