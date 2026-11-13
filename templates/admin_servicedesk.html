@@ -10,7 +10,17 @@
  <div class="col-6"><label class="form-label mb-0">Certificado HTTPS</label><select class="form-select form-select-sm" name="sd_ssl">{% for o in ['Verificar','Ignorar'] %}<option {{ 'selected' if ssl==o }}>{{ o }}</option>{% endfor %}</select></div>
  <div class="col-6"><label class="form-label mb-0">Integração ligada</label><select class="form-select form-select-sm" name="sd_ativo">{% for o in ['Não','Sim'] %}<option {{ 'selected' if ativo==o }}>{{ o }}</option>{% endfor %}</select></div>
  <div class="col-12"><label class="form-label mb-0">Atualizar o ativo no Service Desk (usuário e estado)</label><select class="form-select form-select-sm" name="sd_ativos">{% for o in ['Não','Sim'] %}<option {{ 'selected' if ativos==o }}>{{ o }}</option>{% endfor %}</select>
-  <div class="form-text">Entrega/empréstimo concluído → ativo "In Use" com a pessoa; devolução → sem usuário, "In Store". O ativo é achado pelo hostname.</div></div>
+  <div class="form-text">O estado sai da <b>situação atual do item</b>, então o ciclo inteiro acompanha: entrega e empréstimo viram
+   "In Use" com a pessoa, devolução volta para "In Store" sem usuário, manutenção vira "In Repair" e baixa vira "Expired".
+   O ativo é achado pelo hostname, e item sem hostname no Zelo não sincroniza.</div></div>
+ <div class="col-12"><label class="form-label mb-0">Anexar o equipamento ao chamado</label><select class="form-select form-select-sm" name="sd_anexar_ativo">{% for o in ['Não','Sim'] %}<option {{ 'selected' if anexar_ativo==o }}>{{ o }}</option>{% endfor %}</select>
+  <div class="form-text">Além da nota, põe o equipamento <b>dentro</b> do chamado, na lista de ativos. Ele lê os que já estão lá e
+   acrescenta, sem apagar os outros. Se não passar, a nota e o termo valem do mesmo jeito.</div></div>
+ <div class="col-12"><label class="form-label mb-0">Estados próprios (opcional)</label>
+  <input class="form-control form-control-sm z-mono" name="sd_estados" value="{{ estados }}" placeholder="Em uso=In Use;Baixada=Disposed">
+  <div class="form-text">Só se o seu Service Desk tem estados diferentes dos de fábrica. Formato <code>Situação do Zelo=Estado do SD</code>,
+   separados por ponto e vírgula; deixar o lado direito vazio faz aquela situação não mexer no estado. Em branco, vale o padrão:
+   {{ padrao_estados }}.</div></div>
  <div class="col-12 d-flex gap-2 mt-2"><button class="btn btn-sm btn-zelo">Salvar</button></div>
 </form>
 <form method="post" class="mt-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="testar"><button class="btn btn-sm btn-outline-secondary"><i class="fa fa-plug me-1"></i>Testar conexão</button></form>

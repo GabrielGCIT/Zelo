@@ -331,6 +331,10 @@ def ajuste():
         ok, msg, m = gravar(it, ln, d, g.usuario.nome)
         if ok:
             registrar_log('ajuste de cadastro', f'Nº {m.id} · {it.codigo if it else ln.numero}: {msg} · {d["motivo"]}')
+            if it:                      # o ativo no Service Desk acompanha a correção
+                from flask import current_app
+                from app import servicedesk as sd
+                sd.enfileirar_item(current_app._get_current_object(), it)
             flash(msg, 'success')
             return redirect(url_for('consulta.item', codigo=it.codigo) if it else url_for('linhas.ficha', numero=ln.numero))
         flash(msg, 'danger')

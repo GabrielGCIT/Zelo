@@ -6,6 +6,16 @@ from app.manutencao import ACOES_MANUT, registrar
 from app.models import FORNEC_MANUT, STATUS_MANUT, Consumivel, Item, Manutencao, cfg_lista
 
 manutencao_bp = Blueprint('manutencao', __name__)
+
+
+def _avisar_sd(codigo):
+    """Máquina que entra ou sai de manutenção muda de estado no Service Desk (In Repair e volta)."""
+    from flask import current_app
+    from app import servicedesk as sd
+    from app.routes.consulta import achar_item
+    it = achar_item(codigo)
+    if it:
+        sd.enfileirar_item(current_app._get_current_object(), it)
 CAMPOS = ('acao', 'item', 'defeito', 'fornecedor', 'caso', 'status', 'visita', 'tecnico', 'chamado', 'backup', 'peca', 'qtd',
           'feito', 'backup_volta', 'obs')
 
@@ -21,6 +31,7 @@ def inicio():
         ok, msg = registrar(d, g.usuario.nome)
         if ok:
             registrar_log('manutenção', f'{d["item"]}: {msg}')
+            _avisar_sd(d['item'])
             flash('OK → ' + msg, 'success')
             return redirect(url_for('manutencao.inicio'))
         flash(msg, 'danger')
@@ -66,4 +77,5 @@ def api_status():
         ok, msg = registrar({'acao': 'Atualizar ocorrência', 'item': os_.item, 'status': para}, g.usuario.nome)
     if ok:
         registrar_log('manutenção', f'{os_.item}: {msg}')
+        _avisar_sd(os_.item)
     return jsonify(ok=ok, msg=msg)

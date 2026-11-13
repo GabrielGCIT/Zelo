@@ -161,13 +161,18 @@ Plaqueta (`asset_tag`/`barcode`), site, departamento, garantia (`warranty_expiry
 data de aquisição, custo. É a resposta à Giselly por outro caminho: o SD fica certo porque o Zelo o
 alimenta, em vez de a gestão de ativos mudar de casa.
 
-**E. Mais estados do ativo**
-Hoje só In Use e In Store. Dá para cobrir: Manutenção → `In Repair`; baixa → `Expired/Disposed`;
-transferência → o site novo. Baixo esforço, fecha os buracos do ciclo.
-
-**F. Anexar o ativo ao chamado** (`assets` no POST/PUT de request)
-Fazer o ativo entregue aparecer **dentro do chamado**, não só na nota. Outra resposta ao pedido da
-Giselly, e não precisa customizar o SD.
+**E + F. Ciclo completo do ativo** — FEITAS (v1.12.0)
+O estado no SD passou a sair da **situação atual do item**, não do tipo de lançamento: Em uso,
+Emprestado, Pendente devolução e Reservada → `In Use`; Em estoque, Devolvido, Em preparação →
+`In Store`; Manutenção → `In Repair`; Baixada → `Expired`. Situação sem equivalente (Em trânsito,
+Em transferência, A localizar, Aguardando baixa) **não mexe no estado** — melhor um estado velho que
+um estado mentiroso. O mapa é editável em Administração → Service Desk (`Situação = Estado`, um por
+`;`; valor vazio = não mexer), para o caso de os estados de lá terem outro nome.
+Manutenção e Ajustar cadastro mudam a situação sem gerar movimentação, então entram na fila por
+`enfileirar_item`, que não duplica pendência do mesmo hostname.
+Anexar o ativo **dentro do chamado** (não só na nota) é um liga-desliga na mesma tela: lê os ativos
+que já estão no chamado e acrescenta, porque o PUT substitui a lista inteira. Se falhar, a nota e o
+termo valem do mesmo jeito.
 
 **G. Abrir chamado a partir do Zelo** (`POST /api/v3/requests`)
 Casos que valem: recolhimento no desligamento (um chamado com a lista do que a pessoa tem), abertura
@@ -190,6 +195,6 @@ decisão do Gabriel é que compra e rollout vão para o Jira.
 1. **B** (pessoas/e-mail) — destrava o que já existe e quebra hoje.
 2. **A** (importar ativos) — o pedido, e base para o resto.
 3. **D** (reconciliação) — mostra o tamanho real do problema antes de automatizar correção.
-4. **E** + **F** — baratos, fecham o ciclo.
+4. ~~**E** + **F**~~ — feitas.
 5. **C** — depois que a reconciliação mostrar que o Zelo é confiável naqueles campos.
 6. **G**, **H**, **I** — conforme a necessidade aparecer.

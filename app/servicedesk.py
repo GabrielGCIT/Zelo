@@ -27,7 +27,7 @@ from app import db
 from app.models import Config
 
 ACCEPT = 'application/vnd.manageengine.sdp.v3+json'
-CHAVES = ('sd_url', 'sd_chave', 'sd_ssl', 'sd_ativo', 'sd_ativos')
+CHAVES = ('sd_url', 'sd_chave', 'sd_ssl', 'sd_ativo', 'sd_ativos', 'sd_estados', 'sd_anexar_ativo')
 TIPOS_ENVIO = ('Entrega', 'Empréstimo', 'Devolução')
 NOMES_TIPO = {'chamado': 'Termo + nota', 'ativo': 'Ativo', 'termo': 'Termo assinado'}
 _cache = {}            # chamado → (quando, dados)
@@ -147,6 +147,30 @@ def nota(numero, texto):
                            'add_to_linked_requests': False}})
 
 
+def anexar_ativo_ao_chamado(numero, hostname):
+    """Põe o equipamento DENTRO do chamado, não só na nota.
+
+    É a resposta ao que a Giselly quer — o ativo aparecendo no chamado do solicitante — sem
+    customizar o Service Desk. Lê os ativos que já estão no chamado e acrescenta, em vez de
+    mandar só o novo: o PUT substitui a lista inteira, então mandar um apagaria os outros.
+    Devolve (ok, recado). Nunca levanta erro: a nota e o termo valem mesmo se isto não passar.
+    """
+    host = (hostname or '').strip().upper()
+    if not host:
+        return False, ''
+    try:
+        r = _http('GET', f'/api/v3/requests/{numero}', timeout=10).get('request') or {}
+        atuais = [a for a in (r.get('assets') or []) if isinstance(a, dict)]
+        if any((a.get('name') or '').strip().upper() == host for a in atuais):
+            return True, f'{host} já estava no chamado'
+        lista = [{'id': a['id']} if a.get('id') else {'name': a.get('name')} for a in atuais]
+        lista.append({'name': host})
+        _http('PUT', f'/api/v3/requests/{numero}', {'request': {'assets': lista}}, timeout=15)
+        return True, f'{host} anexado ao chamado'
+    except ErroSD as e:
+        return False, f'não deu para anexar o ativo ao chamado ({e})'
+
+
 def texto_nota(m, it, arquivo):
     oque = f'{it.categoria} {it.modelo or ""} {it.codigo}'.replace('  ', ' ') if it else (f'linha {m.linha}' if m.linha else '')
     verbo = {'Entrega': 'Entregue' if m.etapa == 'Entregue' else f'Entrega registrada ({m.etapa})',
@@ -166,6 +190,10 @@ def texto_nota(m, it, arquivo):
 # O formato em lote (?ids=) devolve "Internal Error" nesse build: não usar.
 def ativos_ligado():
     return configurado() and conf('sd_ativos') == 'Sim'
+
+
+def anexar_ativo_ligado():
+    return configurado() and conf('sd_anexar_ativo') == 'Sim'
 
 
 def _busca(campo, valor, linhas=5):
@@ -223,42 +251,85 @@ def achar_usuario(email=None, nome=None):
 
 
 def atualizar_ativo(asset_id, usuario_id, estado):
-    return _http('PUT', f'/api/v3/asset_assets/{asset_id}',
-                 {'asset_asset': {'user': {'id': str(usuario_id)} if usuario_id else None, 'state': {'name': estado}}})
+    """Um ativo por chamada: o formato em lote (?ids=) devolve 'Internal Error' neste build.
+
+    Estado vazio não entra no corpo — mandar um estado nulo faria o SDP recusar a chamada inteira,
+    e há situação do Zelo que de propósito não mexe no estado (ver ESTADO_PADRAO).
+    """
+    corpo = {'user': {'id': str(usuario_id)} if usuario_id else None}
+    if estado:
+        corpo['state'] = {'name': estado}
+    return _http('PUT', f'/api/v3/asset_assets/{asset_id}', {'asset_asset': corpo})
 
 
-def acao_ativo(m):
-    """('In Use', pessoa) na entrega/empréstimo concluídos; ('In Store', None) na devolução; senão None."""
-    if m.tipo in ('Entrega', 'Empréstimo') and m.etapa == 'Entregue':
-        return 'In Use'
-    if m.tipo == 'Devolução':
-        return 'In Store'
-    return None
+# Situação do item no Zelo → estado do ativo no Service Desk.
+#
+# O estado sai da SITUAÇÃO ATUAL do item, não do tipo de lançamento. É a diferença entre cobrir
+# dois casos (entrega e devolução) e cobrir o ciclo inteiro: manutenção, baixa e até uma correção
+# feita pelo Ajustar cadastro passam a chegar no Service Desk sem código novo.
+#
+# Situação que não está aqui não mexe no estado — só no usuário. É de propósito: trânsito e
+# "a localizar" não têm equivalente nos estados que vêm de fábrica no SDP, e inventar um nome que
+# não existe lá faria a chamada falhar. Quem tiver estado próprio ajusta em `sd_estados`.
+ESTADO_PADRAO = {
+    'Em uso': 'In Use', 'Emprestado': 'In Use', 'Pendente devolução': 'In Use',
+    'Em estoque': 'In Store', 'Reservada': 'In Store', 'Devolvido': 'In Store', 'Em preparação': 'In Store',
+    'Manutenção': 'In Repair', 'Baixada': 'Expired',
+}
+# situação em que o ativo continua no nome de alguém
+COM_PESSOA = ('Em uso', 'Emprestado', 'Pendente devolução', 'Reservada')
+
+
+def mapa_estados():
+    """O mapa em vigor. `sd_estados` sobrepõe o padrão: 'Situação=Estado;Situação=Estado'."""
+    mapa = dict(ESTADO_PADRAO)
+    for par in (conf('sd_estados') or '').split(';'):
+        sit, _s, est = par.partition('=')
+        sit, est = sit.strip(), est.strip()
+        if sit:
+            mapa[sit] = est or None           # sem estado à direita = não mexer nessa situação
+    return mapa
+
+
+def acao_ativo(m, it=None):
+    """O estado que o ativo deve ter no Service Desk, pela situação atual do item. None = não mexer."""
+    from app.models import Item
+    it = it or (db.session.get(Item, m.item) if (m is not None and m.item) else None)
+    if not it:
+        return None
+    return mapa_estados().get(it.situacao or '')
 
 
 def enviar_ativo(envio, m):
+    """Atualiza usuário e estado do ativo. Funciona sem lançamento: manutenção e ajuste de cadastro
+    mudam a situação do item sem gerar movimentação, e o estado no Service Desk tem que acompanhar."""
     from app.models import Item, Pessoa
-    it = db.session.get(Item, m.item) if m.item else None
+    it = db.session.get(Item, m.item) if (m is not None and m.item) else None
+    if not it and envio.alvo:
+        it = Item.query.filter(Item.hostname.ilike(envio.alvo)).first()
     host = (envio.alvo or (it.hostname if it else '') or '').strip().upper()
     if not host:
         raise ErroSD('Item sem hostname no Zelo: não dá para achar o ativo no Service Desk')
     a = achar_ativo(host)
     if not a:
         raise ErroSD(f'Ativo {host} não existe no Service Desk')
-    estado = acao_ativo(m)
-    uid = None
-    if estado == 'In Use':
-        p = db.session.get(Pessoa, m.matricula) if m.matricula else None
-        u = achar_usuario(p.email if p else None, (p.nome if p else m.nome))
+    estado = acao_ativo(m, it)
+    # quem está com o ativo sai do CADASTRO do item, não do lançamento: assim uma correção pelo
+    # Ajustar cadastro chega ao Service Desk igual a uma entrega.
+    uid, quem = None, ''
+    if it and it.situacao in COM_PESSOA and it.matricula:
+        p = db.session.get(Pessoa, it.matricula)
+        quem = (p.nome if p else it.com_quem) or ''
+        u = achar_usuario(p.email if p else None, quem)
         if not u:
-            raise ErroSD(f'{m.nome} não encontrado(a) como usuário no Service Desk')
+            raise ErroSD(f'{quem or it.matricula} não encontrado(a) como usuário no Service Desk')
         uid = u.get('id')
     atualizar_ativo(a['id'], uid, estado)
     aviso = ''
     serial = (a.get('serial_number') or a.get('service_tag') or '')
     if it and it.tag and serial and serial.upper() != it.tag.upper():
         aviso = f' (atenção: service tag no SD {serial} ≠ Zelo {it.tag})'
-    return f'{host} → {estado}' + (f' com {m.nome}' if uid else '') + aviso
+    return f'{host} → {estado or "estado inalterado"}' + (f' com {quem}' if uid else ' (sem usuário)') + aviso
 
 
 def enviar_termo_assinado(envio, m):
@@ -299,17 +370,50 @@ def enfileirar_termo(movs):
 
 
 def enfileirar_ativos(movs):
+    """Um envio por ativo tocado. Sem repetir o mesmo host: num lote de bipagem o mesmo item pode
+    aparecer em mais de um lançamento, e mandar duas vezes o mesmo estado é só gastar chamada."""
     from app.models import EnvioSD, Item
-    novos = []
+    novos, vistos = [], set()
+    pendentes = {e.alvo for e in EnvioSD.query.filter(EnvioSD.tipo == 'ativo',
+                                                      EnvioSD.status == 'Pendente').all()}
     for m in movs:
         it = db.session.get(Item, m.item) if m.item else None
-        if it and it.hostname and acao_ativo(m):
-            e = EnvioSD(mov_id=m.id, tipo='ativo', alvo=it.hostname.upper(), status='Pendente',
-                        criado=datetime.now().isoformat(timespec='seconds'), tentativas=0)
-            db.session.add(e)
-            novos.append(e)
+        if not (it and (it.hostname or '').strip()):
+            continue
+        host = it.hostname.strip().upper()
+        if host in vistos or host in pendentes:
+            continue
+        vistos.add(host)
+        e = EnvioSD(mov_id=m.id, tipo='ativo', alvo=host, status='Pendente',
+                    criado=datetime.now().isoformat(timespec='seconds'), tentativas=0)
+        db.session.add(e)
+        novos.append(e)
     db.session.commit()
     return [e.id for e in novos]
+
+
+def enfileirar_item(app_, codigo):
+    """Avisa o Service Desk do estado de UM item, sem lançamento por trás.
+
+    Manutenção e Ajustar cadastro mudam a situação do item direto (uma abre ocorrência, o outro
+    corrige o que veio errado da planilha) e não geram movimentação — mas o ativo no Service Desk
+    tem que acompanhar do mesmo jeito.
+    """
+    from app.models import EnvioSD, Item
+    if not ativos_ligado():
+        return 0
+    it = db.session.get(Item, codigo) if isinstance(codigo, str) else codigo
+    if not (it and (it.hostname or '').strip()):
+        return 0
+    host = it.hostname.strip().upper()
+    if EnvioSD.query.filter(EnvioSD.tipo == 'ativo', EnvioSD.status == 'Pendente', EnvioSD.alvo == host).first():
+        return 0
+    e = EnvioSD(mov_id=None, tipo='ativo', alvo=host, status='Pendente',
+                criado=datetime.now().isoformat(timespec='seconds'), tentativas=0)
+    db.session.add(e)
+    db.session.commit()
+    processar(app_, [e.id])
+    return 1
 
 
 def enfileirar(movs):
@@ -332,11 +436,11 @@ def enviar(envio):
     from app.routes.termo import montar
     from app.termo_pdf import gerar_pdf
     envio.tentativas = (envio.tentativas or 0) + 1
-    m = db.session.get(Movimentacao, envio.mov_id)
+    m = db.session.get(Movimentacao, envio.mov_id) if envio.mov_id else None
     try:
         if not configurado():
             raise ErroSD('Integração com o Service Desk desligada ou sem chave')
-        if not m:
+        if not m and envio.tipo != 'ativo':
             raise ErroSD('Lançamento não existe mais (foi desfeito)')
         if envio.tipo == 'termo':
             envio.erro = enviar_termo_assinado(envio, m)
@@ -360,7 +464,11 @@ def enviar(envio):
         elif envio.anexo_ok:
             arquivo = f'Termo_Zelo_{m.id}.pdf'
         nota(envio.chamado, texto_nota(m, it, arquivo))
-        envio.status, envio.erro, envio.enviado = 'Enviado', None, datetime.now().isoformat(timespec='seconds')
+        recado = None
+        if anexar_ativo_ligado() and it and (it.hostname or '').strip():
+            _ok, recado = anexar_ativo_ao_chamado(envio.chamado, it.hostname)
+        envio.status, envio.erro = 'Enviado', recado or None
+        envio.enviado = datetime.now().isoformat(timespec='seconds')
     except ErroSD as e:
         envio.status, envio.erro = 'Erro', str(e)[:300]
     except Exception as e:  # nunca derruba o lançamento

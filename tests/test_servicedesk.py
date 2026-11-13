@@ -45,7 +45,8 @@ class SimuladorSD:
             a = self.ativos_por_id[ma.group(1)]
             novo = dados['asset_asset']
             a['user'] = {'id': novo['user']['id']} if novo.get('user') else None
-            a['state'] = novo['state']
+            if 'state' in novo:                                     # sem 'state' = não mexer
+                a['state'] = novo['state']
             return 200, json.dumps({'asset_asset': a, 'response_status': {'status': 'success'}})
         if cam == '/api/v3/users':
             li = dados['list_info']
@@ -73,6 +74,8 @@ class SimuladorSD:
             dados = json.loads(urllib.parse.parse_qs(corpo.decode())['input_data'][0])
             self.notas.append((n, dados['note']['description']))
             return 201, json.dumps({'note': {'id': '9'}, 'response_status': {'status': 'success'}})
+        if metodo == 'PUT':
+            self.chamados[n].update(dados['request'])
         return 200, json.dumps({'request': dict(self.chamados[n], id=n), 'response_status': {'status': 'success'}})
 
 
@@ -299,3 +302,113 @@ def test_desligamento_avisa_o_service_desk(app, cli, sim):
     assert a['user'] is None and a['state']['name'] == 'In Store'       # saiu do nome de quem foi desligado
     env = EnvioSD.query.filter_by(tipo='ativo').order_by(EnvioSD.id.desc()).first()
     assert env.status == 'Enviado' and 'In Store' in (env.erro or '')
+
+
+# ------------------------------------------------------------------ ciclo completo do ativo
+
+def _ativo_do(s, it, ident='90'):
+    a = {'id': ident, 'name': (it.hostname or '').upper(), 'user': None, 'state': {'name': 'In Store'}}
+    s.ativos[a['name']] = a
+    s.ativos_por_id[ident] = a
+    return a
+
+
+def _com_host():
+    return Item.query.filter(Item.situacao == 'Em estoque', Item.categoria == 'Notebook', Item.hostname.isnot(None),
+                             Item.finalidade != 'Pool de empréstimo').first()
+
+
+def test_manutencao_poe_em_in_repair_e_o_fechamento_desfaz(app, cli, sim):
+    """Manutenção não gera movimentação, mas o ativo no Service Desk tem que acompanhar."""
+    s, _p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim'})
+    it = _com_host()
+    a = _ativo_do(s, it, '90')
+    r = cli.post('/manutencao', data={'acao': 'Abrir ocorrência', 'item': it.codigo, 'defeito': 'Tela trincada'},
+                 follow_redirects=True)
+    assert r.status_code == 200
+    assert a['state']['name'] == 'In Repair'
+    env = EnvioSD.query.filter(EnvioSD.tipo == 'ativo').order_by(EnvioSD.id.desc()).first()
+    assert env.status == 'Enviado' and env.mov_id is None and env.alvo == it.hostname.upper()
+    cli.post('/manutencao', data={'acao': 'Fechar ocorrência', 'item': it.codigo, 'feito': 'Tela trocada'},
+             follow_redirects=True)
+    assert a['state']['name'] == 'In Store'          # voltou ao estoque
+
+
+def test_baixa_pelo_ajuste_expira_o_ativo(app, cli, sim):
+    s, _p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim'})
+    it = _com_host()
+    a = _ativo_do(s, it, '91')
+    r = cli.post('/ajuste', data={'item': it.codigo, 'situacao': 'Baixada', 'motivo': 'Item conferido fisicamente',
+                                  'obs': 'Sucateado'}, follow_redirects=True)
+    assert r.status_code == 200
+    assert db.session.get(Item, it.codigo).situacao == 'Baixada'
+    assert a['state']['name'] == 'Expired' and a['user'] is None
+
+
+def test_situacao_sem_mapa_nao_mexe_no_estado(app, cli, sim):
+    """'A localizar' não tem equivalente no Service Desk: melhor não mentir um estado."""
+    s, _p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim'})
+    it = _com_host()
+    a = _ativo_do(s, it, '92')
+    a['state'] = {'name': 'In Use'}
+    cli.post('/ajuste', data={'item': it.codigo, 'situacao': 'A localizar', 'motivo': 'Item conferido fisicamente'},
+             follow_redirects=True)
+    assert a['state']['name'] == 'In Use'            # intocado
+    env = EnvioSD.query.filter(EnvioSD.tipo == 'ativo').order_by(EnvioSD.id.desc()).first()
+    assert env.status == 'Enviado' and 'inalterado' in (env.erro or '')
+
+
+def test_sd_estados_sobrepoe_o_padrao(app, cli, sim):
+    s, _p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim', 'sd_estados': 'Manutenção = Em conserto; Baixada ='})
+    assert sd.mapa_estados()['Manutenção'] == 'Em conserto'
+    assert sd.mapa_estados()['Baixada'] is None      # vazio = não mexer
+    it = _com_host()
+    a = _ativo_do(s, it, '93')
+    cli.post('/manutencao', data={'acao': 'Abrir ocorrência', 'item': it.codigo, 'defeito': 'Não liga'},
+             follow_redirects=True)
+    assert a['state']['name'] == 'Em conserto'
+
+
+def test_anexar_ativo_ao_chamado_preserva_os_que_estavam(app, sim):
+    s, _p = sim
+    s.chamados['777001']['assets'] = [{'id': '55', 'name': 'OUTRA-MAQUINA'}]
+    ok, recado = sd.anexar_ativo_ao_chamado('777001', 'nb-novo')
+    assert ok and 'NB-NOVO' in recado
+    nomes = [a.get('name') for a in s.chamados['777001']['assets']]
+    assert {'id': '55'} in s.chamados['777001']['assets'] or '55' in str(s.chamados['777001']['assets'])
+    assert 'NB-NOVO' in nomes
+    ok, recado = sd.anexar_ativo_ao_chamado('777001', 'NB-NOVO')      # idempotente
+    assert ok and 'já estava' in recado
+
+
+def test_anexar_ativo_em_chamado_inexistente_nao_levanta(app, sim):
+    ok, recado = sd.anexar_ativo_ao_chamado('777999', 'NB-X')
+    assert not ok and 'não deu para anexar' in recado
+
+
+def test_entrega_anexa_o_ativo_ao_chamado_quando_ligado(app, cli, sim):
+    s, p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim', 'sd_anexar_ativo': 'Sim'})
+    it = _com_host()
+    a = _ativo_do(s, it, '94')
+    s.usuarios.append({'id': '94', 'name': p.nome, 'email_id': ''})
+    r = cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum', 'chamado': '777001'}]})
+    assert r.json['gravadas'] == 1 and a['state']['name'] == 'In Use'
+    assert any((x.get('name') or '') == it.hostname.upper() for x in s.chamados['777001'].get('assets') or [])
+
+
+def test_enfileirar_item_nao_duplica_pendencia(app, sim):
+    s, _p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim'})
+    it = _com_host()
+    s.fora = True                                    # força o envio a ficar pendente
+    sd.enfileirar_item(app, it)
+    s.fora = False
+    pend = EnvioSD.query.filter(EnvioSD.tipo == 'ativo', EnvioSD.status == 'Pendente').count()
+    sd.enfileirar_item(app, it)
+    assert EnvioSD.query.filter(EnvioSD.tipo == 'ativo', EnvioSD.status == 'Pendente').count() == pend
