@@ -289,6 +289,16 @@ ESTADO_PADRAO = {
 COM_PESSOA = ('Em uso', 'Emprestado', 'Pendente devolução', 'Reservada')
 
 
+def _pares(texto):
+    """'a=b;c=d' → [('a','b'), ('c','d')]. Vazio dos dois lados é ignorado."""
+    saida = []
+    for par in (texto or '').split(';'):
+        e, _s, d = par.partition('=')
+        if e.strip() and d.strip():
+            saida.append((e.strip(), d.strip()))
+    return saida
+
+
 def mapa_estados():
     """O mapa em vigor. `sd_estados` sobrepõe o padrão: 'Situação=Estado;Situação=Estado'."""
     mapa = dict(ESTADO_PADRAO)
@@ -535,7 +545,7 @@ def achar_produto(modelo=None, tipo=None):
     return None, f'há {len(todos)} produto(s), mas sem tipo de produto não dá para escolher'
 
 
-def criar_ativo(it, estado=None):
+def criar_ativo(it, estado=None, relato=None):
     """Cria o ativo no Service Desk a partir do cadastro do Zelo. Devolve o ativo criado.
 
     Um por chamada, como toda escrita neste build. O `product` entra porque o SDP exige um, mas só
@@ -566,13 +576,13 @@ def criar_ativo(it, estado=None):
     # O que o diagnóstico descobriu sobre ESTE build. Cada instalação do SDP recusa um conjunto
     # diferente de campos e chama alguns por outro nome; um campo recusado derruba a chamada
     # inteira, então é melhor o ativo nascer sem ele — mas, se existir com outro nome, vai com ele.
-    for par in (conf('sd_apelidos') or '').split(';'):
-        de, _s, para = par.partition('=')
-        de, para = de.strip(), para.strip()
-        if de and para and de in corpo:
+    for de, para in _pares(conf('sd_apelidos')):
+        if de in corpo:
             corpo[para] = corpo.pop(de)
     for c in (conf('sd_criar_fora') or '').split(';'):
         corpo.pop(c.strip(), None)
+    if relato is not None:
+        relato.update(plural=plural, chave=chave, corpo=dict(corpo))
     j = _http('POST', f'/api/v3/{plural}', {chave: corpo}, timeout=20)
     novo = j.get(chave) or j.get('asset_asset') or {}
     if isinstance(novo, list):
@@ -705,8 +715,9 @@ def diagnostico_criacao():
             linhas.append(f'  ... e mais {len(todos) - 40}')
     except ErroSD:
         pass
+    relato = {}
     try:
-        novo = criar_ativo(falso, 'In Store')
+        novo = criar_ativo(falso, 'In Store', relato)
     except ErroSD as e:
         linhas += [f'A criação FALHOU: {e}', 'Campos mandados: ' + ', '.join(sorted(enviado))]
         if not mod:
@@ -752,18 +763,61 @@ def diagnostico_criacao():
             linhas.append('Clique no diagnóstico de novo para confirmar.')
         return False, linhas
     linhas.append(f'Criado com id {novo.get("id")}. Conferindo o que o Service Desk guardou:')
+    # A ficha completa vem do endereço DO MÓDULO; a listagem geral devolve um conjunto reduzido de
+    # campos, e ler por ela faria campo gravado parecer campo perdido.
     visto = {}
-    try:
-        visto = achar_ativo(marca) or {}
-    except ErroSD:
-        pass
+    plural = (relato.get('plural') or '') if relato else ''
+    chave = (relato.get('chave') or '') if relato else ''
+    if plural and novo.get('id'):
+        try:
+            j = _http('GET', f'/api/v3/{plural}/{novo["id"]}', timeout=20)
+            visto = j.get(chave) or j.get('asset_asset') or {}
+        except ErroSD:
+            pass
+    if not visto:
+        try:
+            visto = achar_ativo(marca) or {}
+        except ErroSD:
+            pass
     def _valor(v):
         return (v.get('name') or v.get('value') or '') if isinstance(v, dict) else (v or '')
+    # Compara com o que FOI mandado, não com o que seria mandado: campo descartado por
+    # `sd_criar_fora` não é campo perdido, é campo que nem foi.
+    mandado_de_fato = (relato.get('corpo') if relato else None) or enviado
     for campo in sorted(enviado):
-        mandado, guardado = _valor(enviado[campo]), _valor((visto or novo).get(campo))
+        if campo not in mandado_de_fato and campo not in (visto or {}):
+            linhas.append(f'  --   {campo}: não mandei (descartado antes)')
+            continue
+        mandado, guardado = _valor(mandado_de_fato.get(campo)), _valor((visto or novo).get(campo))
         bate = str(mandado).strip().upper() == str(guardado).strip().upper()
         linhas.append(f'  {"OK  " if bate else "NÃO "} {campo}: mandei "{mandado}"'
                       + ('' if bate else f', guardou "{guardado}"'))
+    # O descarte não é definitivo: pode ter sido só o nome errado. Tenta recuperar a cada rodada.
+    excluidos = [c for c in (conf('sd_criar_fora') or '').split(';') if c.strip()]
+    if excluidos and plural:
+        linhas.append('Tentando recuperar os campos descartados:')
+        base = {'name': marca + '-R'}
+        if (relato or {}).get('corpo', {}).get('product'):
+            base['product'] = relato['corpo']['product']
+        _ok, _e, res = sondar_campos(plural, chave, base,
+                                     {c: enviado[c] for c in excluidos if c in enviado})
+        apelidos, ainda_fora = dict(_pares(conf('sd_apelidos'))), []
+        for campo, motivo in sorted(res.items()):
+            if not motivo:
+                linhas.append(f'  OK   {campo} voltou a ser aceito')
+            elif motivo.startswith('APELIDO:'):
+                apelidos[campo] = motivo.split(':', 1)[1]
+                linhas.append(f'  OK   {campo} — neste build chama-se "{apelidos[campo]}"')
+            else:
+                ainda_fora.append(campo)
+                linhas.append(f'  NÃO  {campo}: segue recusado')
+        salvar_conf({'sd_criar_fora': ';'.join(ainda_fora),
+                     'sd_apelidos': ';'.join(f'{k}={v}' for k, v in apelidos.items())})
+        if ainda_fora:
+            voc = campos_metainfo(plural)
+            if voc:
+                linhas.append(f'Campos que o módulo diz ter ({len(voc)}): ' + ', '.join(voc[:60])
+                              + (' ...' if len(voc) > 60 else ''))
     try:
         apagar_ativo(novo['id'])
         linhas.append('Ativo de teste apagado.')

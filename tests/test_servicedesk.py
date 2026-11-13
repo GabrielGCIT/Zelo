@@ -70,6 +70,14 @@ class SimuladorSD:
             # como no build de verdade: o endereço geral NÃO cria
             return 404, json.dumps({'response_status': {'status': 'failed', 'messages': [
                 {'message': 'Cannot add asset under Asset product type.'}]}})
+        mf = re.match(r'^/api/v3/(asset_[a-z_0-9]+)/(\d+)$', cam)
+        if mf and metodo == 'GET':                     # ficha completa, pelo endereço do módulo
+            mod = next((m for m in self.modulos if m['api_plural_name'] == mf.group(1)), None)
+            a = self.ativos_por_id.get(mf.group(2))
+            if not mod or not a:
+                return 404, json.dumps({'response_status': {'status': 'failed',
+                                                            'messages': [{'message': 'Not found'}]}})
+            return 200, json.dumps({mod['api_name']: a, 'response_status': {'status': 'success'}})
         mc = re.match(r'^/api/v3/(asset_[a-z_]+)$', cam)
         if mc and metodo == 'POST':
             mod = next((m for m in self.modulos if m['api_plural_name'] == mc.group(1)), None)
@@ -819,3 +827,33 @@ def test_criar_ativo_usa_o_apelido(app, sim):
     sd.criar_ativo(it, 'In Store')
     a = s.ativos['NB-APL']
     assert a['serial_no'] == 'T7' and 'serial_number' not in a
+
+
+def test_campo_descartado_nao_vira_campo_perdido_no_relatorio(app, sim):
+    """Comparar com o que SERIA mandado fazia campo descartado parecer campo que o SD apagou."""
+    s, _p = sim
+    sd.salvar_conf({'sd_criar_fora': 'product_type'})
+    ok, linhas = sd.diagnostico_criacao()
+    texto = '\n'.join(linhas)
+    assert ok and 'product_type: não mandei (descartado antes)' in texto
+
+
+def test_diagnostico_tenta_recuperar_o_que_foi_descartado(app, sim):
+    """Descarte não é sentença: a cada rodada ele testa de novo, inclusive com outro nome."""
+    s, _p = sim
+    s.recusa_campo = 'serial_number'
+    s.campos_metainfo = ['name', 'product', 'asset_tag', 'serial_no', 'state']
+    sd.salvar_conf({'sd_criar_fora': 'serial_number'})
+    ok, linhas = sd.diagnostico_criacao()
+    texto = '\n'.join(linhas)
+    assert ok and 'neste build chama-se "serial_no"' in texto
+    assert sd.conf('sd_apelidos') == 'serial_number=serial_no'
+    assert not (sd.conf('sd_criar_fora') or '')          # saiu da lista de descartados
+
+
+def test_campo_volta_quando_o_sd_passa_a_aceitar(app, sim):
+    s, _p = sim
+    sd.salvar_conf({'sd_criar_fora': 'asset_tag'})
+    ok, linhas = sd.diagnostico_criacao()
+    assert ok and 'asset_tag voltou a ser aceito' in '\n'.join(linhas)
+    assert not (sd.conf('sd_criar_fora') or '')
