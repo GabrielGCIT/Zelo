@@ -108,7 +108,7 @@ def servicedesk():
             for k in ('sd_ativos', 'sd_anexar_ativo', 'sd_criar_ativo', 'sd_campos_zelo'):
                 if k in request.form:
                     v[k] = request.form.get(k) or 'Não'
-            for k in ('sd_estados', 'sd_tipos'):
+            for k in ('sd_estados', 'sd_tipos', 'sd_apelidos'):
                 if k in request.form:
                     v[k] = (request.form.get(k) or '').strip()
             if 'sd_url' in request.form:
@@ -152,7 +152,7 @@ def servicedesk():
                            ativos=sd.conf('sd_ativos') or 'Não', envios=envios,
                            anexar_ativo=sd.conf('sd_anexar_ativo') or 'Não', estados=sd.conf('sd_estados') or '',
                            criar_ativo=sd.conf('sd_criar_ativo') or 'Não', tipos=sd.conf('sd_tipos') or '',
-                           campos_zelo=sd.conf('sd_campos_zelo') or 'Não',
+                           campos_zelo=sd.conf('sd_campos_zelo') or 'Não', apelidos=sd.conf('sd_apelidos') or '',
                            padrao_estados='; '.join(f'{k} = {v}' for k, v in sd.ESTADO_PADRAO.items()),
                            padrao_tipos='; '.join(f'{k} = {v}' for k, v in sd.TIPO_PADRAO.items()),
                            pendentes=sum(1 for e in envios if e.status != 'Enviado'))

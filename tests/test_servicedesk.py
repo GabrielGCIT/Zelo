@@ -908,3 +908,35 @@ def test_apelido_nunca_sobrescreve_campo_ja_em_uso(app, sim):
     ok, linhas = sd.diagnostico_criacao()
     assert ok and 'chama-se "product"' not in '\n'.join(linhas)
     assert sd.conf('sd_criar_fora') == 'product_type'
+
+
+def test_varios_candidatos_viram_escolha_do_gabriel(app, sim):
+    """cpu_serial_number e org_serial_number gravam os dois, e nenhuma regra de texto sabe qual é
+    o certo. Pôr a service tag no "serial do processador" seria errado em silêncio."""
+    s, _p = sim
+    s.recusa_campo = 'serial_number'
+    s.campos_metainfo = ['name', 'product', 'asset_tag', 'cpu_serial_number',
+                         'org_serial_number', 'state']
+    sd.salvar_conf({'sd_criar_fora': 'serial_number'})
+    ok, linhas = sd.diagnostico_criacao()
+    texto = '\n'.join(linhas)
+    assert ok and 'mais de um campo guarda o valor' in texto
+    assert 'cpu_serial_number' in texto and 'org_serial_number' in texto
+    assert not (sd.conf('sd_apelidos') or '')          # não escolhe sozinho
+    assert sd.conf('sd_criar_fora') == 'serial_number'
+
+
+def test_escolha_manual_do_nome_de_campo_e_respeitada(app, sim):
+    """Decidida a ambiguidade na tela, a criação passa a usar o nome escolhido."""
+    from types import SimpleNamespace
+    s, _p = sim
+    s.recusa_campo = 'serial_number'
+    adm = app.test_client()
+    adm.post('/login', data={'email': 'admin@teste', 'senha': 'senha-forte-1'})
+    adm.post('/admin/servicedesk', data={'acao': 'salvar', 'sd_ativos': 'Sim',
+                                         'sd_apelidos': 'serial_number=org_serial_number',
+                                         'sd_estados': '', 'sd_tipos': ''})
+    it = SimpleNamespace(hostname='NB-ESC', tag='TAG9', plaqueta='', categoria='Notebook',
+                         site='', fornecedor='', garantia='', modelo='Latitude 5450')
+    sd.criar_ativo(it, 'In Store')
+    assert s.ativos['NB-ESC']['org_serial_number'] == 'TAG9'

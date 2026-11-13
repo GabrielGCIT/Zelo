@@ -660,15 +660,27 @@ def sondar_campos(plural, chave, base, opcionais):
         # Duas falhas diferentes: a chamada foi recusada, ou foi aceita e o valor se perdeu. Nos
         # dois casos o campo pode existir com outro nome — mas só vale se o valor VOLTAR nele.
         raiz = campo.split('_')[0]
-        for outro in vocabulario:
-            # nunca um campo que já está em uso: sobrescrever `product` com o tipo de produto
-            # "passa" no teste e grava lixo no lugar certo de outra coisa.
-            if outro == campo or raiz not in outro or outro in base or outro in opcionais:
-                continue
+        # Ordem importa: "serial_number" tem como candidatos `org_serial_number` e
+        # `cpu_serial_number`, e os dois gravam. O que CONTÉM o nome inteiro do campo vem primeiro;
+        # o que só divide a primeira palavra vem por último, porque é o palpite mais fraco.
+        candidatos = sorted(
+            (o for o in vocabulario
+             # nunca um campo que já está em uso: sobrescrever `product` com o tipo de produto
+             # "passa" no teste e grava lixo no lugar certo de outra coisa.
+             if o != campo and raiz in o and o not in base and o not in opcionais),
+            key=lambda o: (campo not in o, len(o), o))
+        passaram = []
+        for outro in candidatos:
             ok_o, _e, ficha_o = _tentar(_nomear(dict(base, **{outro: valor})))
             if ok_o and _guardou(ficha_o, outro, valor):
-                resultado[campo] = f'APELIDO:{outro}'
-                break
+                passaram.append(outro)
+        if len(passaram) == 1:
+            resultado[campo] = f'APELIDO:{passaram[0]}'
+        elif passaram:
+            # Vários campos guardam o valor e nenhuma regra de texto sabe qual é o certo:
+            # `cpu_serial_number` e `org_serial_number` gravam os dois, e pôr a service tag no
+            # "serial do processador" seria errado em silêncio. Quem decide é o Gabriel.
+            resultado[campo] = 'ESCOLHER:' + ','.join(passaram)
         else:
             resultado[campo] = erro_c or 'o Service Desk aceitou a chamada mas não guardou o valor'
     return True, '', resultado
@@ -762,6 +774,11 @@ def diagnostico_criacao():
                 outro = motivo.split(':', 1)[1]
                 apelidos[campo] = outro
                 linhas.append(f'  OK   {campo} — neste build chama-se "{outro}"')
+            elif motivo.startswith('ESCOLHER:'):
+                opcoes = motivo.split(':', 1)[1]
+                fora.append(campo)
+                linhas.append(f'  ?    {campo}: mais de um campo guarda o valor ({opcoes}). '
+                              'Escolha em "Nomes de campo próprios" e rode de novo.')
             else:
                 fora.append(campo)
                 linhas.append(f'  NÃO  {campo}: {motivo}')
@@ -831,6 +848,11 @@ def diagnostico_criacao():
             elif motivo.startswith('APELIDO:'):
                 apelidos[campo] = motivo.split(':', 1)[1]
                 linhas.append(f'  OK   {campo} — neste build chama-se "{apelidos[campo]}"')
+            elif motivo.startswith('ESCOLHER:'):
+                opcoes = motivo.split(':', 1)[1]
+                ainda_fora.append(campo)
+                linhas.append(f'  ?    {campo}: mais de um campo guarda o valor ({opcoes}). '
+                              'Escolha em "Nomes de campo próprios" e rode de novo.')
             else:
                 ainda_fora.append(campo)
                 linhas.append(f'  NÃO  {campo}: segue recusado')

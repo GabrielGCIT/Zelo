@@ -41,6 +41,11 @@
    Rode o diagnóstico para ver a lista do seu Service Desk. Formato <code>Categoria do Zelo=Tipo de produto do SD</code>,
    separados por ponto e vírgula; lado direito vazio deixa aquela categoria sem criação.
    Em branco, vale o padrão: {{ padrao_tipos }}.</div></div>
+ <div class="col-12"><label class="form-label mb-0">Nomes de campo próprios (opcional)</label>
+  <input class="form-control form-control-sm z-mono" name="sd_apelidos" value="{{ apelidos }}" placeholder="serial_number=org_serial_number">
+  <div class="form-text">Quando um campo existe no seu Service Desk com outro nome. O diagnóstico preenche isto sozinho quando acha
+   um nome só; quando acha mais de um que grava o valor, ele lista as opções e deixa a escolha aqui, porque nenhuma regra de texto
+   sabe qual é o certo (<code>cpu_serial_number</code> e <code>org_serial_number</code> guardam os dois).</div></div>
  <div class="col-12"><label class="form-label mb-0">Estados próprios (opcional)</label>
   <input class="form-control form-control-sm z-mono" name="sd_estados" value="{{ estados }}" placeholder="Em uso=In Use;Baixada=Disposed">
   <div class="form-text">Só se o seu Service Desk tem estados diferentes dos de fábrica. Formato <code>Situação do Zelo=Estado do SD</code>,
