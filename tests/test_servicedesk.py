@@ -19,6 +19,7 @@ class SimuladorSD:
         self.anexos, self.notas, self.fora = [], [], False
         self.ativos, self.ativos_por_id, self.usuarios = {}, {}, []
         self.apagados, self.seq, self.recusa_post, self.recusa_campo = [], 500, '', ''
+        self.ignora_campo = ''
         # como o build de verdade: um endereço por tipo de produto, e asset_assets não cria
         self.modulos = [{'id': '1', 'display_name': 'Laptop', 'api_name': 'asset_computer',
                          'api_plural_name': 'asset_computers', 'category': {'display_name': 'Asset'}},
@@ -94,6 +95,8 @@ class SimuladorSD:
             if self.recusa_campo and self.recusa_campo in novo:   # como o SDP: não diz qual campo
                 return 400, json.dumps({'response_status': {'status': 'failed',
                                                             'messages': [{'message': 'Invalid Input'}]}})
+            if self.ignora_campo:                 # aceita a chamada e descarta o valor
+                novo.pop(self.ignora_campo, None)
             self.seq += 1
             novo['id'] = str(self.seq)
             self.ativos[novo['name']] = novo
@@ -857,3 +860,51 @@ def test_campo_volta_quando_o_sd_passa_a_aceitar(app, sim):
     ok, linhas = sd.diagnostico_criacao()
     assert ok and 'asset_tag voltou a ser aceito' in '\n'.join(linhas)
     assert not (sd.conf('sd_criar_fora') or '')
+
+
+def test_apelido_so_vale_se_o_valor_voltar_gravado(app, sim):
+    """Campo que o SDP aceita e ignora passava como apelido: foi assim que product_id virou
+    'tipo de produto'. Agora o valor tem que voltar naquele campo."""
+    s, _p = sim
+    s.recusa_campo = 'serial_number'
+    s.ignora_campo = 'org_serial_number'       # aceita a chamada e descarta o valor
+    s.campos_metainfo = ['name', 'product', 'asset_tag', 'org_serial_number', 'state']
+    sd.salvar_conf({'sd_criar_fora': 'serial_number'})
+    ok, linhas = sd.diagnostico_criacao()
+    texto = '\n'.join(linhas)
+    assert ok and 'chama-se "org_serial_number"' not in texto     # não virou apelido
+    assert 'serial_number: segue recusado' in texto
+    assert sd.conf('sd_criar_fora') == 'serial_number'
+
+
+def test_campo_aceito_mas_nao_guardado_nao_conta_como_aceito(app, sim):
+    s, _p = sim
+    s.ignora_campo = 'asset_tag'
+    sd.salvar_conf({'sd_criar_fora': 'asset_tag'})
+    ok, linhas = sd.diagnostico_criacao()
+    assert 'asset_tag voltou a ser aceito' not in '\n'.join(linhas)
+    assert sd.conf('sd_criar_fora') == 'asset_tag'
+
+
+def test_apelido_falso_de_rodada_anterior_e_desfeito(app, sim):
+    """product_type=product_id passou quando a prova era só "a chamada não falhou". Agora cai."""
+    s, _p = sim
+    s.recusa_campo = 'product_type'
+    s.ignora_campo = 'product_id'
+    s.campos_metainfo = ['name', 'product', 'product_id', 'asset_tag', 'state']
+    sd.salvar_conf({'sd_apelidos': 'product_type=product_id'})
+    ok, linhas = sd.diagnostico_criacao()
+    assert ok and 'product_type: ' in '\n'.join(linhas)
+    assert 'product_type' not in (sd.conf('sd_apelidos') or '')
+    assert sd.conf('sd_criar_fora') == 'product_type'
+
+
+def test_apelido_nunca_sobrescreve_campo_ja_em_uso(app, sim):
+    """'product' já carrega o produto: usá-lo como apelido de product_type grava lixo nele."""
+    s, _p = sim
+    s.recusa_campo = 'product_type'
+    s.campos_metainfo = ['name', 'product', 'asset_tag', 'state']
+    sd.salvar_conf({'sd_criar_fora': 'product_type'})
+    ok, linhas = sd.diagnostico_criacao()
+    assert ok and 'chama-se "product"' not in '\n'.join(linhas)
+    assert sd.conf('sd_criar_fora') == 'product_type'

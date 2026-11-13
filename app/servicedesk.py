@@ -610,19 +610,36 @@ def sondar_campos(plural, chave, base, opcionais):
     de teste. Devolve `resultado` como {campo: '' se aceito, senão o motivo}.
     """
     def _tentar(corpo):
+        """Cria, LÊ DE VOLTA e apaga. Devolve (ok, erro, ficha guardada)."""
         try:
             j = _http('POST', f'/api/v3/{plural}', {chave: corpo}, timeout=20)
             novo = j.get(chave) or j.get('asset_asset') or {}
             if isinstance(novo, list):
                 novo = novo[0] if novo else {}
+            ficha = novo
             if novo.get('id'):
+                try:
+                    r = _http('GET', f'/api/v3/{plural}/{novo["id"]}', timeout=20)
+                    ficha = r.get(chave) or r.get('asset_asset') or novo
+                except ErroSD:
+                    pass
                 try:
                     apagar_ativo(novo['id'])
                 except ErroSD:
                     pass
-            return True, ''
+            return True, '', ficha
         except ErroSD as e:
-            return False, str(e)
+            return False, str(e), {}
+
+    def _texto(v):
+        return str((v.get('name') or v.get('value') or v.get('id') or '')
+                   if isinstance(v, dict) else (v or '')).strip().upper()
+
+    def _guardou(ficha, campo, valor):
+        """O valor chegou NAQUELE campo? Chamada aceita não é valor gravado: campo que o SDP
+        ignora em silêncio também devolve sucesso, e foi assim que `product_id` passou por
+        tipo de produto numa versão anterior."""
+        return bool(_texto(valor)) and _texto(ficha.get(campo)) == _texto(valor)
 
     n = [0]
 
@@ -630,28 +647,30 @@ def sondar_campos(plural, chave, base, opcionais):
         n[0] += 1
         return dict(corpo, name=f'{base["name"]}-{n[0]}')
 
-    ok, erro = _tentar(_nomear(base))
+    ok, erro, _f = _tentar(_nomear(base))
     if not ok:
         return False, erro, {}
     vocabulario = campos_metainfo(plural)
     resultado = {}
     for campo, valor in opcionais.items():
-        ok_c, erro_c = _tentar(_nomear(dict(base, **{campo: valor})))
-        if ok_c:
+        ok_c, erro_c, ficha = _tentar(_nomear(dict(base, **{campo: valor})))
+        if ok_c and _guardou(ficha, campo, valor):
             resultado[campo] = ''
             continue
-        # Recusado pode ser "este build não tem esse campo" e não "esse valor é inválido": procura
-        # o mesmo dado com outro nome, mas só entre nomes que o módulo DIZ ter.
+        # Duas falhas diferentes: a chamada foi recusada, ou foi aceita e o valor se perdeu. Nos
+        # dois casos o campo pode existir com outro nome — mas só vale se o valor VOLTAR nele.
         raiz = campo.split('_')[0]
         for outro in vocabulario:
-            if outro == campo or raiz not in outro:
+            # nunca um campo que já está em uso: sobrescrever `product` com o tipo de produto
+            # "passa" no teste e grava lixo no lugar certo de outra coisa.
+            if outro == campo or raiz not in outro or outro in base or outro in opcionais:
                 continue
-            ok_o, _e = _tentar(_nomear(dict(base, **{outro: valor})))
-            if ok_o:
+            ok_o, _e, ficha_o = _tentar(_nomear(dict(base, **{outro: valor})))
+            if ok_o and _guardou(ficha_o, outro, valor):
                 resultado[campo] = f'APELIDO:{outro}'
                 break
         else:
-            resultado[campo] = erro_c
+            resultado[campo] = erro_c or 'o Service Desk aceitou a chamada mas não guardou o valor'
     return True, '', resultado
 
 
@@ -792,16 +811,20 @@ def diagnostico_criacao():
         bate = str(mandado).strip().upper() == str(guardado).strip().upper()
         linhas.append(f'  {"OK  " if bate else "NÃO "} {campo}: mandei "{mandado}"'
                       + ('' if bate else f', guardou "{guardado}"'))
-    # O descarte não é definitivo: pode ter sido só o nome errado. Tenta recuperar a cada rodada.
+    # Nada aqui é definitivo. O descarte pode ter sido só o nome errado, e o apelido pode ter sido
+    # um falso positivo de uma versão anterior — então os dois são refeitos a cada rodada, agora
+    # exigindo que o valor volte gravado.
     excluidos = [c for c in (conf('sd_criar_fora') or '').split(';') if c.strip()]
-    if excluidos and plural:
-        linhas.append('Tentando recuperar os campos descartados:')
+    apelidados = [de for de, _para in _pares(conf('sd_apelidos'))]
+    revisar = [c for c in dict.fromkeys(excluidos + apelidados) if c in enviado]
+    if revisar and plural:
+        linhas.append('Revisando os campos descartados e apelidados:')
         base = {'name': marca + '-R'}
         if (relato or {}).get('corpo', {}).get('product'):
             base['product'] = relato['corpo']['product']
-        _ok, _e, res = sondar_campos(plural, chave, base,
-                                     {c: enviado[c] for c in excluidos if c in enviado})
-        apelidos, ainda_fora = dict(_pares(conf('sd_apelidos'))), []
+        _ok, _e, res = sondar_campos(plural, chave, base, {c: enviado[c] for c in revisar})
+        apelidos = {de: para for de, para in _pares(conf('sd_apelidos')) if de not in revisar}
+        ainda_fora = []
         for campo, motivo in sorted(res.items()):
             if not motivo:
                 linhas.append(f'  OK   {campo} voltou a ser aceito')
