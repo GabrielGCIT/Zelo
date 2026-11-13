@@ -1,5 +1,81 @@
 # Zelo — plano de execução (acordado em 11/11/2026)
 
+---
+
+## ONDE PARAMOS — 13/11/2026, v1.21.0
+
+Leia esta seção primeiro. O resto do arquivo é histórico e decisões; isto é o que está na mesa.
+
+### Estado
+196 testes verdes. Tudo commitado e empurrado para `github.com/GabrielGCIT/Zelo` (privado).
+A integração com o Service Desk lê chamado, anexa termo, grava nota, atualiza usuário e estado do
+ativo, e **já cria ativo** no SDP — com endereço certo por tipo, produto resolvido, e `asset_tag`,
+`name` e `state` provados gravando no laboratório.
+
+### A pendência imediata (5 minutos)
+A **service tag** ainda não vai junto na criação. O diagnóstico descobriu que neste build ela não se
+chama `serial_number`, e que dois campos guardam o valor: `cpu_serial_number` e `org_serial_number`.
+Ele se recusou a escolher sozinho — de propósito: pôr a service tag no "serial do processador"
+passaria em todos os testes e estaria errado.
+
+A evidência aponta para `org_serial_number`: no banco do SDP, o campo que os relatórios rotulam
+"Org Serial Number" é o serial do registro, o que se preenche à mão; o do agente é outro.
+
+**Fazer:** em Administração → Service Desk, campo **Nomes de campo próprios**, pôr
+`serial_number=org_serial_number`. Salvar. Rodar o diagnóstico e confirmar `OK serial_number`.
+
+### A pergunta aberta que decide o resto
+**O agente do SDP reconcilia pelo `org_serial_number`, ou só pelo serial que ele mesmo lê do BIOS?**
+
+Disso depende se dá para cadastrar os 3203 itens pelo Zelo sem duplicar o parque. Nenhuma
+documentação responde; só o teste responde. O Gabriel tem 5 máquinas com agente instalado.
+
+Protocolo combinado:
+1. escolher uma das 5 e anotar a service tag real (`wmic bios get serialnumber`);
+2. apagar o ativo dela no SDP — e conferir que ela **não** ficou na lista de exclusão, senão o
+   agente nunca mais reporta e o teste não vale;
+3. criar pelo Zelo com o hostname e a tag reais;
+4. forçar a varredura do agente;
+5. contar os ativos no SDP.
+
+Os três desfechos e o que cada um muda:
+- **1 ativo (fundiu)** → o cadastro em massa é seguro; seguir para a tela de cadastro em lote.
+- **2 ativos (duplicou)** → `org_serial_number` não serve para reconciliação. O plano muda: ou
+  cadastrar pelo Zelo só o que nunca terá agente (os ~2295: monitor, celular, dock, coletor, tablet),
+  ou achar qual campo o agente usa.
+- **nada apareceu** → é a lista de exclusão, não a API; resolve-se no SDP e repete o teste.
+
+### Em construção quando a sessão foi interrompida
+**Detector de duplicados**: varrer o SD e apontar ativos que compartilham service tag ou hostname.
+Serve para ler o resultado do teste acima sem depender de olho, e serve para a limpeza da base que o
+Gabriel quer fazer de qualquer jeito. Não começou.
+
+### Depois disso, na ordem conversada
+1. **Cadastro em massa** — empurrar os itens do Zelo para o SD pela fila. Só faz sentido depois do
+   teste do agente; antes disso é construir sobre premissa não provada.
+2. **G — abrir chamado pelo Zelo** (`POST /api/v3/requests`). Independe do agente. Precisa combinar
+   template, categoria e grupo antes.
+3. **H — preencher service tag vazia no SD.**
+4. **I — ler garantia e contrato do SD** para alimentar os lembretes que o Painel já mostra.
+
+### Decisão que vai aparecer no cadastro em massa
+No SDP **todo ativo pertence a um produto** (o modelo), e produto é cadastro manual. Para os 3203
+itens, ou existe um produto por modelo, ou todos caem no primeiro produto do tipo e o campo Modelo
+no SD fica errado — nas ~2295 máquinas sem agente, errado para sempre. Três caminhos:
+1. extrair os modelos distintos da planilha unificada e cadastrar os produtos antes (mais trabalho
+   agora, cadastro certo depois);
+2. um produto genérico por tipo ("Notebook MB"), com o modelo real existindo só no Zelo;
+3. o Zelo criar o produto quando faltar — **descartado**: sistema criando catálogo no SDP sem
+   revisão humana é como a base fica bagunçada de novo.
+Decidir quando o diagnóstico rodar na MB e mostrar que produtos já existem lá.
+
+### Nota de ambiente
+Esta parte do trabalho foi feita por um assistente em nuvem, que gravava os arquivos no
+`Desktop\Zelo` por uma ponte com o desktop. A ponte caiu em 13/11 e o Gabriel passou a trabalhar
+pelo Claude Code, na própria máquina. Daí este `CLAUDE.md` e esta seção.
+
+---
+
 ## Concluído
 - Plano de 3 dias: base, importação (0 divergências), consultas, lançamentos com conferência, termo,
   Acompanhar, manutenção, consumíveis, conferência de linhas (Easy × Zelo × AirWatch), pacote Windows.
@@ -92,7 +168,9 @@ que libera o ativo. Quem não está presencial recebe um link e assina de onde e
 ## Encaixes pendentes (sem etapa fixa)
 - Gabriel terminar o teste de ponta a ponta no laboratório (entrega com chamado → anexo, nota, ativo).
 - Service Desk: preencher a service tag quando vazia (testar o endereço do tipo Computador no laboratório).
-- Publicar no GitHub: Gabriel cria GabrielGCIT/zelo; aí subir os commits.
+- ~~Publicar no GitHub~~ — feito em 13/11: `github.com/GabrielGCIT/Zelo`, privado, sem o banco.
+- Tipo de produto `TESTE-ZELO-01` sobrou de um teste no SDP do laboratório; apagar antes que a base
+  vire produção — tipo órfão é começo de bagunça nova.
 - Login com a conta Microsoft. Admissões.
 - JDE como fonte de colaboradores (CPF, nome, matrícula, código JDE) — depende de o Gabriel conseguir a API.
   Terceiros: cadastro próprio no Zelo (CPF, empresa, fim de contrato).
