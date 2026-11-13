@@ -573,6 +573,10 @@ def criar_ativo(it, estado=None, relato=None):
         corpo['product'] = {'id': prod['id']} if prod.get('id') else {'name': prod.get('name')}
     elif 'product' in obrigatorios(plural):
         raise ErroSD(f'O Service Desk exige um produto para criar o ativo, e {recado}')
+    # O tipo de produto já cumpriu o papel dele, que era escolher o endereço; o endereço e o
+    # produto dizem o tipo ao SDP. Mandá-lo no corpo é redundante e o SDP recusa — então sai daqui
+    # em vez de virar "campo recusado" no diagnóstico a cada rodada.
+    corpo.pop('product_type', None)
     # O que o diagnóstico descobriu sobre ESTE build. Cada instalação do SDP recusa um conjunto
     # diferente de campos e chama alguns por outro nome; um campo recusado derruba a chamada
     # inteira, então é melhor o ativo nascer sem ele — mas, se existir com outro nome, vai com ele.

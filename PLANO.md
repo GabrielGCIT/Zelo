@@ -2,27 +2,31 @@
 
 ---
 
-## ONDE PARAMOS — 13/11/2026, v1.21.0
+## ONDE PARAMOS — 13/11/2026, v1.23.0
 
 Leia esta seção primeiro. O resto do arquivo é histórico e decisões; isto é o que está na mesa.
 
 ### Estado
-196 testes verdes. Tudo commitado e empurrado para `github.com/GabrielGCIT/Zelo` (privado).
+203 testes verdes. Tudo commitado e empurrado para `github.com/GabrielGCIT/Zelo` (privado).
 A integração com o Service Desk lê chamado, anexa termo, grava nota, atualiza usuário e estado do
-ativo, e **já cria ativo** no SDP — com endereço certo por tipo, produto resolvido, e `asset_tag`,
-`name` e `state` provados gravando no laboratório.
+ativo, e **cria ativo** no SDP com hostname, service tag, plaqueta e estado — tudo provado gravando
+no laboratório pelo botão de diagnóstico.
 
-### A pendência imediata (5 minutos)
-A **service tag** ainda não vai junto na criação. O diagnóstico descobriu que neste build ela não se
-chama `serial_number`, e que dois campos guardam o valor: `cpu_serial_number` e `org_serial_number`.
-Ele se recusou a escolher sozinho — de propósito: pôr a service tag no "serial do processador"
-passaria em todos os testes e estaria errado.
+### A criação de ativo está fechada (13/11, v1.23.0)
+O que o Zelo descobriu sozinho sobre o build da MB, e que agora está gravado na configuração:
 
-A evidência aponta para `org_serial_number`: no banco do SDP, o campo que os relatórios rotulam
-"Org Serial Number" é o serial do registro, o que se preenche à mão; o do agente é outro.
+| O quê | Valor neste build |
+|---|---|
+| endereço de criação de Notebook | `/api/v3/asset_laptops` (não `asset_computers`) |
+| produto | obrigatório e tem que já existir; o Zelo usa o do modelo, ou um do mesmo tipo |
+| `product_type` | **recusado** — e com razão: o endereço e o produto já dizem o tipo. Ele serve só para escolher o endereço, e não vai no corpo |
+| service tag | **`org_serial_number`** (`serial_number` é recusado) |
 
-**Fazer:** em Administração → Service Desk, campo **Nomes de campo próprios**, pôr
-`serial_number=org_serial_number`. Salvar. Rodar o diagnóstico e confirmar `OK serial_number`.
+O apelido da service tag não foi escolhido por semelhança de nome: `cpu_serial_number` também era
+candidato, e só `org_serial_number` devolveu o valor gravado na leitura de volta. Se os dois
+tivessem gravado, o diagnóstico teria parado e perguntado.
+
+Provado no laboratório: `asset_tag`, `name`, `org_serial_number` e `state` gravam e voltam.
 
 ### A pergunta aberta que decide o resto
 **O agente do SDP reconcilia pelo `org_serial_number`, ou só pelo serial que ele mesmo lê do BIOS?**
@@ -30,13 +34,23 @@ A evidência aponta para `org_serial_number`: no banco do SDP, o campo que os re
 Disso depende se dá para cadastrar os 3203 itens pelo Zelo sem duplicar o parque. Nenhuma
 documentação responde; só o teste responde. O Gabriel tem 5 máquinas com agente instalado.
 
+**No laboratório não há agente instalado em nada** — as 5 máquinas com agente são da MB. Para
+testar em casa é preciso instalar o agente do SDP de laboratório numa máquina (o próprio PC ou uma
+VM). Um sinal barato antes disso: importar uma planilha de ativos com a mesma tag e hostname de um
+ativo criado pelo Zelo e ver se o SDP atualiza ou cria outro — a regra de casamento da importação é
+parecida; não é prova, mas se já duplicar aí, duplica na varredura.
+
+Meio caminho do próprio passo 1: ver **em qual campo** o agente grava a service tag. Se ele usa
+`serial_number` e o Zelo usa `org_serial_number`, são campos diferentes e a resposta provavelmente
+já é "duplica", sem precisar do passo 4.
+
 Protocolo combinado:
-1. escolher uma das 5 e anotar a service tag real (`wmic bios get serialnumber`);
+1. escolher uma das 5 (na MB) e anotar a service tag real (`wmic bios get serialnumber`);
 2. apagar o ativo dela no SDP — e conferir que ela **não** ficou na lista de exclusão, senão o
    agente nunca mais reporta e o teste não vale;
 3. criar pelo Zelo com o hostname e a tag reais;
 4. forçar a varredura do agente;
-5. contar os ativos no SDP.
+5. abrir Itens → Conferir com o Service Desk e olhar a seção **Repetido no Service Desk**.
 
 Os três desfechos e o que cada um muda:
 - **1 ativo (fundiu)** → o cadastro em massa é seguro; seguir para a tela de cadastro em lote.
@@ -45,10 +59,14 @@ Os três desfechos e o que cada um muda:
   ou achar qual campo o agente usa.
 - **nada apareceu** → é a lista de exclusão, não a API; resolve-se no SDP e repete o teste.
 
-### Em construção quando a sessão foi interrompida
-**Detector de duplicados**: varrer o SD e apontar ativos que compartilham service tag ou hostname.
-Serve para ler o resultado do teste acima sem depender de olho, e serve para a limpeza da base que o
-Gabriel quer fazer de qualquer jeito. Não começou.
+### Detector de duplicados — FEITO (v1.22.0)
+Seção **Repetido no Service Desk** no topo de Itens → Conferir com o Service Desk. Agrupa por
+service tag e por hostname (plaqueta não: etiqueta reaproveitada é legítima e viraria ruído). É por
+ela que se lê o resultado do teste do agente, sem caçar na mão no SDP.
+
+Junto saiu um reparo que o achado da service tag obrigava: `do_sd` lia a tag só de `serial_number`,
+que neste build está vazio — a tela de conferência achava que o Service Desk não tem tag nenhuma, e
+estava casando só por hostname e plaqueta.
 
 ### Depois disso, na ordem conversada
 1. **Cadastro em massa** — empurrar os itens do Zelo para o SD pela fila. Só faz sentido depois do

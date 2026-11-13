@@ -511,7 +511,9 @@ def test_criar_ativo_leva_hostname_tag_e_plaqueta(app, cli, sim):
     assert r.json['gravadas'] == 1
     a = s.ativos[it.hostname.upper()]
     assert a['serial_number'] == 'ABC1234' and a['asset_tag'] == 'MB-0099'
-    assert a['site'] == {'name': 'EC'} and a['product_type'] == {'name': 'Laptop'}
+    assert a['site'] == {'name': 'EC'}
+    # o tipo de produto escolhe o endereço e para por aí: no corpo seria redundante, e o SDP recusa
+    assert 'product_type' not in a and a['product'] == {'id': '77'}
     assert a['user'] == {'id': '31'} and a['state']['name'] == 'In Use'
     e = EnvioSD.query.filter_by(tipo='ativo').one()
     assert e.status == 'Enviado' and 'cadastrado agora' in (e.erro or '')
@@ -954,3 +956,15 @@ def test_relatorio_confere_o_campo_pelo_nome_apelidado(app, sim):
     assert ok
     assert 'OK   serial_number (como "org_serial_number"): mandei' in texto
     assert 'serial_number: não mandei' not in texto
+
+
+def test_tipo_de_produto_escolhe_o_endereco_e_nao_vai_no_corpo(app, sim):
+    """Ele cumpriu o papel ao decidir /api/v3/asset_computers; mandá-lo junto é redundante, o SDP
+    recusa, e ele voltava como "campo recusado" no diagnóstico a cada rodada."""
+    from types import SimpleNamespace
+    s, _p = sim
+    it = SimpleNamespace(hostname='NB-TIPO', tag='', plaqueta='', categoria='Notebook', site='',
+                         fornecedor='', garantia='', modelo='Latitude 5450')
+    sd.criar_ativo(it, 'In Store')
+    assert 'product_type' not in s.ativos['NB-TIPO']
+    assert sd.corpo_do_item(it)['product_type'] == {'name': 'Laptop'}   # segue servindo de bússola
