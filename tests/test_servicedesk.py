@@ -50,9 +50,9 @@ class SimuladorSD:
                                                   'row_count': len(pagina)}})
         mi = re.match(r'^/api/v3/(asset_[a-z_0-9]+)/_metainfo$', cam)
         if mi:
+            campos = getattr(self, 'campos_metainfo', None) or ['name', 'product', 'asset_tag']
             return 200, json.dumps({'metainfo': {'fields': [
-                {'name': 'name', 'mandatory': True}, {'name': 'product', 'mandatory': True},
-                {'name': 'asset_tag', 'mandatory': False}]},
+                {'name': c, 'mandatory': c in ('name', 'product')} for c in campos]},
                 'response_status': {'status': 'success'}})
         if cam == '/api/v3/products':
             li = dados.get('list_info') or {}
@@ -795,3 +795,27 @@ def test_nem_o_minimo_passa_aponta_o_sdp_nao_o_campo(app, sim):
     ok, linhas = sd.diagnostico_criacao()
     texto = '\n'.join(linhas)
     assert not ok and 'Nem o mínimo' in texto and 'permissão da chave' in texto
+
+
+def test_diagnostico_acha_o_campo_com_outro_nome(app, sim):
+    """Recusa pode ser "este build não tem esse campo", não "valor inválido"."""
+    s, _p = sim
+    s.recusa_campo = 'serial_number'
+    s.campos_metainfo = ['name', 'asset_tag', 'serial_no', 'state']
+    ok, linhas = sd.diagnostico_criacao()
+    texto = '\n'.join(linhas)
+    assert not ok and 'serial_number — neste build chama-se "serial_no"' in texto
+    assert sd.conf('sd_apelidos') == 'serial_number=serial_no'
+    assert 'serial_number' not in (sd.conf('sd_criar_fora') or '')
+
+
+def test_criar_ativo_usa_o_apelido(app, sim):
+    from types import SimpleNamespace
+    s, _p = sim
+    s.recusa_campo = 'serial_number'
+    sd.salvar_conf({'sd_apelidos': 'serial_number=serial_no'})
+    it = SimpleNamespace(hostname='NB-APL', tag='T7', plaqueta='', categoria='Notebook', site='',
+                         fornecedor='', garantia='', modelo='Latitude 5450')
+    sd.criar_ativo(it, 'In Store')
+    a = s.ativos['NB-APL']
+    assert a['serial_no'] == 'T7' and 'serial_number' not in a

@@ -29,7 +29,7 @@ from app.models import Config
 
 ACCEPT = 'application/vnd.manageengine.sdp.v3+json'
 CHAVES = ('sd_url', 'sd_chave', 'sd_ssl', 'sd_ativo', 'sd_ativos', 'sd_estados', 'sd_anexar_ativo',
-          'sd_criar_ativo', 'sd_tipos', 'sd_campos_zelo', 'sd_criar_fora')
+          'sd_criar_ativo', 'sd_tipos', 'sd_campos_zelo', 'sd_criar_fora', 'sd_apelidos')
 TIPOS_ENVIO = ('Entrega', 'Empréstimo', 'Devolução')
 NOMES_TIPO = {'chamado': 'Termo + nota', 'ativo': 'Ativo', 'termo': 'Termo assinado'}
 _cache = {}            # chamado → (quando, dados)
@@ -476,6 +476,33 @@ def listar_produtos(limite_paginas=20):
     return saida
 
 
+def campos_metainfo(plural):
+    """Os nomes de campo que o módulo conhece, segundo o próprio Service Desk.
+
+    Serve para achar o nome certo quando o build recusa um campo: a service tag, por exemplo, pode
+    se chamar `serial_number`, `serial_no` ou `service_tag` conforme o módulo. Perguntar é melhor
+    que tentar sinônimos no escuro.
+    """
+    j, _onde, _erro = _metainfo(plural)
+    if j is None:
+        return []
+    achados = set()
+
+    def _varrer(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if isinstance(v, dict) and ({'type', 'data_type', 'mandatory', 'api_name'} & set(v)):
+                    achados.add(str(k))
+                if k in ('name', 'api_name', 'field_name') and isinstance(v, str):
+                    achados.add(v)
+                _varrer(v)
+        elif isinstance(o, list):
+            for v in o:
+                _varrer(v)
+    _varrer(j.get('metainfo') or j)
+    return sorted(achados)
+
+
 def achar_produto(modelo=None, tipo=None):
     """O produto (modelo) a usar na criação. Devolve (produto, recado); produto None se não achar.
 
@@ -536,9 +563,14 @@ def criar_ativo(it, estado=None):
         corpo['product'] = {'id': prod['id']} if prod.get('id') else {'name': prod.get('name')}
     elif 'product' in obrigatorios(plural):
         raise ErroSD(f'O Service Desk exige um produto para criar o ativo, e {recado}')
-    # Campos que ESTE build recusa na criação, descobertos pelo diagnóstico. Cada instalação do SDP
-    # recusa um conjunto diferente, e um campo recusado derruba a chamada inteira — melhor nascer
-    # sem ele do que não nascer.
+    # O que o diagnóstico descobriu sobre ESTE build. Cada instalação do SDP recusa um conjunto
+    # diferente de campos e chama alguns por outro nome; um campo recusado derruba a chamada
+    # inteira, então é melhor o ativo nascer sem ele — mas, se existir com outro nome, vai com ele.
+    for par in (conf('sd_apelidos') or '').split(';'):
+        de, _s, para = par.partition('=')
+        de, para = de.strip(), para.strip()
+        if de and para and de in corpo:
+            corpo[para] = corpo.pop(de)
     for c in (conf('sd_criar_fora') or '').split(';'):
         corpo.pop(c.strip(), None)
     j = _http('POST', f'/api/v3/{plural}', {chave: corpo}, timeout=20)
@@ -591,10 +623,25 @@ def sondar_campos(plural, chave, base, opcionais):
     ok, erro = _tentar(_nomear(base))
     if not ok:
         return False, erro, {}
+    vocabulario = campos_metainfo(plural)
     resultado = {}
     for campo, valor in opcionais.items():
         ok_c, erro_c = _tentar(_nomear(dict(base, **{campo: valor})))
-        resultado[campo] = '' if ok_c else erro_c
+        if ok_c:
+            resultado[campo] = ''
+            continue
+        # Recusado pode ser "este build não tem esse campo" e não "esse valor é inválido": procura
+        # o mesmo dado com outro nome, mas só entre nomes que o módulo DIZ ter.
+        raiz = campo.split('_')[0]
+        for outro in vocabulario:
+            if outro == campo or raiz not in outro:
+                continue
+            ok_o, _e = _tentar(_nomear(dict(base, **{outro: valor})))
+            if ok_o:
+                resultado[campo] = f'APELIDO:{outro}'
+                break
+        else:
+            resultado[campo] = erro_c
     return True, '', resultado
 
 
@@ -677,13 +724,32 @@ def diagnostico_criacao():
             linhas += [f'  Nem o mínimo (nome{" + produto" if prod else ""}) passou: {erro_base}',
                        '  O problema não é um campo meu — é o cadastro ou a permissão da chave no SDP.']
             return False, linhas
-        fora = [c for c, m in res.items() if m]
+        apelidos, fora = {}, []
         for campo, motivo in sorted(res.items()):
-            linhas.append(f'  {"OK  " if not motivo else "NÃO "} {campo}' + (f': {motivo}' if motivo else ''))
+            if not motivo:
+                linhas.append(f'  OK   {campo}')
+            elif motivo.startswith('APELIDO:'):
+                outro = motivo.split(':', 1)[1]
+                apelidos[campo] = outro
+                linhas.append(f'  OK   {campo} — neste build chama-se "{outro}"')
+            else:
+                fora.append(campo)
+                linhas.append(f'  NÃO  {campo}: {motivo}')
+        novo_conf = {}
         if fora:
-            salvar_conf({'sd_criar_fora': ';'.join(fora)})
-            linhas += ['Guardei para não mandar mais: ' + ', '.join(fora)
-                       + '. Clique no diagnóstico de novo para confirmar.']
+            novo_conf['sd_criar_fora'] = ';'.join(fora)
+            linhas.append('Guardei para não mandar mais: ' + ', '.join(fora))
+            voc = campos_metainfo(mod['api_plural_name'])
+            if voc:      # para eu achar o nome certo quando a busca por apelido não acha
+                linhas.append(f'Campos que o módulo diz ter ({len(voc)}): ' + ', '.join(voc[:60])
+                              + (' ...' if len(voc) > 60 else ''))
+        if apelidos:
+            novo_conf['sd_apelidos'] = ';'.join(f'{k}={v}' for k, v in apelidos.items())
+            linhas.append('Guardei os nomes certos: '
+                          + ', '.join(f'{k} → {v}' for k, v in apelidos.items()))
+        if novo_conf:
+            salvar_conf(novo_conf)
+            linhas.append('Clique no diagnóstico de novo para confirmar.')
         return False, linhas
     linhas.append(f'Criado com id {novo.get("id")}. Conferindo o que o Service Desk guardou:')
     visto = {}
