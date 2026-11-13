@@ -130,6 +130,16 @@ def servicedesk():
                 flash('Conexão OK: o Service Desk respondeu com a chave configurada.', 'success')
             except sd.ErroSD as e:
                 flash(str(e), 'danger')
+        elif acao == 'inspecionar':
+            # Em qual campo o agente grava a service tag? Nenhuma documentação responde; uma
+            # máquina com agente responde. O nome que sai daqui é o que entra em "Nomes de campo".
+            achados, err = sd.inspecionar_ativo(request.form.get('hostname'))
+            if err:
+                flash(err, 'danger')
+            for a in achados:
+                flash(f'Ativo "{request.form.get("hostname", "").strip()}" — tipo {a["tipo"] or "?"}, '
+                      f'lido de {a["onde"]}\n'
+                      + '\n'.join(f'  {k}: {v}' for k, v in a['campos']), 'success')
         elif acao == 'diagnostico':
             # Não promete criação em massa com base em documentação: cria um ativo de teste de
             # verdade, mostra campo por campo o que o build aceitou, e apaga.

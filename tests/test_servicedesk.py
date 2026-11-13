@@ -41,7 +41,9 @@ class SimuladorSD:
             li = dados['list_info']
             if 'search_criteria' in li:
                 v = li['search_criteria']['value']
-                return 200, json.dumps({'asset_assets': [a for a in self.ativos.values() if a['name'] == v],
+                # o SDP não diferencia maiúscula de minúscula na busca por nome
+                return 200, json.dumps({'asset_assets': [a for a in self.ativos.values()
+                                                         if (a['name'] or '').upper() == (v or '').upper()],
                                         'response_status': [{'status': 'success'}]})
             todos = list(self.ativos.values())                      # listagem paginada
             ini, n = li.get('start_index', 1), li.get('row_count', 100)
@@ -968,3 +970,44 @@ def test_tipo_de_produto_escolhe_o_endereco_e_nao_vai_no_corpo(app, sim):
     sd.criar_ativo(it, 'In Store')
     assert 'product_type' not in s.ativos['NB-TIPO']
     assert sd.corpo_do_item(it)['product_type'] == {'name': 'Laptop'}   # segue servindo de bússola
+
+
+# ------------------------------------------------------------------ inspecionar um ativo
+
+def test_inspecionar_mostra_os_campos_preenchidos_pela_ficha_do_modulo(app, sim):
+    """A listagem geral devolve menos campos que a ficha do módulo; ler por ela esconderia
+    justamente o campo que se está procurando."""
+    s, _p = sim
+    s.ativos['NB-AGENTE'] = {'id': '700', 'name': 'NB-AGENTE', 'product_type': {'name': 'Laptop'},
+                             'org_serial_number': 'TAGREAL1', 'serial_number': '',
+                             'state': {'name': 'In Use'}, 'asset_tag': None, 'contracts': []}
+    s.ativos_por_id['700'] = s.ativos['NB-AGENTE']
+    achados, err = sd.inspecionar_ativo('nb-agente')
+    assert not err and len(achados) == 1
+    campos = dict(achados[0]['campos'])
+    assert campos['org_serial_number'] == 'TAGREAL1' and campos['state'] == 'In Use'
+    assert 'serial_number' not in campos and 'asset_tag' not in campos   # vazios ficam de fora
+    assert achados[0]['onde'].endswith('/asset_computers/700')
+
+
+def test_inspecionar_avisa_quando_o_ativo_nao_existe(app, sim):
+    achados, err = sd.inspecionar_ativo('NAO-EXISTE')
+    assert not achados and 'não tem nenhum ativo' in err
+
+
+def test_inspecionar_sem_hostname_nao_chama_o_sd(app, sim):
+    achados, err = sd.inspecionar_ativo('   ')
+    assert not achados and 'Diga o hostname' in err
+
+
+def test_inspecionar_pela_tela_de_administracao(app, sim):
+    s, _p = sim
+    s.ativos['NB-TELA'] = {'id': '701', 'name': 'NB-TELA', 'product_type': {'name': 'Laptop'},
+                           'org_serial_number': 'TAG-DA-TELA'}
+    s.ativos_por_id['701'] = s.ativos['NB-TELA']
+    adm = app.test_client()
+    adm.post('/login', data={'email': 'admin@teste', 'senha': 'senha-forte-1'})
+    r = adm.post('/admin/servicedesk', data={'acao': 'inspecionar', 'hostname': 'NB-TELA'},
+                 follow_redirects=True)
+    texto = r.get_data(as_text=True)
+    assert 'org_serial_number: TAG-DA-TELA' in texto

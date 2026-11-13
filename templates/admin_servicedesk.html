@@ -54,6 +54,14 @@
  <div class="col-12 d-flex gap-2 mt-2"><button class="btn btn-sm btn-zelo" name="acao" value="salvar">Salvar</button>
   <button class="btn btn-sm btn-outline-secondary" name="acao" value="diagnostico"><i class="fa fa-vial me-1"></i>Diagnóstico: criar ativo</button></div>
 </form>
+<form method="post" class="d-flex gap-2 mt-3 flex-wrap align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+ <div class="flex-grow-1"><label class="form-label mb-0 small">Ver os campos de um ativo que já existe lá</label>
+  <input class="form-control form-control-sm z-mono" name="hostname" placeholder="hostname da máquina" required></div>
+ <button class="btn btn-sm btn-outline-secondary" name="acao" value="inspecionar"><i class="fa fa-magnifying-glass me-1"></i>Inspecionar</button>
+</form>
+<p class="small text-muted mt-1 mb-0">Mostra todos os campos preenchidos daquele ativo, pelos nomes da API — os mesmos que entram em
+ "Nomes de campo próprios". Numa máquina <b>com agente instalado</b>, é assim que se descobre em qual campo o agente grava a service tag,
+ que é o campo que o Zelo precisa usar para o agente casar em vez de duplicar.</p>
 <p class="small text-muted mt-2 mb-0">O diagnóstico lista os tipos de produto do seu Service Desk com o endereço de cada um, cria um ativo
  chamado <code>ZELO-TESTE-…</code>, mostra campo por campo o que ele guardou, e apaga em seguida. Se não conseguir apagar, ele avisa
  o nome para você tirar à mão.</p>

@@ -222,6 +222,49 @@ def achar_ativo(hostname):
     return lst[0] if lst else None
 
 
+def inspecionar_ativo(hostname):
+    """Todos os campos preenchidos de um ativo, pelos nomes DA API. Devolve (linhas, erro).
+
+    Existe para uma pergunta que nenhuma documentação responde: em qual campo o agente do SDP grava
+    a service tag. Numa máquina com agente, a resposta é olhar quais campos vieram preenchidos — e
+    o nome que aparece aqui é o mesmo que entra em "Nomes de campo próprios".
+
+    Lê pela ficha do módulo, não pela listagem geral: a listagem devolve um conjunto reduzido de
+    campos, e foi ela que já fez campo gravado parecer campo perdido antes.
+    """
+    host = (hostname or '').strip()
+    if not host:
+        return [], 'Diga o hostname da máquina.'
+    try:
+        a = achar_ativo(host)
+    except ErroSD as e:
+        return [], str(e)
+    if not a:
+        return [], f'O Service Desk não tem nenhum ativo chamado "{host}".'
+    ficha, onde = a, '/api/v3/asset_assets (listagem geral)'
+    tipo = a.get('product_type')
+    tipo = tipo.get('name') if isinstance(tipo, dict) else tipo
+    mod = modulo_do_tipo(tipo) if tipo else None
+    if mod and a.get('id'):
+        chave = mod.get('api_name') or mod['api_plural_name'].rstrip('s')
+        try:
+            j = _http('GET', f'/api/v3/{mod["api_plural_name"]}/{a["id"]}', timeout=20)
+            ficha = j.get(chave) or j.get('asset_asset') or a
+            onde = f'/api/v3/{mod["api_plural_name"]}/{a["id"]}'
+        except ErroSD:
+            pass
+
+    def _texto(v):
+        if isinstance(v, dict):
+            return str(v.get('name') or v.get('value') or v.get('id') or '')
+        if isinstance(v, list):
+            return f'({len(v)} item(ns))' if v else ''
+        return '' if v is None else str(v)
+
+    linhas = [(k, _texto(v)) for k, v in sorted(ficha.items()) if _texto(v).strip()]
+    return [{'onde': onde, 'tipo': tipo or '', 'campos': linhas}], ''
+
+
 def listar_usuarios(inicio=1, linhas=100):
     """Uma página de usuários do Service Desk. Devolve (lista, tem_mais).
 
