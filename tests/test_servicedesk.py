@@ -19,6 +19,11 @@ class SimuladorSD:
         self.anexos, self.notas, self.fora = [], [], False
         self.ativos, self.ativos_por_id, self.usuarios = {}, {}, []
         self.apagados, self.seq, self.recusa_post = [], 500, ''
+        # como o build de verdade: um endereço por tipo de produto, e asset_assets não cria
+        self.modulos = [{'id': '1', 'display_name': 'Laptop', 'api_name': 'asset_computer',
+                         'api_plural_name': 'asset_computers', 'category': {'display_name': 'Asset'}},
+                        {'id': '2', 'display_name': 'Monitor', 'api_name': 'asset_monitor',
+                         'api_plural_name': 'asset_monitors', 'category': {'display_name': 'Asset'}}]
 
     def __call__(self, metodo, url, headers, corpo):
         if self.fora:
@@ -41,8 +46,19 @@ class SimuladorSD:
             return 200, json.dumps({'asset_assets': pagina, 'response_status': [{'status': 'success'}],
                                     'list_info': {'has_more_rows': ini - 1 + n < len(todos),
                                                   'row_count': len(pagina)}})
+        if cam == '/api/v3/requests/assets/module':
+            return 200, json.dumps({'module': self.modulos, 'response_status': [{'status': 'success'}]})
         if cam == '/api/v3/asset_assets' and metodo == 'POST':
-            novo = dict(dados['asset_asset'])
+            # como no build de verdade: o endereço geral NÃO cria
+            return 404, json.dumps({'response_status': {'status': 'failed', 'messages': [
+                {'message': 'Cannot add asset under Asset product type.'}]}})
+        mc = re.match(r'^/api/v3/(asset_[a-z_]+)$', cam)
+        if mc and metodo == 'POST':
+            mod = next((m for m in self.modulos if m['api_plural_name'] == mc.group(1)), None)
+            if not mod:
+                return 404, json.dumps({'response_status': {'status': 'failed',
+                                                            'messages': [{'message': 'No such module'}]}})
+            novo = dict(dados[mod['api_name']])
             if novo['name'] in self.ativos:
                 return 400, json.dumps({'response_status': {'status': 'failed',
                                                             'messages': [{'message': 'Asset name already exists'}]}})
@@ -53,7 +69,7 @@ class SimuladorSD:
             novo['id'] = str(self.seq)
             self.ativos[novo['name']] = novo
             self.ativos_por_id[novo['id']] = novo
-            return 201, json.dumps({'asset_asset': novo, 'response_status': {'status': 'success'}})
+            return 201, json.dumps({mod['api_name']: novo, 'response_status': {'status': 'success'}})
         ma = re.match(r'^/api/v3/asset_assets/(\d+)$', cam)
         if ma and metodo == 'DELETE':
             a = self.ativos_por_id.pop(ma.group(1), None)
@@ -581,3 +597,51 @@ def test_salvar_uma_ficha_nao_zera_a_outra(app, sim):
                                          'sd_estados': '', 'sd_tipos': ''})
     assert sd.conf('sd_url') == 'http://sd.teste:8080' and sd.conf('sd_ativo') == 'Sim'
     assert sd.conf('sd_criar_ativo') == 'Não'
+
+
+# ------------------------------------------------------------------ um endereço por tipo
+
+def test_criacao_vai_no_endereco_do_tipo_nao_no_geral(app, sim):
+    """asset_assets não cria ativo: cada tipo de produto tem o seu endereço."""
+    from types import SimpleNamespace
+    s, _p = sim
+    it = SimpleNamespace(hostname='NB-ENDERECO', tag='T1', plaqueta='', categoria='Notebook',
+                         site='', fornecedor='', garantia='')
+    novo = sd.criar_ativo(it, 'In Store')
+    assert novo['id'] and s.ativos['NB-ENDERECO']['serial_number'] == 'T1'
+    assert sd.modulo_do_tipo('Laptop')['api_plural_name'] == 'asset_computers'
+
+
+def test_tipo_que_nao_existe_no_sd_lista_os_que_existem(app, sim):
+    from types import SimpleNamespace
+    sd.salvar_conf({'sd_tipos': 'Notebook = Ultrabook'})
+    it = SimpleNamespace(hostname='NB-Z', tag='', plaqueta='', categoria='Notebook', site='',
+                         fornecedor='', garantia='')
+    with pytest.raises(sd.ErroSD) as e:
+        sd.criar_ativo(it)
+    assert 'não existe no seu Service Desk' in str(e.value) and 'Laptop' in str(e.value)
+
+
+def test_categoria_sem_tipo_nao_tenta_criar(app, sim):
+    """Sem tipo não há endereço para onde mandar: erro claro em vez de 404 do SDP."""
+    from types import SimpleNamespace
+    it = SimpleNamespace(hostname='KIOSK-9', tag='', plaqueta='', categoria='Kiosk', site='',
+                         fornecedor='', garantia='')
+    with pytest.raises(sd.ErroSD, match='sem tipo de produto'):
+        sd.criar_ativo(it)
+
+
+def test_diagnostico_mostra_os_tipos_do_build(app, sim):
+    ok, linhas = sd.diagnostico_criacao()
+    texto = '\n'.join(linhas)
+    assert ok
+    assert '/api/v3/asset_computers' in texto and '/api/v3/asset_monitors' in texto
+    assert 'Tipos de produto no seu Service Desk (2)' in texto
+
+
+def test_diagnostico_sem_a_lista_de_tipos_para_antes_de_criar(app, sim):
+    s, _p = sim
+    s.fora = True
+    ok, linhas = sd.diagnostico_criacao()
+    assert not ok and 'não cria ativo' in '\n'.join(linhas)
+    s.fora = False

@@ -158,7 +158,7 @@ Cadastrar quem não está no Zelo é opt-in linha a linha, com matrícula provis
 
 **C. O Zelo escrever no SD o que ele sabe melhor** — FEITA (v1.13.0)
 Dois interruptores separados em Administração → Service Desk, os dois desligados de fábrica:
-- **Cadastrar o ativo quando ele não existir lá**: em vez de a fila dar erro "ativo não existe", o
+- **Cadastrar o ativo quando ele não existir lá** (v1.14.0 depois do teste no laboratório): em vez de a fila dar erro "ativo não existe", o
   Zelo cria com hostname, service tag, plaqueta, site, fornecedor, garantia e tipo de produto.
   Mandar hostname e service tag é o que faz o agente, quando for instalado, casar com este registro
   em vez de duplicar (a service tag é o primeiro critério de casamento do SDP). Não manda `product`:
@@ -171,10 +171,20 @@ Dois interruptores separados em Administração → Service Desk, os dois deslig
 Campo vazio no Zelo fica **fora** do corpo da chamada: no SDP mandar nulo apaga o que está lá,
 não mandar o campo deixa como está.
 
+**`asset_assets` NÃO cria ativo** (provado no laboratório, 13/nov): o POST devolve
+`HTTP 404 Cannot add asset under Asset product type`. A ManageEngine separou **um endereço por tipo
+de produto** — `asset_computers` (ex-workstations), `asset_monitors`, `asset_printers`,
+`asset_access_points`… — e o nome de cada um sai de `GET /api/v3/requests/assets/module`, no campo
+`api_plural_name`. O Zelo **pergunta** em vez de carregar lista fixa: os tipos variam entre build e
+entre instalação, e lista fixa é justamente o que produz aquele 404. O tipo de produto também
+decide a chave do corpo (`asset_computers` → `{'asset_computer': {...}}`).
+
 **Diagnóstico antes da promessa.** A documentação pública e este build não batem, então a criação
 não entrou por fé: o botão **Diagnóstico: criar ativo** cria um `ZELO-TESTE-…` no Service Desk de
 verdade, mostra campo por campo o que o build guardou, e apaga. Se a recusa citar um campo, o
-relatório diz qual. É o que separa "a API suporta" de "o nosso SDP aceita".
+relatório diz qual — e antes disso ele lista **os tipos de produto do seu Service Desk com o
+endereço de cada um**, que é o que faltava para a criação funcionar. É o que separa "a API suporta"
+de "o nosso SDP aceita"; foi esse botão que achou o 404 acima em um minuto.
 
 **E + F. Ciclo completo do ativo** — FEITAS (v1.12.0)
 O estado no SD passou a sair da **situação atual do item**, não do tipo de lançamento: Em uso,

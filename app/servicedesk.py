@@ -14,6 +14,7 @@ A nota da API v3 não aceita anexo: o PDF vai como anexo do chamado (PUT /reques
 input_file) e a nota cita o nome do arquivo.
 """
 import json
+import re
 import ssl
 import threading
 import time
@@ -32,6 +33,7 @@ CHAVES = ('sd_url', 'sd_chave', 'sd_ssl', 'sd_ativo', 'sd_ativos', 'sd_estados',
 TIPOS_ENVIO = ('Entrega', 'Empréstimo', 'Devolução')
 NOMES_TIPO = {'chamado': 'Termo + nota', 'ativo': 'Ativo', 'termo': 'Termo assinado'}
 _cache = {}            # chamado → (quando, dados)
+_modulos = {}          # tipos de produto do SD: {'quando', 'lista'}
 CACHE_SEG = 300
 
 # Transporte trocável nos testes: f(metodo, url, headers, corpo_bytes) → (status, texto)
@@ -54,6 +56,7 @@ def salvar_conf(valores):
             c.valor = v
     db.session.commit()
     _cache.clear()
+    _modulos.clear()          # trocar de Service Desk troca a lista de tipos
 
 
 def configurado():
@@ -373,6 +376,42 @@ def corpo_do_item(it, estado=None):
     return c
 
 
+def listar_modulos(recarregar=False):
+    """Os módulos de ativo do Service Desk — um por tipo de produto, cada um com o SEU endereço.
+
+    `/api/v3/asset_assets` **não cria** ativo: a ManageEngine separou um endereço por tipo de
+    produto (`asset_computers`, `asset_access_points`, ...), e o nome de cada um vem daqui, no campo
+    `api_plural_name`. Por isso o Zelo pergunta em vez de carregar uma lista fixa: os tipos variam
+    entre build e entre instalação, e lista fixa é exatamente o que devolve
+    "Cannot add asset under Asset product type".
+    """
+    agora = time.time()
+    if not recarregar and _modulos.get('quando', 0) + 1800 > agora:
+        return _modulos['lista']
+    j = _http('GET', '/api/v3/requests/assets/module', timeout=20)
+    lista = j.get('module') or j.get('modules') or []
+    lista = [m for m in lista if isinstance(m, dict) and m.get('api_plural_name')]
+    _modulos.update(quando=agora, lista=lista)
+    return lista
+
+
+def _nome(v):
+    return re.sub(r'\s+', ' ', str(v or '')).strip().lower()
+
+
+def modulo_do_tipo(tipo):
+    """O módulo cujo nome bate com o tipo de produto pedido. None se não achar."""
+    alvo = _nome(tipo)
+    if not alvo:
+        return None
+    mods = listar_modulos()
+    for campo in ('display_name', 'api_name', 'internal_name'):
+        for m in mods:
+            if _nome(m.get(campo)) == alvo:
+                return m
+    return None
+
+
 def criar_ativo(it, estado=None):
     """Cria o ativo no Service Desk a partir do cadastro do Zelo. Devolve o ativo criado.
 
@@ -383,8 +422,21 @@ def criar_ativo(it, estado=None):
     corpo = corpo_do_item(it, estado)
     if not corpo.get('name'):
         raise ErroSD('Item sem hostname no Zelo: o ativo no Service Desk é identificado pelo nome')
-    j = _http('POST', '/api/v3/asset_assets', {'asset_asset': corpo}, timeout=20)
-    novo = j.get('asset_asset') or {}
+    tipo = (corpo.get('product_type') or {}).get('name')
+    if not tipo:
+        raise ErroSD(f'Categoria "{it.categoria}" sem tipo de produto: a criação precisa de um '
+                     '(ajuste o mapa de tipos em Administração → Service Desk)')
+    mod = modulo_do_tipo(tipo)
+    if not mod:
+        nomes = ', '.join(sorted({m.get('display_name') or m.get('api_name') or ''
+                                  for m in listar_modulos()} - {''}))
+        raise ErroSD(f'O tipo de produto "{tipo}" não existe no seu Service Desk.'
+                     + (f' Os que existem: {nomes}' if nomes else ''))
+    # cada tipo tem seu endereço e sua chave no corpo: asset_computers → {'asset_computer': {...}}
+    plural = mod['api_plural_name']
+    chave = mod.get('api_name') or plural.rstrip('s')
+    j = _http('POST', f'/api/v3/{plural}', {chave: corpo}, timeout=20)
+    novo = j.get(chave) or j.get('asset_asset') or {}
     if isinstance(novo, list):
         novo = novo[0] if novo else {}
     if not novo.get('id'):
@@ -416,12 +468,26 @@ def diagnostico_criacao():
                             garantia='')
     enviado = corpo_do_item(falso, 'In Store')
     linhas = [f'Ativo de teste: {marca}']
+    # Primeiro o que existe NESTE Service Desk: sem isso, um erro de criação não diz se o problema
+    # é o endereço, o tipo de produto ou um campo.
+    try:
+        mods = listar_modulos(recarregar=True)
+        linhas.append(f'Tipos de produto no seu Service Desk ({len(mods)}), com o endereço de cada um:')
+        for m in sorted(mods, key=lambda x: _nome(x.get('display_name'))):
+            cat = (m.get('category') or {}).get('display_name') if isinstance(m.get('category'), dict) else m.get('category')
+            linhas.append(f'  {m.get("display_name") or m.get("api_name")}'
+                          f' → /api/v3/{m["api_plural_name"]}' + (f'  [{cat}]' if cat else ''))
+    except ErroSD as e:
+        linhas += [f'Não deu para listar os tipos de produto: {e}',
+                   'Sem essa lista o Zelo não sabe em qual endereço criar: /api/v3/asset_assets não cria ativo.']
+        return False, linhas
     try:
         novo = criar_ativo(falso, 'In Store')
     except ErroSD as e:
         linhas += [f'A criação FALHOU: {e}',
                    'Campos mandados: ' + ', '.join(sorted(enviado)),
-                   'Se a recusa citar um campo, tire-o de corpo_do_item ou ajuste o mapa de tipos.']
+                   'Se a recusa citar um TIPO, acerte o mapa de tipos acima com um nome da lista.',
+                   'Se citar um CAMPO, me diga qual que eu tiro do corpo da chamada.']
         return False, linhas
     linhas.append(f'Criado com id {novo.get("id")}. Conferindo o que o Service Desk guardou:')
     visto = {}

@@ -36,8 +36,11 @@
    daqui em diante o Zelo passa a sobrescrever o que alguém tenha preenchido à mão no SD.</div></div>
  <div class="col-12"><label class="form-label mb-0">Tipos de produto próprios (opcional)</label>
   <input class="form-control form-control-sm z-mono" name="sd_tipos" value="{{ tipos }}" placeholder="Notebook=Laptop;Coletor=Handheld">
-  <div class="form-text">Usado só na criação. Formato <code>Categoria do Zelo=Tipo de produto do SD</code>, separados por ponto e vírgula;
-   lado direito vazio cria sem tipo. Em branco, vale o padrão: {{ padrao_tipos }}.</div></div>
+  <div class="form-text">Usado só na criação, e é ele que decide <b>onde</b> o ativo é criado: no Service Desk cada tipo de produto
+   tem o seu próprio endereço na API, e o tipo precisa existir lá com esse nome exato.
+   Rode o diagnóstico para ver a lista do seu Service Desk. Formato <code>Categoria do Zelo=Tipo de produto do SD</code>,
+   separados por ponto e vírgula; lado direito vazio deixa aquela categoria sem criação.
+   Em branco, vale o padrão: {{ padrao_tipos }}.</div></div>
  <div class="col-12"><label class="form-label mb-0">Estados próprios (opcional)</label>
   <input class="form-control form-control-sm z-mono" name="sd_estados" value="{{ estados }}" placeholder="Em uso=In Use;Baixada=Disposed">
   <div class="form-text">Só se o seu Service Desk tem estados diferentes dos de fábrica. Formato <code>Situação do Zelo=Estado do SD</code>,
@@ -46,8 +49,9 @@
  <div class="col-12 d-flex gap-2 mt-2"><button class="btn btn-sm btn-zelo" name="acao" value="salvar">Salvar</button>
   <button class="btn btn-sm btn-outline-secondary" name="acao" value="diagnostico"><i class="fa fa-vial me-1"></i>Diagnóstico: criar ativo</button></div>
 </form>
-<p class="small text-muted mt-2 mb-0">O diagnóstico cria um ativo chamado <code>ZELO-TESTE-…</code> no seu Service Desk, mostra campo por campo
- o que ele guardou, e apaga em seguida. Se não conseguir apagar, ele avisa o nome para você tirar à mão.</p>
+<p class="small text-muted mt-2 mb-0">O diagnóstico lista os tipos de produto do seu Service Desk com o endereço de cada um, cria um ativo
+ chamado <code>ZELO-TESTE-…</code>, mostra campo por campo o que ele guardou, e apaga em seguida. Se não conseguir apagar, ele avisa
+ o nome para você tirar à mão.</p>
 </div>
 <div class="z-card"><h2>O que vai para o chamado</h2><ul class="small mb-0">
  <li>Entrega, empréstimo ou devolução com Nº de chamado → anexo <code>Termo_Zelo_&lt;Nº&gt;.pdf</code> + nota com o item, a pessoa, o CC e o Nº do lançamento.</li>
