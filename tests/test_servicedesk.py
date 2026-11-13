@@ -940,3 +940,17 @@ def test_escolha_manual_do_nome_de_campo_e_respeitada(app, sim):
                          site='', fornecedor='', garantia='', modelo='Latitude 5450')
     sd.criar_ativo(it, 'In Store')
     assert s.ativos['NB-ESC']['org_serial_number'] == 'TAG9'
+
+
+def test_relatorio_confere_o_campo_pelo_nome_apelidado(app, sim):
+    """Com apelido ativo o campo É mandado, com outro nome. Conferir pelo nome antigo faz o
+    relatório acusar de perdido justamente o que o apelido resolveu."""
+    s, _p = sim
+    s.recusa_campo = 'serial_number'
+    s.campos_metainfo = ['name', 'product', 'asset_tag', 'org_serial_number', 'state']
+    sd.salvar_conf({'sd_apelidos': 'serial_number=org_serial_number'})
+    ok, linhas = sd.diagnostico_criacao()
+    texto = '\n'.join(linhas)
+    assert ok
+    assert 'OK   serial_number (como "org_serial_number"): mandei' in texto
+    assert 'serial_number: não mandei' not in texto

@@ -820,13 +820,19 @@ def diagnostico_criacao():
     # Compara com o que FOI mandado, não com o que seria mandado: campo descartado por
     # `sd_criar_fora` não é campo perdido, é campo que nem foi.
     mandado_de_fato = (relato.get('corpo') if relato else None) or enviado
+    apelido_de = dict(_pares(conf('sd_apelidos')))
     for campo in sorted(enviado):
-        if campo not in mandado_de_fato and campo not in (visto or {}):
+        # campo que foi com outro nome tem que ser conferido PELO OUTRO NOME, senão o relatório
+        # acusa de perdido justamente o que o apelido resolveu
+        chave_real = apelido_de.get(campo, campo)
+        apelidado = f' (como "{chave_real}")' if chave_real != campo else ''
+        if chave_real not in mandado_de_fato and chave_real not in (visto or {}):
             linhas.append(f'  --   {campo}: não mandei (descartado antes)')
             continue
-        mandado, guardado = _valor(mandado_de_fato.get(campo)), _valor((visto or novo).get(campo))
+        mandado = _valor(mandado_de_fato.get(chave_real))
+        guardado = _valor((visto or novo).get(chave_real))
         bate = str(mandado).strip().upper() == str(guardado).strip().upper()
-        linhas.append(f'  {"OK  " if bate else "NÃO "} {campo}: mandei "{mandado}"'
+        linhas.append(f'  {"OK  " if bate else "NÃO "} {campo}{apelidado}: mandei "{mandado}"'
                       + ('' if bate else f', guardou "{guardado}"'))
     # Nada aqui é definitivo. O descarte pode ter sido só o nome errado, e o apelido pode ter sido
     # um falso positivo de uma versão anterior — então os dois são refeitos a cada rodada, agora
