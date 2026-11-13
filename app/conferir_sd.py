@@ -35,10 +35,8 @@ GRUPOS = {
     'so_zelo': ('Só no Zelo', 'Máquina com hostname aqui que o Service Desk não conhece: ou está sem agente, ou falta cadastrar lá. Monitor, celular e acessório não entram nesta conta — nunca estiveram no SD.'),
 }
 # situação do Zelo → estado equivalente no Service Desk
-EQUIVALE = {
-    'Em uso': 'In Use', 'Emprestado': 'In Use', 'Em estoque': 'In Store', 'Reservada': 'In Store',
-    'Devolvido': 'In Store', 'Em preparação': 'In Store', 'Manutenção': 'In Repair', 'Baixada': 'Expired',
-}
+# O mapa situação → estado mora em app.servicedesk (ESTADO_PADRAO + sd_estados), não aqui: esta tela
+# tem que acusar exatamente a divergência que a sincronização sabe corrigir.
 
 
 def _up(v):
@@ -189,7 +187,10 @@ def _quem_difere(it, s):
 
 
 def _estado_difere(it, s):
-    esperado = EQUIVALE.get(it.situacao or '')
+    from app import servicedesk as sd
+    # o mesmo mapa que a sincronização usa, inclusive o que foi customizado em `sd_estados`: dois
+    # mapas separados divergiriam, e a tela acusaria divergência que a fila não corrige.
+    esperado = sd.mapa_estados().get(it.situacao or '')
     if not esperado or not s['estado']:
         return False
     return _up(s['estado']) != _up(esperado)

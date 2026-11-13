@@ -102,15 +102,26 @@ def servicedesk():
     if request.method == 'POST':
         acao = request.form.get('acao')
         if acao == 'salvar':
-            v = {'sd_url': (request.form.get('sd_url') or '').strip().rstrip('/'),
-                 'sd_ssl': request.form.get('sd_ssl') or 'Verificar', 'sd_ativo': request.form.get('sd_ativo') or 'Não',
-                 'sd_ativos': request.form.get('sd_ativos') or 'Não',
-                 'sd_anexar_ativo': request.form.get('sd_anexar_ativo') or 'Não',
-                 'sd_estados': (request.form.get('sd_estados') or '').strip()}
+            # São duas fichas na tela (conexão e ativo). Só entra o que veio NESTE envio: gravar a
+            # chave inteira faria salvar uma ficha zerar os campos da outra.
+            v = {}
+            for k in ('sd_ativos', 'sd_anexar_ativo', 'sd_criar_ativo', 'sd_campos_zelo'):
+                if k in request.form:
+                    v[k] = request.form.get(k) or 'Não'
+            for k in ('sd_estados', 'sd_tipos'):
+                if k in request.form:
+                    v[k] = (request.form.get(k) or '').strip()
+            if 'sd_url' in request.form:
+                v['sd_url'] = (request.form.get('sd_url') or '').strip().rstrip('/')
+            if 'sd_ssl' in request.form:
+                v['sd_ssl'] = request.form.get('sd_ssl') or 'Verificar'
+            if 'sd_ativo' in request.form:
+                v['sd_ativo'] = request.form.get('sd_ativo') or 'Não'
             if (request.form.get('sd_chave') or '').strip():
                 v['sd_chave'] = request.form['sd_chave'].strip()
             sd.salvar_conf(v)
-            registrar_log('service desk', f'configuração salva: {v["sd_url"]}, ativo={v["sd_ativo"]}'
+            registrar_log('service desk', 'configuração salva: '
+                          + ', '.join(f'{k}={x}' for k, x in sorted(v.items()) if k != 'sd_chave')
                           + (', chave trocada' if 'sd_chave' in v else ''))
             flash('Configuração salva.', 'success')
         elif acao == 'testar':
@@ -119,6 +130,15 @@ def servicedesk():
                 flash('Conexão OK: o Service Desk respondeu com a chave configurada.', 'success')
             except sd.ErroSD as e:
                 flash(str(e), 'danger')
+        elif acao == 'diagnostico':
+            # Não promete criação em massa com base em documentação: cria um ativo de teste de
+            # verdade, mostra campo por campo o que o build aceitou, e apaga.
+            try:
+                ok, linhas = sd.diagnostico_criacao()
+            except sd.ErroSD as e:
+                ok, linhas = False, [str(e)]
+            registrar_log('service desk', 'diagnóstico de criação de ativo: ' + ('OK' if ok else 'falhou'))
+            flash('Diagnóstico de criação de ativo:\n' + '\n'.join(linhas), 'success' if ok else 'danger')
         elif acao == 'reenviar':
             ids = [int(i) for i in request.form.getlist('ids') if i.isdigit()] or \
                   [e.id for e in EnvioSD.query.filter(EnvioSD.status != 'Enviado')]
@@ -131,5 +151,8 @@ def servicedesk():
                            ssl=sd.conf('sd_ssl') or 'Verificar', ativo=sd.conf('sd_ativo') or 'Não',
                            ativos=sd.conf('sd_ativos') or 'Não', envios=envios,
                            anexar_ativo=sd.conf('sd_anexar_ativo') or 'Não', estados=sd.conf('sd_estados') or '',
+                           criar_ativo=sd.conf('sd_criar_ativo') or 'Não', tipos=sd.conf('sd_tipos') or '',
+                           campos_zelo=sd.conf('sd_campos_zelo') or 'Não',
                            padrao_estados='; '.join(f'{k} = {v}' for k, v in sd.ESTADO_PADRAO.items()),
+                           padrao_tipos='; '.join(f'{k} = {v}' for k, v in sd.TIPO_PADRAO.items()),
                            pendentes=sum(1 for e in envios if e.status != 'Enviado'))

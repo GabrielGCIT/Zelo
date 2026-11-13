@@ -27,7 +27,8 @@ from app import db
 from app.models import Config
 
 ACCEPT = 'application/vnd.manageengine.sdp.v3+json'
-CHAVES = ('sd_url', 'sd_chave', 'sd_ssl', 'sd_ativo', 'sd_ativos', 'sd_estados', 'sd_anexar_ativo')
+CHAVES = ('sd_url', 'sd_chave', 'sd_ssl', 'sd_ativo', 'sd_ativos', 'sd_estados', 'sd_anexar_ativo',
+          'sd_criar_ativo', 'sd_tipos', 'sd_campos_zelo')
 TIPOS_ENVIO = ('Entrega', 'Empréstimo', 'Devolução')
 NOMES_TIPO = {'chamado': 'Termo + nota', 'ativo': 'Ativo', 'termo': 'Termo assinado'}
 _cache = {}            # chamado → (quando, dados)
@@ -250,15 +251,20 @@ def achar_usuario(email=None, nome=None):
     return None
 
 
-def atualizar_ativo(asset_id, usuario_id, estado):
+def atualizar_ativo(asset_id, usuario_id, estado, extra=None):
     """Um ativo por chamada: o formato em lote (?ids=) devolve 'Internal Error' neste build.
 
     Estado vazio não entra no corpo — mandar um estado nulo faria o SDP recusar a chamada inteira,
     e há situação do Zelo que de propósito não mexe no estado (ver ESTADO_PADRAO).
+
+    `extra` são os campos de que o Zelo é dono (ver CAMPOS_ZELO). Só vêm quando `sd_campos_zelo`
+    está ligado, porque num ativo que já existe eles sobrescrevem o que alguém pôs à mão no SD —
+    e isso é uma decisão, não um detalhe.
     """
     corpo = {'user': {'id': str(usuario_id)} if usuario_id else None}
     if estado:
         corpo['state'] = {'name': estado}
+    corpo.update(extra or {})
     return _http('PUT', f'/api/v3/asset_assets/{asset_id}', {'asset_asset': corpo})
 
 
@@ -300,6 +306,144 @@ def acao_ativo(m, it=None):
     return mapa_estados().get(it.situacao or '')
 
 
+# Categoria no Zelo → tipo de produto no Service Desk. Só o que existe de fábrica no SDP; o que
+# não está aqui vai sem tipo, e o SDP resolve (ou recusa, e o erro aparece na fila). Editável em
+# `sd_tipos` para quem renomeou os tipos.
+TIPO_PADRAO = {
+    'Notebook': 'Laptop', 'Desktop': 'Workstation', 'Thin client': 'Workstation',
+    'Monitor': 'Monitor', 'Dock station': 'Docking Station', 'Celular': 'Mobile',
+    'Tablet': 'Tablet', 'Coletor': 'Handheld', 'Telefone IP': 'IP Phone', 'Impressora': 'Printer',
+}
+
+
+def mapa_tipos():
+    """O mapa em vigor. `sd_tipos` sobrepõe o padrão: 'Categoria=Tipo;Categoria=Tipo'."""
+    mapa = dict(TIPO_PADRAO)
+    for par in (conf('sd_tipos') or '').split(';'):
+        cat, _s, tp = par.partition('=')
+        cat, tp = cat.strip(), tp.strip()
+        if cat:
+            mapa[cat] = tp or None
+    return mapa
+
+
+# Os campos que o Zelo escreve num ativo que JÁ existe. Hostname, service tag, modelo e o que a
+# máquina diz de si mesma ficam de fora de propósito: o agente descreve melhor que digitação, e a
+# regra de dono (ver PLANO.md) é o que impede os dois lados de ficarem trocando dado.
+CAMPOS_ZELO = ('asset_tag', 'site', 'vendor', 'warranty_expiry')
+
+
+def criar_ativo_ligado():
+    return ativos_ligado() and conf('sd_criar_ativo') == 'Sim'
+
+
+def campos_zelo_ligado():
+    return ativos_ligado() and conf('sd_campos_zelo') == 'Sim'
+
+
+def corpo_do_item(it, estado=None):
+    """O que o Zelo manda sobre um ativo — só os campos de que ELE é dono.
+
+    Hostname, service tag, modelo, SO, memória: quem descreve melhor é o agente, então o Zelo não
+    escreve nada disso num ativo que já existe (ver `atualizar_ativo`). Na CRIAÇÃO é diferente: o
+    ativo não existe, ninguém descreveu nada, e mandar hostname e tag é o que faz o agente casar
+    com este registro depois em vez de duplicar.
+
+    Campo vazio fica fora do corpo: no SDP mandar nulo num campo é diferente de não mandar o campo,
+    e o primeiro apaga o que estiver lá.
+    """
+    c = {}
+    if (it.hostname or '').strip():
+        c['name'] = it.hostname.strip().upper()
+    if (it.tag or '').strip():
+        c['serial_number'] = it.tag.strip()
+    if (it.plaqueta or '').strip():
+        c['asset_tag'] = it.plaqueta.strip()
+    if (it.site or '').strip():
+        c['site'] = {'name': it.site.strip()}
+    if (it.fornecedor or '').strip():
+        c['vendor'] = {'name': it.fornecedor.strip()}
+    if (it.garantia or '').strip():
+        c['warranty_expiry'] = {'value': it.garantia.strip()}
+    tipo = mapa_tipos().get(it.categoria or '')
+    if tipo:
+        c['product_type'] = {'name': tipo}
+    if estado:
+        c['state'] = {'name': estado}
+    return c
+
+
+def criar_ativo(it, estado=None):
+    """Cria o ativo no Service Desk a partir do cadastro do Zelo. Devolve o ativo criado.
+
+    Um por chamada, como toda escrita neste build. Não tenta adivinhar o `product` (o modelo
+    precisa existir como produto cadastrado no SDP, e inventar um faria a chamada falhar inteira):
+    o tipo de produto basta para o ativo nascer, e o resto o agente completa quando chegar.
+    """
+    corpo = corpo_do_item(it, estado)
+    if not corpo.get('name'):
+        raise ErroSD('Item sem hostname no Zelo: o ativo no Service Desk é identificado pelo nome')
+    j = _http('POST', '/api/v3/asset_assets', {'asset_asset': corpo}, timeout=20)
+    novo = j.get('asset_asset') or {}
+    if isinstance(novo, list):
+        novo = novo[0] if novo else {}
+    if not novo.get('id'):
+        raise ErroSD('O Service Desk aceitou a chamada mas não devolveu o ativo criado')
+    return novo
+
+
+def apagar_ativo(asset_id):
+    """Apaga UM ativo. Só para o ativo de teste do diagnóstico.
+
+    Nunca para ativo de verdade: apagar um ativo com agente instalado desinstala o agente da
+    máquina ou joga o host na lista de exclusão do SDP, e ele não volta sozinho na varredura.
+    """
+    return _http('DELETE', f'/api/v3/asset_assets/{asset_id}', timeout=15)
+
+
+def diagnostico_criacao():
+    """Prova, no Service Desk de verdade, se o Zelo consegue criar ativo — e com quais campos.
+
+    A documentação pública e este build não batem (`/api/v3/assets` × `/api/v3/asset_assets`, lote
+    que devolve "Internal Error"), então não dá para prometer a criação em massa de 3203 itens com
+    base em documentação. Isto cria UM ativo de teste, confere o que voltou campo por campo, e
+    apaga em seguida. Devolve (ok, linhas) — `linhas` é o relatório, mesmo quando falha.
+    """
+    from types import SimpleNamespace
+    marca = f'ZELO-TESTE-{uuid.uuid4().hex[:6].upper()}'
+    falso = SimpleNamespace(hostname=marca, tag=f'TAG{uuid.uuid4().hex[:7].upper()}',
+                            plaqueta='TESTE-ZELO', categoria='Notebook', site='', fornecedor='',
+                            garantia='')
+    enviado = corpo_do_item(falso, 'In Store')
+    linhas = [f'Ativo de teste: {marca}']
+    try:
+        novo = criar_ativo(falso, 'In Store')
+    except ErroSD as e:
+        linhas += [f'A criação FALHOU: {e}',
+                   'Campos mandados: ' + ', '.join(sorted(enviado)),
+                   'Se a recusa citar um campo, tire-o de corpo_do_item ou ajuste o mapa de tipos.']
+        return False, linhas
+    linhas.append(f'Criado com id {novo.get("id")}. Conferindo o que o Service Desk guardou:')
+    visto = {}
+    try:
+        visto = achar_ativo(marca) or {}
+    except ErroSD:
+        pass
+    def _valor(v):
+        return (v.get('name') or v.get('value') or '') if isinstance(v, dict) else (v or '')
+    for campo in sorted(enviado):
+        mandado, guardado = _valor(enviado[campo]), _valor((visto or novo).get(campo))
+        bate = str(mandado).strip().upper() == str(guardado).strip().upper()
+        linhas.append(f'  {"OK  " if bate else "NÃO "} {campo}: mandei "{mandado}"'
+                      + ('' if bate else f', guardou "{guardado}"'))
+    try:
+        apagar_ativo(novo['id'])
+        linhas.append('Ativo de teste apagado.')
+    except ErroSD as e:
+        linhas.append(f'ATENÇÃO: não deu para apagar o ativo de teste ({e}). Apague {marca} à mão.')
+    return True, linhas
+
+
 def enviar_ativo(envio, m):
     """Atualiza usuário e estado do ativo. Funciona sem lançamento: manutenção e ajuste de cadastro
     mudam a situação do item sem gerar movimentação, e o estado no Service Desk tem que acompanhar."""
@@ -310,10 +454,16 @@ def enviar_ativo(envio, m):
     host = (envio.alvo or (it.hostname if it else '') or '').strip().upper()
     if not host:
         raise ErroSD('Item sem hostname no Zelo: não dá para achar o ativo no Service Desk')
-    a = achar_ativo(host)
-    if not a:
-        raise ErroSD(f'Ativo {host} não existe no Service Desk')
     estado = acao_ativo(m, it)
+    a = achar_ativo(host)
+    nasceu = ''
+    if not a:
+        if not (it and criar_ativo_ligado()):
+            raise ErroSD(f'Ativo {host} não existe no Service Desk')
+        a = criar_ativo(it, estado)
+        nasceu = ' (cadastrado agora)'
+    extra = {k: v for k, v in corpo_do_item(it).items() if k in CAMPOS_ZELO} \
+        if (it and not nasceu and campos_zelo_ligado()) else None
     # quem está com o ativo sai do CADASTRO do item, não do lançamento: assim uma correção pelo
     # Ajustar cadastro chega ao Service Desk igual a uma entrega.
     uid, quem = None, ''
@@ -324,12 +474,13 @@ def enviar_ativo(envio, m):
         if not u:
             raise ErroSD(f'{quem or it.matricula} não encontrado(a) como usuário no Service Desk')
         uid = u.get('id')
-    atualizar_ativo(a['id'], uid, estado)
+    atualizar_ativo(a['id'], uid, estado, extra)
     aviso = ''
     serial = (a.get('serial_number') or a.get('service_tag') or '')
     if it and it.tag and serial and serial.upper() != it.tag.upper():
         aviso = f' (atenção: service tag no SD {serial} ≠ Zelo {it.tag})'
-    return f'{host} → {estado or "estado inalterado"}' + (f' com {quem}' if uid else ' (sem usuário)') + aviso
+    return (f'{host}{nasceu} → {estado or "estado inalterado"}'
+            + (f' com {quem}' if uid else ' (sem usuário)') + aviso)
 
 
 def enviar_termo_assinado(envio, m):

@@ -18,6 +18,7 @@ class SimuladorSD:
         self.chamados = chamados          # {id: {'subject', 'status', 'requester': {...}}}
         self.anexos, self.notas, self.fora = [], [], False
         self.ativos, self.ativos_por_id, self.usuarios = {}, {}, []
+        self.apagados, self.seq, self.recusa_post = [], 500, ''
 
     def __call__(self, metodo, url, headers, corpo):
         if self.fora:
@@ -40,13 +41,35 @@ class SimuladorSD:
             return 200, json.dumps({'asset_assets': pagina, 'response_status': [{'status': 'success'}],
                                     'list_info': {'has_more_rows': ini - 1 + n < len(todos),
                                                   'row_count': len(pagina)}})
+        if cam == '/api/v3/asset_assets' and metodo == 'POST':
+            novo = dict(dados['asset_asset'])
+            if novo['name'] in self.ativos:
+                return 400, json.dumps({'response_status': {'status': 'failed',
+                                                            'messages': [{'message': 'Asset name already exists'}]}})
+            if self.recusa_post:
+                return 400, json.dumps({'response_status': {'status': 'failed',
+                                                            'messages': [{'message': self.recusa_post}]}})
+            self.seq += 1
+            novo['id'] = str(self.seq)
+            self.ativos[novo['name']] = novo
+            self.ativos_por_id[novo['id']] = novo
+            return 201, json.dumps({'asset_asset': novo, 'response_status': {'status': 'success'}})
         ma = re.match(r'^/api/v3/asset_assets/(\d+)$', cam)
+        if ma and metodo == 'DELETE':
+            a = self.ativos_por_id.pop(ma.group(1), None)
+            if a:
+                self.ativos.pop(a['name'], None)
+            self.apagados.append(ma.group(1))
+            return 200, json.dumps({'response_status': {'status': 'success'}})
         if ma and metodo == 'PUT':
             a = self.ativos_por_id[ma.group(1)]
             novo = dados['asset_asset']
             a['user'] = {'id': novo['user']['id']} if novo.get('user') else None
             if 'state' in novo:                                     # sem 'state' = não mexer
                 a['state'] = novo['state']
+            for k, v in novo.items():                               # plaqueta, site, fornecedor...
+                if k not in ('user', 'state'):
+                    a[k] = v
             return 200, json.dumps({'asset_asset': a, 'response_status': {'status': 'success'}})
         if cam == '/api/v3/users':
             li = dados['list_info']
@@ -412,3 +435,149 @@ def test_enfileirar_item_nao_duplica_pendencia(app, sim):
     pend = EnvioSD.query.filter(EnvioSD.tipo == 'ativo', EnvioSD.status == 'Pendente').count()
     sd.enfileirar_item(app, it)
     assert EnvioSD.query.filter(EnvioSD.tipo == 'ativo', EnvioSD.status == 'Pendente').count() == pend
+
+
+# ------------------------------------------------------------------ o Zelo cadastrando no SD
+
+def test_sem_criar_ligado_ativo_ausente_continua_erro(app, cli, sim):
+    """A criação é opt-in: quem não ligou continua vendo o erro, e não ganha ativo novo sem pedir."""
+    s, p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim'})
+    it = _com_host()
+    cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}]})
+    e = EnvioSD.query.filter_by(tipo='ativo').one()
+    assert e.status == 'Erro' and 'não existe no Service Desk' in e.erro
+    assert not s.ativos
+
+
+def test_criar_ativo_leva_hostname_tag_e_plaqueta(app, cli, sim):
+    s, p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim', 'sd_criar_ativo': 'Sim'})
+    it = _com_host()
+    it.tag, it.plaqueta, it.site = 'ABC1234', 'MB-0099', 'EC'
+    db.session.commit()
+    s.usuarios.append({'id': '31', 'name': p.nome, 'email_id': ''})
+    r = cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}]})
+    assert r.json['gravadas'] == 1
+    a = s.ativos[it.hostname.upper()]
+    assert a['serial_number'] == 'ABC1234' and a['asset_tag'] == 'MB-0099'
+    assert a['site'] == {'name': 'EC'} and a['product_type'] == {'name': 'Laptop'}
+    assert a['user'] == {'id': '31'} and a['state']['name'] == 'In Use'
+    e = EnvioSD.query.filter_by(tipo='ativo').one()
+    assert e.status == 'Enviado' and 'cadastrado agora' in (e.erro or '')
+
+
+def test_campo_vazio_nao_entra_no_corpo(app, sim):
+    """No SDP mandar nulo apaga o que está lá; não mandar o campo deixa como está."""
+    from types import SimpleNamespace
+    it = SimpleNamespace(hostname='NB-X', tag='', plaqueta='', categoria='Monitor', site='',
+                         fornecedor='', garantia='')
+    c = sd.corpo_do_item(it)
+    assert c == {'name': 'NB-X', 'product_type': {'name': 'Monitor'}}
+
+
+def test_categoria_sem_tipo_cria_sem_product_type(app, sim):
+    from types import SimpleNamespace
+    it = SimpleNamespace(hostname='KIOSK-1', tag='', plaqueta='', categoria='Kiosk', site='',
+                         fornecedor='', garantia='')
+    assert 'product_type' not in sd.corpo_do_item(it)
+
+
+def test_sd_tipos_sobrepoe_o_padrao(app, sim):
+    from types import SimpleNamespace
+    sd.salvar_conf({'sd_tipos': 'Notebook = Notebook MB; Monitor ='})
+    it = SimpleNamespace(hostname='NB-Y', tag='', plaqueta='', categoria='Notebook', site='',
+                         fornecedor='', garantia='')
+    assert sd.corpo_do_item(it)['product_type'] == {'name': 'Notebook MB'}
+    assert 'product_type' not in sd.corpo_do_item(SimpleNamespace(
+        hostname='MON-1', tag='', plaqueta='', categoria='Monitor', site='', fornecedor='', garantia=''))
+
+
+def test_item_sem_hostname_nao_tenta_criar(app, sim):
+    from types import SimpleNamespace
+    sd.salvar_conf({'sd_ativos': 'Sim', 'sd_criar_ativo': 'Sim'})
+    it = SimpleNamespace(hostname='', tag='ABC', plaqueta='', categoria='Celular', site='',
+                         fornecedor='', garantia='')
+    with pytest.raises(sd.ErroSD, match='sem hostname'):
+        sd.criar_ativo(it)
+
+
+def test_diagnostico_cria_confere_e_apaga(app, sim):
+    s, _p = sim
+    ok, linhas = sd.diagnostico_criacao()
+    texto = '\n'.join(linhas)
+    assert ok and 'apagado' in texto
+    assert 'OK   name' in texto and 'OK   serial_number' in texto
+    assert s.apagados and not s.ativos            # não deixou lixo no Service Desk
+
+
+def test_diagnostico_relata_a_recusa_sem_levantar(app, sim):
+    s, _p = sim
+    s.recusa_post = 'product_type is not valid'
+    ok, linhas = sd.diagnostico_criacao()
+    texto = '\n'.join(linhas)
+    assert not ok and 'FALHOU' in texto and 'product_type is not valid' in texto
+    assert 'Campos mandados' in texto and not s.ativos
+
+
+def test_diagnostico_na_tela_de_administracao(app, sim):
+    s, _p = sim
+    adm = app.test_client()
+    adm.post('/login', data={'email': 'admin@teste', 'senha': 'senha-forte-1'})
+    r = adm.post('/admin/servicedesk', data={'acao': 'diagnostico'}, follow_redirects=True)
+    assert r.status_code == 200
+    assert 'Diagnóstico de criação de ativo' in r.get_data(as_text=True)
+    assert not s.ativos
+
+
+def test_campos_do_zelo_so_vao_quando_ligado(app, cli, sim):
+    s, p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim'})
+    it = _com_host()
+    it.plaqueta, it.site = 'MB-0100', 'GR'
+    db.session.commit()
+    a = _ativo_do(s, it, '95')
+    a['asset_tag'] = 'POSTO-A-MAO'
+    s.usuarios.append({'id': '95', 'name': p.nome, 'email_id': ''})
+    cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}]})
+    assert a['asset_tag'] == 'POSTO-A-MAO'            # desligado: não encosta
+    sd.salvar_conf({'sd_campos_zelo': 'Sim'})
+    cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Devolver', 'item': it.codigo, 'receb_por': 'Adriano Santos'}]})
+    assert a['asset_tag'] == 'MB-0100' and a['site'] == {'name': 'GR'}
+
+
+def test_campos_do_zelo_nao_mexem_em_hostname_nem_tag(app, cli, sim):
+    """A regra de dono: o que a máquina diz de si mesma é do agente, não do Zelo."""
+    s, p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim', 'sd_campos_zelo': 'Sim'})
+    it = _com_host()
+    it.tag, it.plaqueta = 'TAG-DO-ZELO', 'MB-0101'
+    db.session.commit()
+    a = _ativo_do(s, it, '96')
+    a['serial_number'] = 'TAG-DO-AGENTE'
+    s.usuarios.append({'id': '96', 'name': p.nome, 'email_id': ''})
+    cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}]})
+    assert a['serial_number'] == 'TAG-DO-AGENTE'      # intocado
+    assert a['asset_tag'] == 'MB-0101'                # esse sim
+    e = EnvioSD.query.filter_by(tipo='ativo').one()
+    assert 'service tag no SD' in (e.erro or '')      # divergência fica avisada, não corrigida
+
+
+def test_salvar_uma_ficha_nao_zera_a_outra(app, sim):
+    """A tela tem duas fichas; cada POST traz só os campos dela."""
+    sd.salvar_conf({'sd_ativos': 'Sim', 'sd_criar_ativo': 'Sim', 'sd_campos_zelo': 'Sim'})
+    adm = app.test_client()
+    adm.post('/login', data={'email': 'admin@teste', 'senha': 'senha-forte-1'})
+    adm.post('/admin/servicedesk', data={'acao': 'salvar', 'sd_url': 'http://sd.teste:8080',
+                                         'sd_ssl': 'Verificar', 'sd_ativo': 'Sim'})
+    assert sd.conf('sd_ativos') == 'Sim' and sd.conf('sd_criar_ativo') == 'Sim'
+    adm.post('/admin/servicedesk', data={'acao': 'salvar', 'sd_ativos': 'Sim', 'sd_anexar_ativo': 'Não',
+                                         'sd_criar_ativo': 'Não', 'sd_campos_zelo': 'Não',
+                                         'sd_estados': '', 'sd_tipos': ''})
+    assert sd.conf('sd_url') == 'http://sd.teste:8080' and sd.conf('sd_ativo') == 'Sim'
+    assert sd.conf('sd_criar_ativo') == 'Não'

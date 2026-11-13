@@ -156,10 +156,25 @@ nome repetido vira escolha na tela, nunca palpite. O e-mail só entra onde está
 fica num grupo à parte que você marca de propósito) e o login só onde o Zelo não tem nenhum.
 Cadastrar quem não está no Zelo é opt-in linha a linha, com matrícula provisória SD-NOME.
 
-**C. O Zelo escrever no SD o que ele sabe melhor**
-Plaqueta (`asset_tag`/`barcode`), site, departamento, garantia (`warranty_expiry`), fornecedor,
-data de aquisição, custo. É a resposta à Giselly por outro caminho: o SD fica certo porque o Zelo o
-alimenta, em vez de a gestão de ativos mudar de casa.
+**C. O Zelo escrever no SD o que ele sabe melhor** — FEITA (v1.13.0)
+Dois interruptores separados em Administração → Service Desk, os dois desligados de fábrica:
+- **Cadastrar o ativo quando ele não existir lá**: em vez de a fila dar erro "ativo não existe", o
+  Zelo cria com hostname, service tag, plaqueta, site, fornecedor, garantia e tipo de produto.
+  Mandar hostname e service tag é o que faz o agente, quando for instalado, casar com este registro
+  em vez de duplicar (a service tag é o primeiro critério de casamento do SDP). Não manda `product`:
+  o modelo teria que existir como produto cadastrado no SDP, e inventar um derruba a chamada inteira.
+- **Corrigir os campos que são do Zelo**: em ativo que já existe, escreve `asset_tag`, `site`,
+  `vendor` e `warranty_expiry` a cada sincronização. Hostname, service tag e modelo nunca — é a
+  regra de dono da tabela acima. Ligar isto é passar a sobrescrever o que alguém pôs à mão no SD,
+  então só depois de a tela Conferir mostrar que o Zelo está confiável nesses campos.
+
+Campo vazio no Zelo fica **fora** do corpo da chamada: no SDP mandar nulo apaga o que está lá,
+não mandar o campo deixa como está.
+
+**Diagnóstico antes da promessa.** A documentação pública e este build não batem, então a criação
+não entrou por fé: o botão **Diagnóstico: criar ativo** cria um `ZELO-TESTE-…` no Service Desk de
+verdade, mostra campo por campo o que o build guardou, e apaga. Se a recusa citar um campo, o
+relatório diz qual. É o que separa "a API suporta" de "o nosso SDP aceita".
 
 **E + F. Ciclo completo do ativo** — FEITAS (v1.12.0)
 O estado no SD passou a sair da **situação atual do item**, não do tipo de lançamento: Em uso,
@@ -196,5 +211,6 @@ decisão do Gabriel é que compra e rollout vão para o Jira.
 2. **A** (importar ativos) — o pedido, e base para o resto.
 3. **D** (reconciliação) — mostra o tamanho real do problema antes de automatizar correção.
 4. ~~**E** + **F**~~ — feitas.
-5. **C** — depois que a reconciliação mostrar que o Zelo é confiável naqueles campos.
+5. ~~**C**~~ — feita, mas os dois interruptores nascem desligados: ligar depende da reconciliação
+   mostrar que o Zelo é confiável naqueles campos.
 6. **G**, **H**, **I** — conforme a necessidade aparecer.
