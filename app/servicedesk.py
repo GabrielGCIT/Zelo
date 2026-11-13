@@ -105,9 +105,20 @@ def _http(metodo, caminho, dados=None, arquivo=None, timeout=10):
     rs = j.get('response_status') or {}
     if isinstance(rs, list):          # listagens devolvem response_status como lista
         rs = rs[0] if rs else {}
+    if not isinstance(rs, dict):
+        rs = {}
     if st >= 400 or rs.get('status') == 'failed':
-        msgs = [m.get('message') or m.get('field') or '' for m in rs.get('messages', [])] if isinstance(rs, dict) else []
-        raise ErroSD(f'Service Desk recusou (HTTP {st}): ' + ('; '.join(x for x in msgs if x) or texto[:200]))
+        # O formato da recusa varia: messages pode vir como lista de dicionários, lista de textos,
+        # ou nem vir. Só o texto cru nunca falta — e um erro de leitura do erro vira 500 na cara do
+        # Gabriel, escondendo justamente o que o Service Desk tentou dizer.
+        brutos = rs.get('messages')
+        if isinstance(brutos, dict):
+            brutos = [brutos]
+        msgs = []
+        for m in (brutos or []):
+            msgs.append((m.get('message') or m.get('field') or '') if isinstance(m, dict) else str(m))
+        raise ErroSD(f'Service Desk recusou (HTTP {st}): '
+                     + ('; '.join(x for x in msgs if x) or (texto or '')[:200] or 'sem detalhes'))
     return j
 
 

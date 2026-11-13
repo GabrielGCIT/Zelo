@@ -1,6 +1,6 @@
 import secrets
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from werkzeug.security import generate_password_hash
 
 from app import db
@@ -101,61 +101,20 @@ def servicedesk():
     from app.models import EnvioSD
     if request.method == 'POST':
         acao = request.form.get('acao')
-        if acao == 'salvar':
-            # São duas fichas na tela (conexão e ativo). Só entra o que veio NESTE envio: gravar a
-            # chave inteira faria salvar uma ficha zerar os campos da outra.
-            v = {}
-            for k in ('sd_ativos', 'sd_anexar_ativo', 'sd_criar_ativo', 'sd_campos_zelo'):
-                if k in request.form:
-                    v[k] = request.form.get(k) or 'Não'
-            for k in ('sd_estados', 'sd_tipos', 'sd_apelidos'):
-                if k in request.form:
-                    v[k] = (request.form.get(k) or '').strip()
-            if 'sd_url' in request.form:
-                v['sd_url'] = (request.form.get('sd_url') or '').strip().rstrip('/')
-            if 'sd_ssl' in request.form:
-                v['sd_ssl'] = request.form.get('sd_ssl') or 'Verificar'
-            if 'sd_ativo' in request.form:
-                v['sd_ativo'] = request.form.get('sd_ativo') or 'Não'
-            if (request.form.get('sd_chave') or '').strip():
-                v['sd_chave'] = request.form['sd_chave'].strip()
-            sd.salvar_conf(v)
-            registrar_log('service desk', 'configuração salva: '
-                          + ', '.join(f'{k}={x}' for k, x in sorted(v.items()) if k != 'sd_chave')
-                          + (', chave trocada' if 'sd_chave' in v else ''))
-            flash('Configuração salva.', 'success')
-        elif acao == 'testar':
-            try:
-                sd.testar()
-                flash('Conexão OK: o Service Desk respondeu com a chave configurada.', 'success')
-            except sd.ErroSD as e:
-                flash(str(e), 'danger')
-        elif acao == 'inspecionar':
-            # Em qual campo o agente grava a service tag? Nenhuma documentação responde; uma
-            # máquina com agente responde. O nome que sai daqui é o que entra em "Nomes de campo".
-            achados, err = sd.inspecionar_ativo(request.form.get('hostname'))
-            if err:
-                flash(err, 'danger')
-            for a in achados:
-                flash(f'Ativo "{request.form.get("hostname", "").strip()}" — tipo {a["tipo"] or "?"}, '
-                      f'lido de {a["onde"]}\n'
-                      + '\n'.join(f'  {k}: {v}' for k, v in a['campos']), 'success')
-        elif acao == 'diagnostico':
-            # Não promete criação em massa com base em documentação: cria um ativo de teste de
-            # verdade, mostra campo por campo o que o build aceitou, e apaga.
-            try:
-                ok, linhas = sd.diagnostico_criacao()
-            except sd.ErroSD as e:
-                ok, linhas = False, [str(e)]
-            registrar_log('service desk', 'diagnóstico de criação de ativo: ' + ('OK' if ok else 'falhou'))
-            flash('Diagnóstico de criação de ativo:\n' + '\n'.join(linhas), 'success' if ok else 'danger')
-        elif acao == 'reenviar':
-            ids = [int(i) for i in request.form.getlist('ids') if i.isdigit()] or \
-                  [e.id for e in EnvioSD.query.filter(EnvioSD.status != 'Enviado')]
-            ok = sum(sd.enviar(e) for e in EnvioSD.query.filter(EnvioSD.id.in_(ids)))
-            registrar_log('service desk', f'reenvio: {ok} de {len(ids)} enviado(s)')
-            flash(f'{ok} de {len(ids)} envio(s) concluído(s).', 'success' if ok == len(ids) else 'warning')
-        return redirect(url_for('admin.servicedesk'))
+        try:
+            return _servicedesk_post(sd, EnvioSD, acao)
+        except sd.ErroSD as e:
+            flash(str(e), 'danger')
+            return redirect(url_for('admin.servicedesk'))
+        except Exception as e:
+            # Esta tela conversa com um sistema de terceiro que responde de formas imprevistas.
+            # "Internal Server Error" esconde justamente o que o Service Desk tentou dizer, e deixa
+            # o Gabriel sem saída numa tela de configuração; o log guarda o traceback inteiro.
+            current_app.logger.exception('erro na tela do Service Desk (%s)', acao)
+            registrar_log('service desk', f'falha na ação {acao}: {type(e).__name__}: {e}')
+            flash(f'A ação "{acao}" falhou: {type(e).__name__}: {e}. O traceback está no log do servidor.',
+                  'danger')
+            return redirect(url_for('admin.servicedesk'))
     envios = EnvioSD.query.order_by(EnvioSD.id.desc()).limit(150).all()
     return render_template('admin_servicedesk.html', url=sd.conf('sd_url'), tem_chave=bool(sd.conf('sd_chave')),
                            ssl=sd.conf('sd_ssl') or 'Verificar', ativo=sd.conf('sd_ativo') or 'Não',
@@ -166,3 +125,62 @@ def servicedesk():
                            padrao_estados='; '.join(f'{k} = {v}' for k, v in sd.ESTADO_PADRAO.items()),
                            padrao_tipos='; '.join(f'{k} = {v}' for k, v in sd.TIPO_PADRAO.items()),
                            pendentes=sum(1 for e in envios if e.status != 'Enviado'))
+
+
+def _servicedesk_post(sd, EnvioSD, acao):
+    """O POST desta tela, isolado para quem chama poder tratar o imprevisto num lugar só."""
+    if acao == 'salvar':
+        # São duas fichas na tela (conexão e ativo). Só entra o que veio NESTE envio: gravar a
+        # chave inteira faria salvar uma ficha zerar os campos da outra.
+        v = {}
+        for k in ('sd_ativos', 'sd_anexar_ativo', 'sd_criar_ativo', 'sd_campos_zelo'):
+            if k in request.form:
+                v[k] = request.form.get(k) or 'Não'
+        for k in ('sd_estados', 'sd_tipos', 'sd_apelidos'):
+            if k in request.form:
+                v[k] = (request.form.get(k) or '').strip()
+        if 'sd_url' in request.form:
+            v['sd_url'] = (request.form.get('sd_url') or '').strip().rstrip('/')
+        if 'sd_ssl' in request.form:
+            v['sd_ssl'] = request.form.get('sd_ssl') or 'Verificar'
+        if 'sd_ativo' in request.form:
+            v['sd_ativo'] = request.form.get('sd_ativo') or 'Não'
+        if (request.form.get('sd_chave') or '').strip():
+            v['sd_chave'] = request.form['sd_chave'].strip()
+        sd.salvar_conf(v)
+        registrar_log('service desk', 'configuração salva: '
+                      + ', '.join(f'{k}={x}' for k, x in sorted(v.items()) if k != 'sd_chave')
+                      + (', chave trocada' if 'sd_chave' in v else ''))
+        flash('Configuração salva.', 'success')
+    elif acao == 'testar':
+        try:
+            sd.testar()
+            flash('Conexão OK: o Service Desk respondeu com a chave configurada.', 'success')
+        except sd.ErroSD as e:
+            flash(str(e), 'danger')
+    elif acao == 'inspecionar':
+        # Em qual campo o agente grava a service tag? Nenhuma documentação responde; uma
+        # máquina com agente responde. O nome que sai daqui é o que entra em "Nomes de campo".
+        achados, err = sd.inspecionar_ativo(request.form.get('hostname'))
+        if err:
+            flash(err, 'danger')
+        for a in achados:
+            flash(f'Ativo "{request.form.get("hostname", "").strip()}" — tipo {a["tipo"] or "?"}, '
+                  f'lido de {a["onde"]}\n'
+                  + '\n'.join(f'  {k}: {v}' for k, v in a['campos']), 'success')
+    elif acao == 'diagnostico':
+        # Não promete criação em massa com base em documentação: cria um ativo de teste de
+        # verdade, mostra campo por campo o que o build aceitou, e apaga.
+        try:
+            ok, linhas = sd.diagnostico_criacao()
+        except sd.ErroSD as e:
+            ok, linhas = False, [str(e)]
+        registrar_log('service desk', 'diagnóstico de criação de ativo: ' + ('OK' if ok else 'falhou'))
+        flash('Diagnóstico de criação de ativo:\n' + '\n'.join(linhas), 'success' if ok else 'danger')
+    elif acao == 'reenviar':
+        ids = [int(i) for i in request.form.getlist('ids') if i.isdigit()] or \
+              [e.id for e in EnvioSD.query.filter(EnvioSD.status != 'Enviado')]
+        ok = sum(sd.enviar(e) for e in EnvioSD.query.filter(EnvioSD.id.in_(ids)))
+        registrar_log('service desk', f'reenvio: {ok} de {len(ids)} enviado(s)')
+        flash(f'{ok} de {len(ids)} envio(s) concluído(s).', 'success' if ok == len(ids) else 'warning')
+    return redirect(url_for('admin.servicedesk'))

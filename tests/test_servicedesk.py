@@ -1011,3 +1011,56 @@ def test_inspecionar_pela_tela_de_administracao(app, sim):
                  follow_redirects=True)
     texto = r.get_data(as_text=True)
     assert 'org_serial_number: TAG-DA-TELA' in texto
+
+
+# ------------------------------------------------------------------ a tela não pode dar 500
+
+def test_recusa_com_messages_em_formato_estranho_nao_quebra(app, sim):
+    """O formato da recusa varia entre builds. Ler o erro errado virava 500 e escondia justamente
+    o que o Service Desk tentou dizer."""
+    s, _p = sim
+    for brutos in ([{'message': 'Sem permissão'}], ['Sem permissão'], {'message': 'Sem permissão'},
+                   None, 'Sem permissão'):
+        class Esquisito:
+            def __call__(self, metodo, url, headers, corpo):
+                return 400, json.dumps({'response_status': {'status': 'failed', 'messages': brutos}})
+        sd.transporte = Esquisito()
+        try:
+            with pytest.raises(sd.ErroSD) as e:
+                sd.testar()
+            assert 'HTTP 400' in str(e.value)
+        finally:
+            sd.transporte = s
+
+
+def test_response_status_em_formato_estranho_nao_quebra(app, sim):
+    s, _p = sim
+
+    class Esquisito:
+        def __call__(self, metodo, url, headers, corpo):
+            return 400, json.dumps({'response_status': 'failed'})
+    sd.transporte = Esquisito()
+    try:
+        with pytest.raises(sd.ErroSD):
+            sd.testar()
+    finally:
+        sd.transporte = s
+
+
+def test_imprevisto_na_tela_vira_recado_e_nao_erro_500(app, sim):
+    """Tela de configuração que responde Internal Server Error deixa o Gabriel sem saída."""
+    s, _p = sim
+
+    class Explode:
+        def __call__(self, metodo, url, headers, corpo):
+            raise RuntimeError('algo que eu não previ')
+    sd.transporte = Explode()
+    adm = app.test_client()
+    adm.post('/login', data={'email': 'admin@teste', 'senha': 'senha-forte-1'})
+    try:
+        r = adm.post('/admin/servicedesk', data={'acao': 'testar'}, follow_redirects=True)
+    finally:
+        sd.transporte = s
+    assert r.status_code == 200
+    texto = r.get_data(as_text=True)
+    assert 'falhou' in texto and 'algo que eu não previ' in texto
