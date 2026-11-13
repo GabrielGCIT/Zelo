@@ -1088,3 +1088,40 @@ def test_sem_endereco_a_mensagem_diz_o_que_falta(app, sim):
     sd.salvar_conf({'sd_url': 'http://x:8080', 'sd_chave': ''})
     with pytest.raises(sd.ErroSD, match='Falta a chave'):
         sd.testar()
+
+
+def test_inspecionar_usa_o_campo_module_do_proprio_ativo(app, sim):
+    """A listagem geral costuma vir sem product_type, mas vem com module — e foi assim que o
+    Inspecionar caiu na listagem reduzida na primeira vez, no servidor da MB."""
+    s, _p = sim
+    s.ativos['NB-MOD'] = {'id': '710', 'name': 'NB-MOD', 'module': 'asset_computer',
+                          'org_serial_number': 'TAG-COMPLETA', 'state': {'name': 'In Use'}}
+    s.ativos_por_id['710'] = s.ativos['NB-MOD']
+    achados, err = sd.inspecionar_ativo('NB-MOD')
+    assert not err
+    assert achados[0]['onde'].endswith('/asset_computers/710')          # ficha do módulo, não listagem
+    assert dict(achados[0]['campos'])['org_serial_number'] == 'TAG-COMPLETA'
+
+
+def test_listar_ativos_pede_os_campos_e_cai_de_pe_se_o_build_recusar(app, sim):
+    """Sem fields_required a listagem vem sem service tag, e a conferência casa só por hostname
+    sem perceber que está cega. Mas nome inválido derruba a chamada: tem que ter plano B."""
+    s, _p = sim
+    pedidos = []
+    original = s
+
+    class SóSemCampos:
+        def __call__(self, metodo, url, headers, corpo):
+            pedidos.append('fields_required' in url)
+            if 'fields_required' in url:
+                return 400, json.dumps({'response_status': {'status': 'failed', 'messages': [
+                    {'message': 'Invalid field: org_serial_number'}]}})
+            return original(metodo, url, headers, corpo)
+
+    sd.transporte = SóSemCampos()
+    try:
+        lista, mais = sd.listar_ativos(1, 10)
+    finally:
+        sd.transporte = s
+    assert pedidos == [True, False]        # tentou com campos, repetiu sem
+    assert isinstance(lista, list) and mais in (True, False)

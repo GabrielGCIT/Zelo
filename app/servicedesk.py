@@ -220,22 +220,54 @@ def _busca(campo, valor, linhas=5):
     return {'list_info': {'row_count': linhas, 'search_criteria': {'field': campo, 'condition': 'is', 'value': valor}}}
 
 
+CAMPOS_LISTA = ('id', 'name', 'serial_number', 'org_serial_number', 'asset_tag', 'barcode',
+                'product', 'product_type', 'state', 'user', 'site', 'vendor', 'warranty_expiry',
+                'module')
+
+
 def listar_ativos(inicio=1, linhas=100):
     """Uma página de ativos do Service Desk. Devolve (lista, tem_mais).
 
-    De propósito sem `fields_required`: os nomes de campo variam entre build e tipo de produto, e
-    pedir uma lista errada derruba a chamada inteira. Vem tudo e o Zelo lê o que reconhece.
+    A listagem geral NÃO devolve tudo: sem `fields_required` vem um conjunto mínimo, sem service
+    tag e sem plaqueta — e aí a conferência casa só por hostname, sem perceber que está cega. Daí
+    pedir os campos. Mas nome de campo varia entre build, e um nome inválido derruba a chamada
+    inteira: se isso acontecer, volta a pedir o mínimo, que é pior mas funciona.
     """
-    j = _http('GET', '/api/v3/asset_assets',
-              {'list_info': {'row_count': linhas, 'start_index': inicio, 'get_total_count': True}}, timeout=25)
-    info = j.get('list_info') or {}
-    return (j.get('asset_assets') or []), bool(info.get('has_more_rows'))
+    def _pagina(campos):
+        li = {'row_count': linhas, 'start_index': inicio, 'get_total_count': True}
+        if campos:
+            li['fields_required'] = list(campos)
+        j = _http('GET', '/api/v3/asset_assets', {'list_info': li}, timeout=25)
+        return (j.get('asset_assets') or []), bool((j.get('list_info') or {}).get('has_more_rows'))
+
+    try:
+        return _pagina(CAMPOS_LISTA)
+    except ErroSD:
+        return _pagina(None)
 
 
 def achar_ativo(hostname):
     r = _http('GET', '/api/v3/asset_assets', _busca('name', hostname))
     lst = r.get('asset_assets') or []
     return lst[0] if lst else None
+
+
+def modulo_do_ativo(a):
+    """O módulo de um ativo que já existe. None se não der para saber.
+
+    O próprio ativo diz, no campo `module` (ex.: `asset_laptop`) — e é o caminho bom, porque a
+    listagem geral costuma vir SEM `product_type`, e aí procurar pelo tipo não acha nada.
+    """
+    nome = a.get('module')
+    nome = nome.get('name') if isinstance(nome, dict) else nome
+    if nome:
+        alvo = _nome(nome)
+        for m in listar_modulos():
+            if _nome(m.get('api_name')) == alvo or _nome(m.get('api_plural_name')) == alvo:
+                return m
+    tipo = a.get('product_type')
+    tipo = tipo.get('name') if isinstance(tipo, dict) else tipo
+    return modulo_do_tipo(tipo) if tipo else None
 
 
 def inspecionar_ativo(hostname):
@@ -260,7 +292,7 @@ def inspecionar_ativo(hostname):
     ficha, onde = a, '/api/v3/asset_assets (listagem geral)'
     tipo = a.get('product_type')
     tipo = tipo.get('name') if isinstance(tipo, dict) else tipo
-    mod = modulo_do_tipo(tipo) if tipo else None
+    mod = modulo_do_ativo(a)
     if mod and a.get('id'):
         chave = mod.get('api_name') or mod['api_plural_name'].rstrip('s')
         try:
