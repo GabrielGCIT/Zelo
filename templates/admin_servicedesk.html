@@ -3,15 +3,18 @@
 <h1 class="z-titulo">Integração com o Service Desk</h1>
 <p class="z-sub">Lançamento com Nº de chamado: o Zelo anexa o PDF do termo ao chamado e grava uma nota (visível só para técnicos). Na conferência em tempo real, o chamado mostra o solicitante. Se o Service Desk estiver fora, o lançamento grava normal e o envio fica aqui para reenviar.</p>
 <div class="row g-3"><div class="col-lg-6"><div class="z-card"><h2>Conexão</h2>
-<form method="post" class="row g-2 small"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="salvar">
+{# O botão de testar mora DENTRO desta ficha de propósito: fora dela ele testava o que estava
+   salvo, não o que estava na tela, e quem preenchia e clicava em testar recebia um erro sobre
+   endereço vazio. #}
+<form method="post" class="row g-2 small"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
  <div class="col-12"><label class="form-label mb-0">Endereço do Service Desk</label><input class="form-control form-control-sm" name="sd_url" value="{{ url }}" placeholder="https://servicedesk.empresa.com.br ou http://localhost:8080"></div>
  <div class="col-12"><label class="form-label mb-0">Chave de API do técnico {% if tem_chave %}<span class="badge text-bg-success">configurada</span>{% endif %}</label>
   <input type="password" class="form-control form-control-sm" name="sd_chave" autocomplete="new-password" placeholder="{{ 'deixe vazio para manter a atual' if tem_chave else 'cole a chave aqui' }}"></div>
  <div class="col-6"><label class="form-label mb-0">Certificado HTTPS</label><select class="form-select form-select-sm" name="sd_ssl">{% for o in ['Verificar','Ignorar'] %}<option {{ 'selected' if ssl==o }}>{{ o }}</option>{% endfor %}</select></div>
  <div class="col-6"><label class="form-label mb-0">Integração ligada</label><select class="form-select form-select-sm" name="sd_ativo">{% for o in ['Não','Sim'] %}<option {{ 'selected' if ativo==o }}>{{ o }}</option>{% endfor %}</select></div>
- <div class="col-12 d-flex gap-2 mt-2"><button class="btn btn-sm btn-zelo">Salvar</button></div>
+ <div class="col-12 d-flex gap-2 mt-2"><button class="btn btn-sm btn-zelo" name="acao" value="salvar">Salvar</button>
+  <button class="btn btn-sm btn-outline-secondary" name="acao" value="testar"><i class="fa fa-plug me-1"></i>Salvar e testar</button></div>
 </form>
-<form method="post" class="mt-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="testar"><button class="btn btn-sm btn-outline-secondary"><i class="fa fa-plug me-1"></i>Testar conexão</button></form>
 <p class="small text-muted mt-2 mb-0">"Ignorar" o certificado só se o Service Desk usa certificado interno. A chave fica só no banco deste servidor e não é mostrada de volta.</p>
 </div></div>
 <div class="col-lg-6"><div class="z-card"><h2>O ativo no Service Desk</h2>

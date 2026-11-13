@@ -129,7 +129,9 @@ def servicedesk():
 
 def _servicedesk_post(sd, EnvioSD, acao):
     """O POST desta tela, isolado para quem chama poder tratar o imprevisto num lugar só."""
-    if acao == 'salvar':
+    if acao in ('salvar', 'testar'):
+        # Testar salva antes: o botão fica dentro da ficha, e testar o que está salvo enquanto a
+        # tela mostra outra coisa só produz erro sobre endereço vazio.
         # São duas fichas na tela (conexão e ativo). Só entra o que veio NESTE envio: gravar a
         # chave inteira faria salvar uma ficha zerar os campos da outra.
         v = {}
@@ -151,8 +153,9 @@ def _servicedesk_post(sd, EnvioSD, acao):
         registrar_log('service desk', 'configuração salva: '
                       + ', '.join(f'{k}={x}' for k, x in sorted(v.items()) if k != 'sd_chave')
                       + (', chave trocada' if 'sd_chave' in v else ''))
-        flash('Configuração salva.', 'success')
-    elif acao == 'testar':
+        if acao == 'salvar':
+            flash('Configuração salva.', 'success')
+    if acao == 'testar':
         try:
             sd.testar()
             flash('Conexão OK: o Service Desk respondeu com a chave configurada.', 'success')

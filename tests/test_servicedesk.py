@@ -1064,3 +1064,27 @@ def test_imprevisto_na_tela_vira_recado_e_nao_erro_500(app, sim):
     assert r.status_code == 200
     texto = r.get_data(as_text=True)
     assert 'falhou' in texto and 'algo que eu não previ' in texto
+
+
+def test_testar_salva_o_que_esta_na_tela_antes(app, sim):
+    """O botão vive dentro da ficha: testar o que está salvo enquanto a tela mostra outra coisa
+    produzia só 'endereço vazio' — foi o primeiro erro no servidor da MB."""
+    s, _p = sim
+    sd.salvar_conf({'sd_url': '', 'sd_chave': ''})
+    adm = app.test_client()
+    adm.post('/login', data={'email': 'admin@teste', 'senha': 'senha-forte-1'})
+    r = adm.post('/admin/servicedesk', data={'acao': 'testar', 'sd_url': 'http://sd.novo:8080/',
+                                             'sd_chave': 'CHAVE-TESTE', 'sd_ssl': 'Verificar',
+                                             'sd_ativo': 'Sim'}, follow_redirects=True)
+    assert sd.conf('sd_url') == 'http://sd.novo:8080'      # salvou, sem a barra do fim
+    assert 'Conexão OK' in r.get_data(as_text=True)
+
+
+def test_sem_endereco_a_mensagem_diz_o_que_falta(app, sim):
+    """Antes vazava um ValueError sobre 'unknown url type', que não ajuda ninguém."""
+    sd.salvar_conf({'sd_url': '', 'sd_chave': 'K'})
+    with pytest.raises(sd.ErroSD, match='Falta o endereço'):
+        sd.testar()
+    sd.salvar_conf({'sd_url': 'http://x:8080', 'sd_chave': ''})
+    with pytest.raises(sd.ErroSD, match='Falta a chave'):
+        sd.testar()

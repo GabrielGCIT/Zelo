@@ -68,7 +68,12 @@ class ErroSD(Exception):
 
 
 def _http(metodo, caminho, dados=None, arquivo=None, timeout=10):
-    url = conf('sd_url').rstrip('/') + caminho
+    base = conf('sd_url').rstrip('/')
+    if not base:
+        raise ErroSD('Falta o endereço do Service Desk em Administração → Service Desk.')
+    if not conf('sd_chave'):
+        raise ErroSD('Falta a chave de API em Administração → Service Desk.')
+    url = base + caminho
     h = {'authtoken': conf('sd_chave'), 'Accept': ACCEPT}
     corpo = None
     if arquivo:
