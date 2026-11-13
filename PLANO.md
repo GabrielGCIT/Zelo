@@ -2,7 +2,7 @@
 
 ---
 
-## ONDE PARAMOS — 13/11/2026, v1.23.0
+## ONDE PARAMOS — 13/11/2026, v1.26.0
 
 Leia esta seção primeiro. O resto do arquivo é histórico e decisões; isto é o que está na mesa.
 
@@ -28,36 +28,39 @@ tivessem gravado, o diagnóstico teria parado e perguntado.
 
 Provado no laboratório: `asset_tag`, `name`, `org_serial_number` e `state` gravam e voltam.
 
-### A pergunta aberta que decide o resto
-**O agente do SDP reconcilia pelo `org_serial_number`, ou só pelo serial que ele mesmo lê do BIOS?**
+### A pergunta da duplicação — RESPONDIDA (13/11, no SDP de produção da MB)
+O agente do SDP grava a service tag no campo **`service_tag`**. Visto num ativo real escaneado
+(`lmbbfyp9nq3.reyesholdings.com`, agente 11.2.2338.1.W): `service_tag: FYP9NQ3`, com `serial_number`
+e `org_serial_number` ausentes.
 
-Disso depende se dá para cadastrar os 3203 itens pelo Zelo sem duplicar o parque. Nenhuma
-documentação responde; só o teste responde. O Gabriel tem 5 máquinas com agente instalado.
+Isso **não** teria sido descoberto pela sondagem automática: ela procura nomes que contenham a raiz
+do campo (`serial`), e `service_tag` não contém. No laboratório, onde não há agente, ela tinha
+concluído `org_serial_number` — e o Zelo estaria escrevendo a tag num campo que o agente não lê,
+criando um ativo duplicado por máquina em todo o parque.
 
-**No laboratório não há agente instalado em nada** — as 5 máquinas com agente são da MB. Para
-testar em casa é preciso instalar o agente do SDP de laboratório numa máquina (o próprio PC ou uma
-VM). Um sinal barato antes disso: importar uma planilha de ativos com a mesma tag e hostname de um
-ativo criado pelo Zelo e ver se o SDP atualiza ou cria outro — a regra de casamento da importação é
-parecida; não é prova, mas se já duplicar aí, duplica na varredura.
+Daí duas mudanças (v1.26.0): `service_tag` entrou na lista de campos pedidos na listagem, e passou
+a existir uma tabela de **sinônimos conhecidos** (`serial_number` → `service_tag`,
+`org_serial_number`, `serial_no`) com ordem de preferência vinda do que o agente de verdade
+preenche. Quando vários campos guardam o valor e um deles é o do agente, agora há razão para
+preferir, e ele prefere; sem razão, continua perguntando.
 
-Meio caminho do próprio passo 1: ver **em qual campo** o agente grava a service tag. Se ele usa
-`serial_number` e o Zelo usa `org_serial_number`, são campos diferentes e a resposta provavelmente
-já é "duplica", sem precisar do passo 4.
+**Na MB, portanto: `serial_number=service_tag` em "Nomes de campo próprios".**
+No laboratório, onde o build recusa `service_tag`, vale `org_serial_number`.
 
-Protocolo combinado:
-1. escolher uma das 5 (na MB) e anotar a service tag real (`wmic bios get serialnumber`);
-2. apagar o ativo dela no SDP — e conferir que ela **não** ficou na lista de exclusão, senão o
-   agente nunca mais reporta e o teste não vale;
-3. criar pelo Zelo com o hostname e a tag reais;
-4. forçar a varredura do agente;
-5. abrir Itens → Conferir com o Service Desk e olhar a seção **Repetido no Service Desk**.
+Falta confirmar na prática que o agente funde em vez de duplicar — mas a condição necessária
+(escrever no campo que ele lê) está resolvida.
 
-Os três desfechos e o que cada um muda:
-- **1 ativo (fundiu)** → o cadastro em massa é seguro; seguir para a tela de cadastro em lote.
-- **2 ativos (duplicou)** → `org_serial_number` não serve para reconciliação. O plano muda: ou
-  cadastrar pelo Zelo só o que nunca terá agente (os ~2295: monitor, celular, dock, coletor, tablet),
-  ou achar qual campo o agente usa.
-- **nada apareceu** → é a lista de exclusão, não a API; resolve-se no SDP e repete o teste.
+### Outros achados do mesmo ativo, para usar depois
+- **Datas vêm em epoch de milissegundos** (`warranty_expiry: 1813046399000`, `acquisition_date`).
+  O Zelo manda garantia como `{'value': 'AAAA-MM-DD'}` — **provavelmente não grava**; conferir antes
+  de ligar "Corrigir os campos que são do Zelo".
+- Campos que o SD já tem e o Zelo poderia aproveitar: `department`, `site`, `region`,
+  `last_logged_user`, `mac_addresses`, `os_name`, `manufacturer`, `chassis_type`,
+  `agent_version`, `last_scan_success_time` (dá para saber quais máquinas o agente parou de ver).
+- `product_id` é o product id do **Windows**, não o id do produto do SDP. Confirma que o apelido
+  `product_type=product_id`, que a v1.20.0 rejeitou por falta de prova de ida e volta, teria
+  gravado lixo em cima da licença.
+- O ativo tem `linked_entity: cmdb_windowsworkstation` — existe um CI espelho no CMDB.
 
 ### Detector de duplicados — FEITO (v1.22.0)
 Seção **Repetido no Service Desk** no topo de Itens → Conferir com o Service Desk. Agrupa por

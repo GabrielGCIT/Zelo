@@ -220,9 +220,9 @@ def _busca(campo, valor, linhas=5):
     return {'list_info': {'row_count': linhas, 'search_criteria': {'field': campo, 'condition': 'is', 'value': valor}}}
 
 
-CAMPOS_LISTA = ('id', 'name', 'serial_number', 'org_serial_number', 'asset_tag', 'barcode',
-                'product', 'product_type', 'state', 'user', 'site', 'vendor', 'warranty_expiry',
-                'module')
+CAMPOS_LISTA = ('id', 'name', 'service_tag', 'serial_number', 'org_serial_number', 'asset_tag',
+                'barcode', 'product', 'product_type', 'state', 'user', 'site', 'vendor',
+                'warranty_expiry', 'module')
 
 
 def listar_ativos(inicio=1, linhas=100):
@@ -696,6 +696,16 @@ def apagar_ativo(asset_id):
     return _http('DELETE', f'/api/v3/asset_assets/{asset_id}', timeout=15)
 
 
+# Campos que são o MESMO dado com outro nome, em ordem de preferência. Não é palpite de texto: a
+# ordem vem do que o agente do SDP de verdade preenche — numa máquina escaneada na MB, a service tag
+# está em `service_tag`, e é lá que o Zelo precisa escrever para o agente casar com o registro em
+# vez de criar outro.
+SINONIMOS = {
+    'serial_number': ('service_tag', 'org_serial_number', 'serial_no'),
+    'asset_tag': ('barcode',),
+}
+
+
 def sondar_campos(plural, chave, base, opcionais):
     """Descobre quais campos ESTE build aceita na criação. Devolve (ok_base, erro_base, resultado).
 
@@ -754,23 +764,34 @@ def sondar_campos(plural, chave, base, opcionais):
             continue
         # Duas falhas diferentes: a chamada foi recusada, ou foi aceita e o valor se perdeu. Nos
         # dois casos o campo pode existir com outro nome — mas só vale se o valor VOLTAR nele.
+        # Sinônimo não se acha por semelhança de texto: a service tag do agente mora em
+        # `service_tag`, que não tem "serial" no nome e nunca entraria pela raiz. Isto veio de um
+        # ativo real escaneado pelo agente na MB, não de documentação.
         raiz = campo.split('_')[0]
         # Ordem importa: "serial_number" tem como candidatos `org_serial_number` e
         # `cpu_serial_number`, e os dois gravam. O que CONTÉM o nome inteiro do campo vem primeiro;
         # o que só divide a primeira palavra vem por último, porque é o palpite mais fraco.
-        candidatos = sorted(
-            (o for o in vocabulario
-             # nunca um campo que já está em uso: sobrescrever `product` com o tipo de produto
-             # "passa" no teste e grava lixo no lugar certo de outra coisa.
-             if o != campo and raiz in o and o not in base and o not in opcionais),
+        def _serve(o):
+            # nunca um campo que já está em uso: sobrescrever `product` com o tipo de produto
+            # "passa" no teste e grava lixo no lugar certo de outra coisa.
+            return o != campo and o not in base and o not in opcionais and o in vocabulario
+        preferidos = [o for o in SINONIMOS.get(campo, ()) if _serve(o)]
+        candidatos = preferidos + sorted(
+            (o for o in vocabulario if _serve(o) and raiz in o and o not in preferidos),
             key=lambda o: (campo not in o, len(o), o))
         passaram = []
         for outro in candidatos:
             ok_o, _e, ficha_o = _tentar(_nomear(dict(base, **{outro: valor})))
             if ok_o and _guardou(ficha_o, outro, valor):
                 passaram.append(outro)
+        conhecidos = [o for o in passaram if o in SINONIMOS.get(campo, ())]
         if len(passaram) == 1:
             resultado[campo] = f'APELIDO:{passaram[0]}'
+        elif conhecidos:
+            # Vários guardam, mas um deles é o campo que o AGENTE usa — e é nele que a tag precisa
+            # estar, senão o agente não reconhece o registro e cria outro. Aqui há razão para
+            # preferir, então prefere; sem razão, pergunta (abaixo).
+            resultado[campo] = f'APELIDO:{conhecidos[0]}'
         elif passaram:
             # Vários campos guardam o valor e nenhuma regra de texto sabe qual é o certo:
             # `cpu_serial_number` e `org_serial_number` gravam os dois, e pôr a service tag no

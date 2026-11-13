@@ -914,19 +914,30 @@ def test_apelido_nunca_sobrescreve_campo_ja_em_uso(app, sim):
     assert sd.conf('sd_criar_fora') == 'product_type'
 
 
-def test_varios_candidatos_viram_escolha_do_gabriel(app, sim):
-    """cpu_serial_number e org_serial_number gravam os dois, e nenhuma regra de texto sabe qual é
-    o certo. Pôr a service tag no "serial do processador" seria errado em silêncio."""
+def test_entre_candidatos_vence_o_campo_que_o_agente_usa(app, sim):
+    """cpu_serial_number e service_tag gravam os dois. Não é empate: a tag precisa estar onde o
+    agente a escreve, senão ele não reconhece o registro e cria outro."""
+    s, _p = sim
+    s.recusa_campo = 'serial_number'
+    s.campos_metainfo = ['name', 'product', 'asset_tag', 'cpu_serial_number', 'service_tag',
+                         'org_serial_number', 'state']
+    sd.salvar_conf({'sd_criar_fora': 'serial_number'})
+    ok, linhas = sd.diagnostico_criacao()
+    assert ok and 'chama-se "service_tag"' in '\n'.join(linhas)
+    assert sd.conf('sd_apelidos') == 'serial_number=service_tag'
+
+
+def test_ambiguidade_sem_razao_para_preferir_continua_sendo_escolha_do_gabriel(app, sim):
+    """Quando nenhum dos candidatos é um campo conhecido, não há o que preferir: pergunta."""
     s, _p = sim
     s.recusa_campo = 'serial_number'
     s.campos_metainfo = ['name', 'product', 'asset_tag', 'cpu_serial_number',
-                         'org_serial_number', 'state']
+                         'chassis_serial_number', 'state']
     sd.salvar_conf({'sd_criar_fora': 'serial_number'})
     ok, linhas = sd.diagnostico_criacao()
     texto = '\n'.join(linhas)
     assert ok and 'mais de um campo guarda o valor' in texto
-    assert 'cpu_serial_number' in texto and 'org_serial_number' in texto
-    assert not (sd.conf('sd_apelidos') or '')          # não escolhe sozinho
+    assert not (sd.conf('sd_apelidos') or '')
     assert sd.conf('sd_criar_fora') == 'serial_number'
 
 
