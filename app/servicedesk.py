@@ -293,6 +293,9 @@ def inspecionar_ativo(hostname):
     tipo = a.get('product_type')
     tipo = tipo.get('name') if isinstance(tipo, dict) else tipo
     mod = modulo_do_ativo(a)
+    # ativo escaneado pelo agente costuma vir SEM product_type; o nome do módulo diz a mesma coisa
+    if not tipo and mod:
+        tipo = mod.get('display_name') or mod.get('api_name') or ''
     if mod and a.get('id'):
         chave = mod.get('api_name') or mod['api_plural_name'].rstrip('s')
         try:

@@ -1136,3 +1136,13 @@ def test_listar_ativos_pede_os_campos_e_cai_de_pe_se_o_build_recusar(app, sim):
         sd.transporte = s
     assert pedidos == [True, False]        # tentou com campos, repetiu sem
     assert isinstance(lista, list) and mais in (True, False)
+
+
+def test_inspecionar_diz_o_tipo_pelo_modulo_quando_falta_product_type(app, sim):
+    """Ativo escaneado pelo agente vem sem product_type; mostrar "tipo ?" é esconder o que se sabe."""
+    s, _p = sim
+    s.ativos['NB-SEMTIPO'] = {'id': '720', 'name': 'NB-SEMTIPO', 'module': 'asset_computer',
+                              'service_tag': 'T1'}
+    s.ativos_por_id['720'] = s.ativos['NB-SEMTIPO']
+    achados, err = sd.inspecionar_ativo('NB-SEMTIPO')
+    assert not err and achados[0]['tipo'] == 'Laptop'
