@@ -9,6 +9,63 @@ que está em aberto. **O `PLANO.md` é o contexto de verdade do projeto** — an
 coisa sobre Service Desk, leia a seção do levantamento até o fim: várias ideias óbvias já foram
 testadas e recusadas pelo build real.
 
+## Por que o Zelo existe
+
+A gestão de ativos de TI da Martin Brower Brasil estava com a Giselly e, segundo o Gabriel, estava
+bagunçada. Em novembro de 2026 o Cristiano Sato (gerente dele) passou o processo para o Gabriel, que
+começou juntando tudo numa **planilha unificada** — e o Zelo é a substituição dessa planilha por um
+sistema, com as mesmas regras.
+
+Isso explica várias escolhas que de fora parecem exagero:
+
+- **A planilha é a fonte histórica, e o sistema tem que bater com ela.** Na importação de 09/11 a
+  situação calculada pelo Zelo bateu com a da planilha em 100% dos itens e linhas. Qualquer mudança
+  em `app/regras.py` tem que preservar isso.
+- **O sistema aponta o que está errado em vez de só guardar dado** (tela Qualidade do cadastro,
+  lembretes, conferência em tempo real nos lançamentos). O pedido do Gabriel em 11/11 foi explícito:
+  o Zelo tem de APONTAR o erro e INDUZIR o fluxo certo. Ele herdou uma base ruim e não quer
+  reproduzi-la.
+- **Nada é corrigido automaticamente quando há divergência de pessoa ou situação.** Toda
+  reconciliação com o Service Desk mostra e deixa a decisão com ele. Palpite automático foi
+  justamente o que criou o problema que ele está limpando.
+- **O termo precisa de duas assinaturas**: de quem recebe o equipamento e de quem responde pela
+  empresa (Giselly ou Sato) — é esta que libera o ativo. Como nem sempre estão presenciais, existe o
+  link por via. É requisito de processo, não firula.
+
+### O tamanho do problema (números da importação de 09/11)
+- ~3203 itens vivos e ~1779 pessoas ativas.
+- Só ~908 itens (28%) são máquinas que podem ter o agente do SDP. Monitor, celular, dock, coletor e
+  tablet — os outros ~2295 — nunca terão: **cadastro manual ou por API é inevitável**, e foi isso
+  que justificou o Zelo escrever no Service Desk.
+- 2806 itens já têm service tag, e só 1 tem hostname sem tag. Por isso o cadastro pelo Zelo é seguro:
+  a service tag é o principal critério de casamento do SDP.
+- **1750 das 1779 pessoas não têm e-mail.** É o gargalo real para atribuir ativo a usuário no SD, e
+  foi o que colocou "importar pessoas do SD" como primeira prioridade do levantamento.
+- 3106 lançamentos antigos vieram da planilha sem data; é assim mesmo, não é defeito da importação.
+
+## Trabalhando com a planilha
+
+O Gabriel pode anexar a planilha unificada (`Gestão de Ativos de TI - Centralizado.xlsx`) para que a
+sessão trabalhe com o controle atual em mãos. Ela tem proteção por senha em algumas abas — **a senha
+é digitada por ele, nunca por um assistente**.
+
+```bash
+.venv/bin/python manage.py importar "Gestão de Ativos de TI - Centralizado.xlsx"
+.venv/bin/python manage.py importar "<planilha>" --substituir   # zera e reimporta
+.venv/bin/python manage.py recalcular                           # refaz o cache a partir do Histórico
+```
+
+A importação é idempotente e os testes usam a planilha real (`ZELO_PLANILHA_TESTE`) num banco
+temporário — então vale importar antes de mexer em regra, para ver o efeito sobre os dados de
+verdade em vez de sobre um exemplo inventado.
+
+Duas cautelas:
+- **a planilha é dado de produção da MB.** Não copie conteúdo dela para fora do ambiente do Gabriel,
+  não a mande para serviço externo, e não a inclua em commit. Trabalhe sobre ela no lugar e produza
+  conclusões, não extratos.
+- na virada, o combinado é **importar a planilha mais recente no dia**, porque ela continua sendo
+  atualizada enquanto o Zelo não entra em produção.
+
 ## Quem é o Gabriel, e como ele quer as coisas
 
 Analista de governança de TI na Martin Brower; administra o ServiceDesk Plus da empresa e escreveu
@@ -99,6 +156,20 @@ exatamente o que produziu o primeiro 404.
 - Apagar um ativo no SDP pode **desinstalar o agente** da máquina ou pôr o host na lista de exclusão —
   ele não volta sozinho na varredura. `servicedesk.apagar_ativo` existe só para o ativo de teste do
   diagnóstico.
+
+## Começando uma sessão nova
+
+Ordem de leitura que dá o contexto inteiro sem adivinhação:
+1. este arquivo;
+2. `PLANO.md`, seção **ONDE PARAMOS** — o que está na mesa agora;
+3. `PLANO.md`, do começo: as etapas 1 a 5 contam como o sistema chegou aqui e, principalmente,
+   **o que já foi decidido e descartado** (e-mail automático, link do termo na v1.5, API do AirWatch,
+   Zelo criar produto no SDP). Propor de novo o que já foi recusado desperdiça o tempo dele;
+4. `git log` — as mensagens de commit são memória do projeto, não registro burocrático. As da série
+   v1.14 a v1.21 contam a investigação inteira da criação de ativo no Service Desk, rodada por
+   rodada, com o que cada erro revelou.
+
+Se a tarefa envolver dados reais, pedir a planilha unificada e importar antes de começar.
 
 ## Commits e versão
 
