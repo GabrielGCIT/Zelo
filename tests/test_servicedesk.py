@@ -55,12 +55,11 @@ class SimuladorSD:
                 {'name': 'asset_tag', 'mandatory': False}]},
                 'response_status': {'status': 'success'}})
         if cam == '/api/v3/products':
-            sc = (dados.get('list_info') or {}).get('search_criteria') or {}
-            campo, v = sc.get('field'), (sc.get('value') or '')
-            achados = [p for p in self.produtos
-                       if (p.get('name') == v if campo == 'name'
-                           else (p.get('product_type') or {}).get('name') == v)]
-            return 200, json.dumps({'products': achados, 'response_status': [{'status': 'success'}]})
+            li = dados.get('list_info') or {}
+            ini, n = li.get('start_index', 1), li.get('row_count', 100)
+            pagina = self.produtos[ini - 1:ini - 1 + n]
+            return 200, json.dumps({'products': pagina, 'response_status': [{'status': 'success'}],
+                                    'list_info': {'has_more_rows': ini - 1 + n < len(self.produtos)}})
         if cam == '/api/v3/requests/assets/module':
             li = dados.get('list_info') or {}
             ini, n = li.get('start_index', 1), li.get('row_count', 10)   # sem row_count: só 10
@@ -681,21 +680,33 @@ def test_criacao_leva_o_produto_que_existe_no_sd(app, sim):
 
 
 def test_zelo_nao_cria_produto_no_sd(app, sim):
-    """Sem produto daquele tipo, não inventa: manda sem e deixa o SDP recusar com a razão dele."""
+    """Sem produto, não inventa um: para com o motivo em vez de deixar o SDP dizer só
+    "Value not provided"."""
     from types import SimpleNamespace
     s, _p = sim
     s.produtos = []
     it = SimpleNamespace(hostname='NB-SEMPROD', tag='', plaqueta='', categoria='Notebook', site='',
                          fornecedor='', garantia='', modelo='X')
-    sd.criar_ativo(it, 'In Store')
-    assert 'product' not in s.ativos['NB-SEMPROD']
+    with pytest.raises(sd.ErroSD, match='exige um produto'):
+        sd.criar_ativo(it, 'In Store')
+    assert 'NB-SEMPROD' not in s.ativos
+
+
+def test_sem_produto_do_tipo_a_mensagem_diz_quantos_existem(app, sim):
+    from types import SimpleNamespace
+    s, _p = sim
+    s.produtos = [{'id': '9', 'name': 'Impressora X', 'product_type': {'name': 'Printer'}}]
+    it = SimpleNamespace(hostname='NB-T', tag='', plaqueta='', categoria='Notebook', site='',
+                         fornecedor='', garantia='', modelo='')
+    with pytest.raises(sd.ErroSD, match='nenhum do tipo "Laptop"'):
+        sd.criar_ativo(it, 'In Store')
 
 
 def test_diagnostico_mostra_obrigatorios_e_produto(app, sim):
     ok, linhas = sd.diagnostico_criacao()
     texto = '\n'.join(linhas)
-    assert ok and 'Obrigatórios em /api/v3/asset_computers: name, product' in texto
-    assert 'Produto escolhido para o tipo "Laptop": Latitude 5450' in texto
+    assert ok and 'Obrigatórios segundo /api/v3/asset_computers/_metainfo: name, product' in texto
+    assert 'Produto para o tipo "Laptop": Latitude 5450' in texto
 
 
 def test_modulos_paginados_vem_todos(app, sim):
@@ -705,3 +716,36 @@ def test_modulos_paginados_vem_todos(app, sim):
                               'api_name': f'asset_t{i}', 'api_plural_name': f'asset_t{i}s'}
                              for i in range(150)]
     assert len(sd.listar_modulos(recarregar=True)) == 152
+
+
+def test_metainfo_tenta_as_variantes_do_nome(app, sim):
+    """O nome do recurso muda entre build; desistir na primeira foi o que escondeu o motivo."""
+    s, _p = sim
+    vistos = []
+    original = s.__call__
+
+    class Variante:
+        def __call__(self, metodo, url, headers, corpo):
+            cam = urllib.parse.urlparse(url).path
+            if cam.endswith('/_metainfo'):
+                vistos.append(cam)
+                return 404, json.dumps({'response_status': {'status': 'failed',
+                                                            'messages': [{'message': 'URL not found'}]}})
+            if cam.endswith('/meta_info'):
+                vistos.append(cam)
+                return 200, json.dumps({'metainfo': {'fields': [{'name': 'site', 'mandatory': True}]},
+                                        'response_status': {'status': 'success'}})
+            return original(metodo, url, headers, corpo)
+
+    sd.transporte = Variante()
+    try:
+        assert sd.obrigatorios('asset_computers') == ['site']
+    finally:
+        sd.transporte = s
+    assert vistos == ['/api/v3/asset_computers/_metainfo', '/api/v3/asset_computers/meta_info']
+
+
+def test_produtos_paginados_vem_todos(app, sim):
+    s, _p = sim
+    s.produtos = [{'id': str(i), 'name': f'P{i}', 'product_type': {'name': 'Laptop'}} for i in range(250)]
+    assert len(sd.listar_produtos()) == 250

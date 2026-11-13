@@ -419,15 +419,30 @@ def modulo_do_tipo(tipo):
     return None
 
 
+def _metainfo(plural):
+    """A descrição dos campos do módulo. Devolve (json, endereço que respondeu, último erro).
+
+    O nome do recurso varia entre build — já foi `_metainfo`, `meta_info` e `metainfo` — e este
+    build nem sempre responde. Tenta as formas conhecidas em vez de desistir na primeira.
+    """
+    ultimo = ''
+    for cam in (f'/api/v3/{plural}/_metainfo', f'/api/v3/{plural}/meta_info',
+                f'/api/v3/{plural}/metainfo', f'/api/v3/{plural}/_meta_info'):
+        try:
+            return _http('GET', cam, timeout=20), cam, ''
+        except ErroSD as e:
+            ultimo = str(e)
+    return None, '', ultimo
+
+
 def obrigatorios(plural):
     """Os campos que o Service Desk exige na criação, perguntados a ele. [] se não souber dizer.
 
     O SDP recusa com "Value not provided" sem dizer qual valor: o `_metainfo` do módulo é quem
     responde isso, e cada instalação pode ter campo obrigatório próprio.
     """
-    try:
-        j = _http('GET', f'/api/v3/{plural}/_metainfo', timeout=20)
-    except ErroSD:
+    j, _end, _erro = _metainfo(plural)
+    if j is None:
         return []
     def _varrer(o, achados):
         if isinstance(o, dict):
@@ -443,31 +458,54 @@ def obrigatorios(plural):
     return sorted(_varrer(j.get('metainfo') or j, set()))
 
 
-def achar_produto(modelo=None, tipo=None):
-    """O produto (modelo) a usar na criação. O SDP costuma exigir um, e ele tem que existir lá.
+def listar_produtos(limite_paginas=20):
+    """Todos os produtos do Service Desk. Levanta ErroSD — quem chama decide o que fazer.
 
-    Primeiro pelo nome do modelo do Zelo; se não houver, qualquer produto daquele tipo serve para o
-    ativo nascer — o agente corrige o modelo quando chegar. O Zelo não cria produto: inventar
-    cadastro no SDP é exatamente o tipo de sujeira que esta integração existe para evitar.
+    Sem `search_criteria` de propósito: o filtro por tipo nem sempre existe, e um filtro que o
+    build não entende derruba a chamada. Vêm todos e o Zelo peneira aqui.
     """
+    saida, inicio = [], 1
+    for _p in range(limite_paginas):
+        j = _http('GET', '/api/v3/products',
+                  {'list_info': {'row_count': 100, 'start_index': inicio}}, timeout=20)
+        pagina = j.get('products') or []
+        saida += pagina
+        if not pagina or not (j.get('list_info') or {}).get('has_more_rows'):
+            break
+        inicio += 100
+    return saida
+
+
+def achar_produto(modelo=None, tipo=None):
+    """O produto (modelo) a usar na criação. Devolve (produto, recado); produto None se não achar.
+
+    O SDP exige um produto, e ele tem que EXISTIR lá. Primeiro pelo nome do modelo do Zelo; se não
+    houver, qualquer produto daquele tipo serve para o ativo nascer — o agente corrige o modelo
+    quando chegar. O Zelo não cria produto: inventar cadastro no SDP é a sujeira que esta
+    integração existe para evitar.
+
+    O recado existe porque "não achei" tem causas diferentes (base vazia, tipo sem produto, a
+    chamada falhou) e engolir todas em None foi o que escondeu o motivo na primeira rodada.
+    """
+    try:
+        todos = listar_produtos()
+    except ErroSD as e:
+        return None, f'não deu para listar os produtos ({e})'
+    if not todos:
+        return None, 'não há nenhum produto cadastrado no Service Desk'
     if modelo:
-        try:
-            p = _http('GET', '/api/v3/products', _busca('name', modelo)).get('products') or []
-            if p:
-                return p[0]
-        except ErroSD:
-            pass
+        for p in todos:
+            if _nome(p.get('name')) == _nome(modelo):
+                return p, f'pelo modelo "{p.get("name")}"'
     if tipo:
-        try:
-            j = _http('GET', '/api/v3/products', {'list_info': {
-                'row_count': 1, 'search_criteria': {'field': 'product_type.name', 'condition': 'is',
-                                                    'value': tipo}}})
-            p = j.get('products') or []
-            if p:
-                return p[0]
-        except ErroSD:
-            pass
-    return None
+        iguais = [p for p in todos
+                  if _nome((p.get('product_type') or {}).get('name') if isinstance(p.get('product_type'), dict)
+                           else p.get('product_type')) == _nome(tipo)]
+        if iguais:
+            return iguais[0], f'o primeiro do tipo "{tipo}": {iguais[0].get("name")}'
+        return None, (f'há {len(todos)} produto(s) no Service Desk, nenhum do tipo "{tipo}" — '
+                      f'cadastre um em Admin → Product')
+    return None, f'há {len(todos)} produto(s), mas sem tipo de produto não dá para escolher'
 
 
 def criar_ativo(it, estado=None):
@@ -493,9 +531,11 @@ def criar_ativo(it, estado=None):
     # cada tipo tem seu endereço e sua chave no corpo: asset_computers → {'asset_computer': {...}}
     plural = mod['api_plural_name']
     chave = mod.get('api_name') or plural.rstrip('s')
-    prod = achar_produto(getattr(it, 'modelo', ''), tipo)
+    prod, recado = achar_produto(getattr(it, 'modelo', ''), tipo)
     if prod:
         corpo['product'] = {'id': prod['id']} if prod.get('id') else {'name': prod.get('name')}
+    elif 'product' in obrigatorios(plural):
+        raise ErroSD(f'O Service Desk exige um produto para criar o ativo, e {recado}')
     j = _http('POST', f'/api/v3/{plural}', {chave: corpo}, timeout=20)
     novo = j.get(chave) or j.get('asset_asset') or {}
     if isinstance(novo, list):
@@ -546,15 +586,21 @@ def diagnostico_criacao():
     tipo = (enviado.get('product_type') or {}).get('name')
     mod = modulo_do_tipo(tipo)
     if mod:
-        obr = obrigatorios(mod['api_plural_name'])
-        linhas.append(f'Obrigatórios em /api/v3/{mod["api_plural_name"]}: '
-                      + (', '.join(obr) if obr else 'o _metainfo não respondeu'))
-        falta = [c for c in obr if c not in enviado and c != 'product']
-        if falta:
-            linhas.append('  O Zelo NÃO manda: ' + ', '.join(falta) + ' — me diga e eu acrescento.')
-    prod = achar_produto('', tipo)
-    linhas.append(f'Produto escolhido para o tipo "{tipo}": '
-                  + (prod.get('name') or prod.get('id') if prod else 'NENHUM — cadastre um produto desse tipo no SDP'))
+        plural = mod['api_plural_name']
+        j, onde, erro = _metainfo(plural)
+        if j is None:
+            linhas.append(f'Nenhuma forma de _metainfo respondeu em {plural} (último erro: {erro}).'
+                          ' Sem ela eu não sei quais campos o seu build exige.')
+        else:
+            obr = obrigatorios(plural)
+            linhas.append(f'Obrigatórios segundo {onde}: ' + (', '.join(obr) if obr
+                                                              else 'respondeu, mas sem marcar nenhum campo'))
+            falta = [c for c in obr if c not in enviado and c != 'product']
+            if falta:
+                linhas.append('  O Zelo NÃO manda: ' + ', '.join(falta) + ' — me diga e eu acrescento.')
+    prod, recado = achar_produto('', tipo)
+    linhas.append(f'Produto para o tipo "{tipo}": ' + (prod.get('name') or '?') if prod else
+                  f'Produto para o tipo "{tipo}": NENHUM — {recado}')
     try:
         novo = criar_ativo(falso, 'In Store')
     except ErroSD as e:
