@@ -24,6 +24,8 @@ class SimuladorSD:
                          'api_plural_name': 'asset_computers', 'category': {'display_name': 'Asset'}},
                         {'id': '2', 'display_name': 'Monitor', 'api_name': 'asset_monitor',
                          'api_plural_name': 'asset_monitors', 'category': {'display_name': 'Asset'}}]
+        self.produtos = [{'id': '77', 'name': 'Latitude 5450', 'product_type': {'name': 'Laptop'}},
+                         {'id': '78', 'name': 'P2422H', 'product_type': {'name': 'Monitor'}}]
 
     def __call__(self, metodo, url, headers, corpo):
         if self.fora:
@@ -46,8 +48,25 @@ class SimuladorSD:
             return 200, json.dumps({'asset_assets': pagina, 'response_status': [{'status': 'success'}],
                                     'list_info': {'has_more_rows': ini - 1 + n < len(todos),
                                                   'row_count': len(pagina)}})
+        mi = re.match(r'^/api/v3/(asset_[a-z_0-9]+)/_metainfo$', cam)
+        if mi:
+            return 200, json.dumps({'metainfo': {'fields': [
+                {'name': 'name', 'mandatory': True}, {'name': 'product', 'mandatory': True},
+                {'name': 'asset_tag', 'mandatory': False}]},
+                'response_status': {'status': 'success'}})
+        if cam == '/api/v3/products':
+            sc = (dados.get('list_info') or {}).get('search_criteria') or {}
+            campo, v = sc.get('field'), (sc.get('value') or '')
+            achados = [p for p in self.produtos
+                       if (p.get('name') == v if campo == 'name'
+                           else (p.get('product_type') or {}).get('name') == v)]
+            return 200, json.dumps({'products': achados, 'response_status': [{'status': 'success'}]})
         if cam == '/api/v3/requests/assets/module':
-            return 200, json.dumps({'module': self.modulos, 'response_status': [{'status': 'success'}]})
+            li = dados.get('list_info') or {}
+            ini, n = li.get('start_index', 1), li.get('row_count', 10)   # sem row_count: só 10
+            pagina = self.modulos[ini - 1:ini - 1 + n]
+            return 200, json.dumps({'module': pagina, 'response_status': [{'status': 'success'}],
+                                    'list_info': {'has_more_rows': ini - 1 + n < len(self.modulos)}})
         if cam == '/api/v3/asset_assets' and metodo == 'POST':
             # como no build de verdade: o endereço geral NÃO cria
             return 404, json.dumps({'response_status': {'status': 'failed', 'messages': [
@@ -645,3 +664,44 @@ def test_diagnostico_sem_a_lista_de_tipos_para_antes_de_criar(app, sim):
     ok, linhas = sd.diagnostico_criacao()
     assert not ok and 'não cria ativo' in '\n'.join(linhas)
     s.fora = False
+
+
+def test_criacao_leva_o_produto_que_existe_no_sd(app, sim):
+    """O SDP exige um produto, e ele tem que já existir lá: pelo modelo, ou um do mesmo tipo."""
+    from types import SimpleNamespace
+    s, _p = sim
+    it = SimpleNamespace(hostname='NB-PROD', tag='', plaqueta='', categoria='Notebook', site='',
+                         fornecedor='', garantia='', modelo='Latitude 5450')
+    sd.criar_ativo(it, 'In Store')
+    assert s.ativos['NB-PROD']['product'] == {'id': '77'}
+    it2 = SimpleNamespace(hostname='NB-SEMMOD', tag='', plaqueta='', categoria='Notebook', site='',
+                          fornecedor='', garantia='', modelo='Modelo que não existe lá')
+    sd.criar_ativo(it2, 'In Store')
+    assert s.ativos['NB-SEMMOD']['product'] == {'id': '77'}     # cai no produto do tipo
+
+
+def test_zelo_nao_cria_produto_no_sd(app, sim):
+    """Sem produto daquele tipo, não inventa: manda sem e deixa o SDP recusar com a razão dele."""
+    from types import SimpleNamespace
+    s, _p = sim
+    s.produtos = []
+    it = SimpleNamespace(hostname='NB-SEMPROD', tag='', plaqueta='', categoria='Notebook', site='',
+                         fornecedor='', garantia='', modelo='X')
+    sd.criar_ativo(it, 'In Store')
+    assert 'product' not in s.ativos['NB-SEMPROD']
+
+
+def test_diagnostico_mostra_obrigatorios_e_produto(app, sim):
+    ok, linhas = sd.diagnostico_criacao()
+    texto = '\n'.join(linhas)
+    assert ok and 'Obrigatórios em /api/v3/asset_computers: name, product' in texto
+    assert 'Produto escolhido para o tipo "Laptop": Latitude 5450' in texto
+
+
+def test_modulos_paginados_vem_todos(app, sim):
+    """Sem row_count o SDP devolve só os 10 primeiros tipos."""
+    s, _p = sim
+    s.modulos = s.modulos + [{'id': str(10 + i), 'display_name': f'Tipo {i}',
+                              'api_name': f'asset_t{i}', 'api_plural_name': f'asset_t{i}s'}
+                             for i in range(150)]
+    assert len(sd.listar_modulos(recarregar=True)) == 152

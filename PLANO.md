@@ -177,7 +177,15 @@ de produto** — `asset_computers` (ex-workstations), `asset_monitors`, `asset_p
 `asset_access_points`… — e o nome de cada um sai de `GET /api/v3/requests/assets/module`, no campo
 `api_plural_name`. O Zelo **pergunta** em vez de carregar lista fixa: os tipos variam entre build e
 entre instalação, e lista fixa é justamente o que produz aquele 404. O tipo de produto também
-decide a chave do corpo (`asset_computers` → `{'asset_computer': {...}}`).
+decide a chave do corpo (`asset_computers` → `{'asset_computer': {...}}`). A listagem é **paginada**
+e sem `row_count` só devolvem os 10 primeiros tipos. No SDP da MB, por exemplo, o endereço de
+Notebook é `asset_laptops`, não `asset_computers` — motivo suficiente para nunca fixar a lista.
+
+**O SDP exige um produto** e recusa com `HTTP 400 Value not provided`, sem dizer qual campo falta.
+Quem responde isso é `GET /api/v3/<modulo>/_metainfo`, e o diagnóstico lê de lá. O produto tem que
+**já existir** no SDP: o Zelo procura pelo modelo do item e, na falta, usa qualquer produto daquele
+tipo — o agente corrige o modelo quando chegar. O Zelo **não cria produto**: inventar cadastro no
+SDP é a sujeira que esta integração existe para evitar.
 
 **Diagnóstico antes da promessa.** A documentação pública e este build não batem, então a criação
 não entrou por fé: o botão **Diagnóstico: criar ativo** cria um `ZELO-TESTE-…` no Service Desk de
