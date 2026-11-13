@@ -749,3 +749,12 @@ def test_produtos_paginados_vem_todos(app, sim):
     s, _p = sim
     s.produtos = [{'id': str(i), 'name': f'P{i}', 'product_type': {'name': 'Laptop'}} for i in range(250)]
     assert len(sd.listar_produtos()) == 250
+
+
+def test_diagnostico_lista_os_produtos_que_existem(app, sim):
+    s, _p = sim
+    s.produtos = [{'id': '9', 'name': 'Impressora X', 'product_type': {'name': 'Printer'}}]
+    ok, linhas = sd.diagnostico_criacao()
+    texto = '\n'.join(linhas)
+    assert not ok and 'nenhum do tipo "Laptop"' in texto
+    assert 'Produtos cadastrados no Service Desk (1)' in texto and 'Impressora X  [Printer]' in texto

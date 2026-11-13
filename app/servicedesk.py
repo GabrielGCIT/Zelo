@@ -601,6 +601,19 @@ def diagnostico_criacao():
     prod, recado = achar_produto('', tipo)
     linhas.append(f'Produto para o tipo "{tipo}": ' + (prod.get('name') or '?') if prod else
                   f'Produto para o tipo "{tipo}": NENHUM — {recado}')
+    try:                     # sem ver o que existe, "nenhum do tipo X" não diz o que cadastrar
+        todos = listar_produtos()
+        linhas.append(f'Produtos cadastrados no Service Desk ({len(todos)}):' if todos
+                      else 'Nenhum produto cadastrado: todo ativo no SDP pertence a um produto '
+                           '(Admin → Product).')
+        for p in sorted(todos, key=lambda x: _nome(x.get('name')))[:40]:
+            pt = p.get('product_type')
+            pt = pt.get('name') if isinstance(pt, dict) else pt
+            linhas.append(f'  {p.get("name")}  [{pt or "sem tipo"}]')
+        if len(todos) > 40:
+            linhas.append(f'  ... e mais {len(todos) - 40}')
+    except ErroSD:
+        pass
     try:
         novo = criar_ativo(falso, 'In Store')
     except ErroSD as e:
