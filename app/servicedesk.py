@@ -29,7 +29,7 @@ from app.models import Config
 
 ACCEPT = 'application/vnd.manageengine.sdp.v3+json'
 CHAVES = ('sd_url', 'sd_chave', 'sd_ssl', 'sd_ativo', 'sd_ativos', 'sd_estados', 'sd_anexar_ativo',
-          'sd_criar_ativo', 'sd_tipos', 'sd_campos_zelo')
+          'sd_criar_ativo', 'sd_tipos', 'sd_campos_zelo', 'sd_criar_fora')
 TIPOS_ENVIO = ('Entrega', 'Empréstimo', 'Devolução')
 NOMES_TIPO = {'chamado': 'Termo + nota', 'ativo': 'Ativo', 'termo': 'Termo assinado'}
 _cache = {}            # chamado → (quando, dados)
@@ -536,6 +536,11 @@ def criar_ativo(it, estado=None):
         corpo['product'] = {'id': prod['id']} if prod.get('id') else {'name': prod.get('name')}
     elif 'product' in obrigatorios(plural):
         raise ErroSD(f'O Service Desk exige um produto para criar o ativo, e {recado}')
+    # Campos que ESTE build recusa na criação, descobertos pelo diagnóstico. Cada instalação do SDP
+    # recusa um conjunto diferente, e um campo recusado derruba a chamada inteira — melhor nascer
+    # sem ele do que não nascer.
+    for c in (conf('sd_criar_fora') or '').split(';'):
+        corpo.pop(c.strip(), None)
     j = _http('POST', f'/api/v3/{plural}', {chave: corpo}, timeout=20)
     novo = j.get(chave) or j.get('asset_asset') or {}
     if isinstance(novo, list):
@@ -552,6 +557,45 @@ def apagar_ativo(asset_id):
     máquina ou joga o host na lista de exclusão do SDP, e ele não volta sozinho na varredura.
     """
     return _http('DELETE', f'/api/v3/asset_assets/{asset_id}', timeout=15)
+
+
+def sondar_campos(plural, chave, base, opcionais):
+    """Descobre quais campos ESTE build aceita na criação. Devolve (ok_base, erro_base, resultado).
+
+    O SDP recusa com "Invalid Input" sem dizer qual campo é o inválido, e um campo recusado derruba
+    a chamada inteira. Em vez de o Gabriel testar um por um (uma rodada de conversa por campo),
+    isto cria o mínimo que funciona e depois acrescenta um campo de cada vez, apagando cada ativo
+    de teste. Devolve `resultado` como {campo: '' se aceito, senão o motivo}.
+    """
+    def _tentar(corpo):
+        try:
+            j = _http('POST', f'/api/v3/{plural}', {chave: corpo}, timeout=20)
+            novo = j.get(chave) or j.get('asset_asset') or {}
+            if isinstance(novo, list):
+                novo = novo[0] if novo else {}
+            if novo.get('id'):
+                try:
+                    apagar_ativo(novo['id'])
+                except ErroSD:
+                    pass
+            return True, ''
+        except ErroSD as e:
+            return False, str(e)
+
+    n = [0]
+
+    def _nomear(corpo):
+        n[0] += 1
+        return dict(corpo, name=f'{base["name"]}-{n[0]}')
+
+    ok, erro = _tentar(_nomear(base))
+    if not ok:
+        return False, erro, {}
+    resultado = {}
+    for campo, valor in opcionais.items():
+        ok_c, erro_c = _tentar(_nomear(dict(base, **{campo: valor})))
+        resultado[campo] = '' if ok_c else erro_c
+    return True, '', resultado
 
 
 def diagnostico_criacao():
@@ -617,10 +661,29 @@ def diagnostico_criacao():
     try:
         novo = criar_ativo(falso, 'In Store')
     except ErroSD as e:
-        linhas += [f'A criação FALHOU: {e}',
-                   'Campos mandados: ' + ', '.join(sorted(enviado)),
-                   'Se a recusa citar um TIPO, acerte o mapa de tipos acima com um nome da lista.',
-                   'Se citar um CAMPO, me diga qual que eu tiro do corpo da chamada.']
+        linhas += [f'A criação FALHOU: {e}', 'Campos mandados: ' + ', '.join(sorted(enviado))]
+        if not mod:
+            return False, linhas
+        # O SDP não diz QUAL campo é o inválido: descobre-se testando, aqui, e não numa rodada de
+        # conversa por campo.
+        linhas.append('Descobrindo campo a campo o que o seu Service Desk aceita:')
+        base = {'name': marca}
+        if prod:
+            base['product'] = {'id': prod['id']} if prod.get('id') else {'name': prod.get('name')}
+        ok_base, erro_base, res = sondar_campos(mod['api_plural_name'],
+                                                mod.get('api_name') or mod['api_plural_name'].rstrip('s'),
+                                                base, {k: v for k, v in enviado.items() if k != 'name'})
+        if not ok_base:
+            linhas += [f'  Nem o mínimo (nome{" + produto" if prod else ""}) passou: {erro_base}',
+                       '  O problema não é um campo meu — é o cadastro ou a permissão da chave no SDP.']
+            return False, linhas
+        fora = [c for c, m in res.items() if m]
+        for campo, motivo in sorted(res.items()):
+            linhas.append(f'  {"OK  " if not motivo else "NÃO "} {campo}' + (f': {motivo}' if motivo else ''))
+        if fora:
+            salvar_conf({'sd_criar_fora': ';'.join(fora)})
+            linhas += ['Guardei para não mandar mais: ' + ', '.join(fora)
+                       + '. Clique no diagnóstico de novo para confirmar.']
         return False, linhas
     linhas.append(f'Criado com id {novo.get("id")}. Conferindo o que o Service Desk guardou:')
     visto = {}

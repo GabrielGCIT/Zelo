@@ -18,7 +18,7 @@ class SimuladorSD:
         self.chamados = chamados          # {id: {'subject', 'status', 'requester': {...}}}
         self.anexos, self.notas, self.fora = [], [], False
         self.ativos, self.ativos_por_id, self.usuarios = {}, {}, []
-        self.apagados, self.seq, self.recusa_post = [], 500, ''
+        self.apagados, self.seq, self.recusa_post, self.recusa_campo = [], 500, '', ''
         # como o build de verdade: um endereço por tipo de produto, e asset_assets não cria
         self.modulos = [{'id': '1', 'display_name': 'Laptop', 'api_name': 'asset_computer',
                          'api_plural_name': 'asset_computers', 'category': {'display_name': 'Asset'}},
@@ -83,6 +83,9 @@ class SimuladorSD:
             if self.recusa_post:
                 return 400, json.dumps({'response_status': {'status': 'failed',
                                                             'messages': [{'message': self.recusa_post}]}})
+            if self.recusa_campo and self.recusa_campo in novo:   # como o SDP: não diz qual campo
+                return 400, json.dumps({'response_status': {'status': 'failed',
+                                                            'messages': [{'message': 'Invalid Input'}]}})
             self.seq += 1
             novo['id'] = str(self.seq)
             self.ativos[novo['name']] = novo
@@ -758,3 +761,37 @@ def test_diagnostico_lista_os_produtos_que_existem(app, sim):
     texto = '\n'.join(linhas)
     assert not ok and 'nenhum do tipo "Laptop"' in texto
     assert 'Produtos cadastrados no Service Desk (1)' in texto and 'Impressora X  [Printer]' in texto
+
+
+def test_diagnostico_acha_o_campo_recusado_e_guarda(app, sim):
+    """O SDP diz só "Invalid Input": quem descobre qual campo é o diagnóstico, não o Gabriel."""
+    s, _p = sim
+    s.recusa_campo = 'asset_tag'
+    ok, linhas = sd.diagnostico_criacao()
+    texto = '\n'.join(linhas)
+    assert not ok
+    assert 'NÃO  asset_tag' in texto and 'OK   serial_number' in texto and 'OK   state' in texto
+    assert sd.conf('sd_criar_fora') == 'asset_tag'
+    assert not s.ativos                        # nenhuma sonda ficou para trás
+    s.recusa_campo = ''
+    ok2, linhas2 = sd.diagnostico_criacao()    # na segunda passada já nasce sem o campo
+    assert ok2 and 'apagado' in '\n'.join(linhas2)
+
+
+def test_criar_ativo_respeita_os_campos_descartados(app, sim):
+    from types import SimpleNamespace
+    s, _p = sim
+    sd.salvar_conf({'sd_criar_fora': 'asset_tag;state'})
+    it = SimpleNamespace(hostname='NB-FORA', tag='T9', plaqueta='PL9', categoria='Notebook',
+                         site='', fornecedor='', garantia='', modelo='Latitude 5450')
+    sd.criar_ativo(it, 'In Store')
+    a = s.ativos['NB-FORA']
+    assert 'asset_tag' not in a and 'state' not in a and a['serial_number'] == 'T9'
+
+
+def test_nem_o_minimo_passa_aponta_o_sdp_nao_o_campo(app, sim):
+    s, _p = sim
+    s.recusa_post = 'No permission to add asset'
+    ok, linhas = sd.diagnostico_criacao()
+    texto = '\n'.join(linhas)
+    assert not ok and 'Nem o mínimo' in texto and 'permissão da chave' in texto
