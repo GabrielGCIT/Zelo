@@ -50,6 +50,28 @@ No laboratório, onde o build recusa `service_tag`, vale `org_serial_number`.
 Falta confirmar na prática que o agente funde em vez de duplicar — mas a condição necessária
 (escrever no campo que ele lê) está resolvida.
 
+### A base de ativos do SD foi zerada (17/11/2026)
+O Gabriel limpou o módulo de ativos do SDP da MB: hoje não há nenhum ativo lá, e dali em diante só
+entra pelo agente. Isso resolve a divisão de trabalho da criação, que estava em aberto:
+
+- **Notebook, desktop, thin client** → o agente cria; o Zelo não encosta na criação, só enriquece.
+- **Monitor, celular, dock, coletor, tablet** (~2295 itens) → nunca terão agente. Ou o Zelo cria,
+  ou nunca existem no SD.
+
+Configurável sem código: em **Tipos de produto próprios**, `Notebook=` com o lado direito vazio
+desliga a criação daquela categoria.
+
+O preço: o agente **não** vem na imagem do Windows e é instalado à mão pelo Suporte. Máquina
+formatada ou nova sem agente é invisível para o SD. Mas o Zelo sabe o que entregou — hostname
+entregue que não aparece no SD em N dias só pode ser agente não instalado, e isso vira pendência
+(e, quando a oportunidade G existir, chamado automático). É o monitoramento de cobertura do agente,
+e sai quase de graça porque o Zelo tem os dois lados.
+
+Consequência para "o ativo conta a própria história": esse histórico **começa agora**, e só se
+constrói se o ativo estiver anexado aos chamados. O interruptor "anexar o equipamento ao chamado"
+deixa de ser enfeite e vira matéria-prima — cada mês desligado é um mês de histórico perdido
+para sempre.
+
 ### Outros achados do mesmo ativo, para usar depois
 - **Datas vêm em epoch de milissegundos** (`warranty_expiry: 1813046399000`, `acquisition_date`).
   O Zelo manda garantia como `{'value': 'AAAA-MM-DD'}` — **provavelmente não grava**; conferir antes
@@ -224,6 +246,29 @@ Limites conhecidos, provados no laboratório (SDP 16 on-premises):
   Toda escrita é um ativo por chamada, logo tudo que for em massa tem que ser fila, não botão síncrono;
 - a documentação pública fala em `/api/v3/assets`; o que responde nesse build é `/api/v3/asset_assets`.
   Qualquer endpoint novo daqui precisa de um teste no laboratório antes de virar promessa.
+
+## Princípio: o Zelo é autossuficiente; o Service Desk é adaptador (17/11/2026)
+Decisão do Gabriel: o Zelo tem de rodar sozinho amanhã se preciso, e rodar **com excelência** quando
+integrado. Consequências práticas, que é fácil furar sem perceber:
+
+- **A espinha do processo mora no Zelo.** Quando o Zelo passar a abrir e fechar chamados, a
+  *solicitação* (pedido de preparação, pedido de devolução) é entidade **do Zelo**, com status e
+  prazo próprios; o chamado no SD é o espelho dela. Apontar só para o Nº do chamado mudaria o
+  processo de casa sem ninguém decidir isso.
+- **O SD é registro oficial de chamado e fonte do que o agente descobre da máquina.** Não é o banco
+  de dados do Zelo: pessoas, itens e histórico de responsabilidade vivem aqui.
+- **Teste para toda decisão nova:** *se a integração for desligada agora, isso continua
+  funcionando?* Se não, está no lugar errado.
+
+## Identificação de pessoa: matrícula é a chave, CPF é atributo (17/11/2026)
+Terceiro não tem matrícula, então o CPF é necessário — mas o que importa é **onde ele mora**. No
+Zelo ele fica com três ou quatro usuários de governança; no SD ficaria com dezenas de técnicos e
+como campo de busca. Mesmo dado, riscos muito diferentes.
+
+- matrícula segue sendo a chave (terceiro recebe matrícula interna; o Zelo já gera `SD-NOME`);
+- CPF entra como atributo da pessoa, para busca e para identificar quem assina o termo — uso
+  legítimo num termo de responsabilidade;
+- fica no Zelo, **não** no Service Desk; restrito por perfil e mascarado nas telas de consulta.
 
 ## A decisão que vem antes de tudo: quem é dono de qual campo
 A base do SD vem do agente e do AD. A do Zelo vem da planilha. Elas vão discordar muito no primeiro
