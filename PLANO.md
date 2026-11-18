@@ -21,8 +21,9 @@ de produto, e o **Inspecionar** lendo a ficha completa de um ativo.
 Falta no servidor, por ordem:
 1. `serial_number=service_tag` em "Nomes de campo próprios", e rodar o **Diagnóstico: criar ativo**
    para confirmar a criação (1 minuto; cria e apaga um `ZELO-TESTE-…` de verdade).
-2. **Subir como serviço no boot.** Clonado do git não tem `instalar-servico.bat` (ele é gerado pelo
-   empacotador), então hoje o Zelo morre quando a janela fecha.
+2. **Subir como serviço no boot.** Desde a v1.28.0 o repositório traz `instalar-servico.bat` e
+   `servico-run.bat` na raiz. Falta rodar no servidor (como administrador) e **reiniciar** para
+   provar o boot. Até lá o Zelo morre quando a janela fecha.
 3. **Testar a restauração do backup.** O backup diário existe; restaurar nunca foi testado, e
    backup não testado não é backup.
 4. **Ligar "anexar o equipamento ao chamado"** — com a base de ativos zerada, o histórico por ativo

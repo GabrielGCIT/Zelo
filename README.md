@@ -37,6 +37,12 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 firewall da porta 5001), `importar-planilha.bat` (arrastar a planilha) e `atualizar.bat`.
 Instruções para quem instala: `LEIAME.txt` dentro do pacote.
 
+Instalado por clone do git (como no servidor da MB): crie o `.venv`, instale o `requirements.txt`
+e rode `instalar-servico.bat` da raiz **como administrador**. Ele registra a mesma tarefa no boot
+(como SYSTEM, apontando para `servico-run.bat`) e libera no firewall a porta configurada em
+`instance\`, não uma fixa. O Python base precisa estar instalado para todos os usuários: o SYSTEM
+não executa um Python que mora no `AppData` de alguém.
+
 ## Próximos passos combinados
 
 - Login com a conta Microsoft
