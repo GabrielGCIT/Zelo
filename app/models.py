@@ -406,6 +406,10 @@ CONFIG_PADRAO = {
     # ao estoque depois de Preparação e Liberação — o quadro da tela Acompanhar.
     'fluxo_preparacao': '',
     'dias_fluxo_parado': '7',
+    # Cobertura do agente (Itens → Conferir com o Service Desk). O agente é instalado à mão pelo
+    # Suporte, então máquina recém-entregue sem ele é normal por alguns dias, não por semanas.
+    'dias_sem_agente': '7',
+    'dias_agente_sumido': '30',
     'aviso_contrato_dias': '90',
     'equipe': 'Gabriel;Giselly Oliveira;Adriano Santos;Daniely Reis',
     'tecnicos': 'Diogo Mariano;Adriano Santos;Emilly Cosmo;Edvaldo Filho;Thomaz Jardim;Lucas Rodrigues;Michel Santos;Lara Vitoriano',

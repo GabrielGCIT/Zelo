@@ -20,6 +20,8 @@ class SimuladorSD:
         self.ativos, self.ativos_por_id, self.usuarios = {}, {}, []
         self.apagados, self.seq, self.recusa_post, self.recusa_campo = [], 500, '', ''
         self.ignora_campo = ''
+        # o que este build não conhece: condições de busca e campos pedidos na listagem
+        self.recusa_condicao, self.recusa_campos_lista = set(), set()
         # como o build de verdade: um endereço por tipo de produto, e asset_assets não cria
         self.modulos = [{'id': '1', 'display_name': 'Laptop', 'api_name': 'asset_computer',
                          'api_plural_name': 'asset_computers', 'category': {'display_name': 'Asset'}},
@@ -40,11 +42,22 @@ class SimuladorSD:
         if cam == '/api/v3/asset_assets' and metodo == 'GET':
             li = dados['list_info']
             if 'search_criteria' in li:
-                v = li['search_criteria']['value']
-                # o SDP não diferencia maiúscula de minúscula na busca por nome
-                return 200, json.dumps({'asset_assets': [a for a in self.ativos.values()
-                                                         if (a['name'] or '').upper() == (v or '').upper()],
+                sc = li['search_criteria']
+                campo, cond, v = sc.get('field', 'name'), sc.get('condition', 'is'), (sc['value'] or '').upper()
+                if cond in self.recusa_condicao:
+                    return 400, json.dumps({'response_status': {'status': 'failed', 'messages': [
+                        {'message': f'Invalid condition: {cond}'}]}})
+
+                def _txt(x):
+                    return str((x.get('name') or x.get('value') or '') if isinstance(x, dict) else (x or '')).upper()
+                # o SDP não diferencia maiúscula de minúscula na busca
+                bate = (lambda t: t.startswith(v)) if cond == 'starts with' else (lambda t: t == v)
+                return 200, json.dumps({'asset_assets': [a for a in self.ativos.values() if bate(_txt(a.get(campo)))],
                                         'response_status': [{'status': 'success'}]})
+            pedidos = set(li.get('fields_required') or ())
+            if pedidos & self.recusa_campos_lista:                  # um nome inválido derruba tudo
+                return 400, json.dumps({'response_status': {'status': 'failed', 'messages': [
+                    {'message': 'Invalid field: ' + sorted(pedidos & self.recusa_campos_lista)[0]}]}})
             todos = list(self.ativos.values())                      # listagem paginada
             ini, n = li.get('start_index', 1), li.get('row_count', 100)
             pagina = todos[ini - 1:ini - 1 + n]
@@ -472,7 +485,8 @@ def test_entrega_anexa_o_ativo_ao_chamado_quando_ligado(app, cli, sim):
     r = cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
         {'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum', 'chamado': '777001'}]})
     assert r.json['gravadas'] == 1 and a['state']['name'] == 'In Use'
-    assert any((x.get('name') or '') == it.hostname.upper() for x in s.chamados['777001'].get('assets') or [])
+    # pelo id do ativo achado, não pelo nome: o nome do agente vem com domínio e não acharia nada
+    assert {'id': a['id']} in (s.chamados['777001'].get('assets') or [])
 
 
 def test_enfileirar_item_nao_duplica_pendencia(app, sim):
@@ -1134,8 +1148,104 @@ def test_listar_ativos_pede_os_campos_e_cai_de_pe_se_o_build_recusar(app, sim):
         lista, mais = sd.listar_ativos(1, 10)
     finally:
         sd.transporte = s
-    assert pedidos == [True, False]        # tentou com campos, repetiu sem
+    assert pedidos == [True, True, False]  # com os campos do agente, sem eles, e sem campo nenhum
     assert isinstance(lista, list) and mais in (True, False)
+
+
+def test_campo_do_agente_recusado_nao_cega_a_service_tag(app, sim):
+    """Se o build recusar last_logged_user na listagem, o degrau seguinte ainda pede a service tag:
+    perder a tag por causa de um campo opcional faria a conferência casar só por hostname."""
+    s, _p = sim
+    s.ativos['NB-T'] = {'id': '730', 'name': 'NB-T', 'service_tag': 'TAGT'}
+    s.ativos_por_id['730'] = s.ativos['NB-T']
+    s.recusa_campos_lista = {'last_logged_user'}
+    lista, _m = sd.listar_ativos(1, 10)
+    assert lista and lista[0]['service_tag'] == 'TAGT'
+    assert sd._degrau_lista['i'] == 1      # lembrado: as outras páginas não repetem a recusa
+
+
+def test_queda_de_rede_nao_desce_o_degrau(app, sim):
+    s, _p = sim
+    s.fora = True
+    with pytest.raises(sd.ErroSD):
+        sd.listar_ativos(1, 10)
+    assert sd._degrau_lista['i'] == 0
+
+
+# ------------------------------------------------------------------ hostname com domínio (agente)
+
+def test_host_curto():
+    assert sd.host_curto('lmbbfyp9nq3.reyesholdings.com') == 'LMBBFYP9NQ3'
+    assert sd.host_curto(' LMB123 ') == 'LMB123'
+    assert sd.host_curto('10.0.0.5') == '10.0.0.5'          # IP não se corta
+    assert sd.host_curto('') == '' and sd.host_curto(None) == ''
+
+
+def _do_agente(s, nome, tag='', id_='740'):
+    """Ativo como o agente cria: nome com domínio e a tag em service_tag (visto na MB, 13/11)."""
+    s.ativos[nome] = {'id': id_, 'name': nome, 'service_tag': tag, 'module': 'asset_computer'}
+    s.ativos_por_id[id_] = s.ativos[nome]
+    return s.ativos[nome]
+
+
+def test_acha_o_ativo_do_agente_pelo_nome_curto(app, sim):
+    s, _p = sim
+    a = _do_agente(s, 'lmbteste01.reyesholdings.com')
+    assert sd.achar_ativo('LMBTESTE01')['id'] == a['id']
+
+
+def test_nome_curto_nao_confunde_maquinas_de_nome_parecido(app, sim):
+    """'LMB1.' no começo não pode achar 'LMB10.dominio': o ponto é parte da busca."""
+    s, _p = sim
+    _do_agente(s, 'lmb10.reyesholdings.com', id_='741')
+    assert sd.achar_ativo('LMB1') is None
+
+
+def test_sem_starts_with_cai_para_a_service_tag(app, sim):
+    s, _p = sim
+    s.recusa_condicao = {'starts with'}
+    a = _do_agente(s, 'lmbteste02.reyesholdings.com', tag='TAGX02', id_='742')
+    assert sd.achar_ativo('LMBTESTE02') is None                 # sem tag não há como achar
+    assert sd.achar_ativo('LMBTESTE02', 'tagx02')['id'] == a['id']
+
+
+def test_service_tag_acha_maquina_renomeada(app, sim):
+    s, _p = sim
+    a = _do_agente(s, 'nome-novo.reyesholdings.com', tag='TAGREN', id_='743')
+    assert sd.achar_ativo('NOME-ANTIGO', 'TAGREN')['id'] == a['id']
+
+
+def test_duas_maquinas_com_o_mesmo_nome_curto_e_erro_nao_escolha(app, sim):
+    """Atualizar o ativo errado poria a máquina no nome de outra pessoa."""
+    s, _p = sim
+    _do_agente(s, 'lmbdup.reyesholdings.com', id_='744')
+    _do_agente(s, 'lmbdup.outrodominio.local', id_='745')
+    with pytest.raises(sd.ErroSD, match='Reconcile'):
+        sd.achar_ativo('LMBDUP')
+
+
+def test_entrega_atualiza_o_ativo_criado_pelo_agente(app, cli, sim):
+    """O caso que motivou tudo: com o nome exato, a entrega dava 'ativo não existe' para toda
+    máquina com agente."""
+    s, p = sim
+    it = _nb()
+    a = _do_agente(s, it.hostname.lower() + '.reyesholdings.com', tag=it.tag or '', id_='746')
+    s.usuarios = [{'id': '91', 'name': p.nome, 'email_id': 'x@mb.com'}]
+    p.email = 'x@mb.com'
+    sd.salvar_conf({'sd_ativos': 'Sim'})
+    db.session.commit()
+    cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}]})
+    e = EnvioSD.query.filter_by(tipo='ativo').one()
+    assert e.status == 'Enviado', e.erro
+    assert a['state'] == {'name': 'In Use'} and a['user'] == {'id': '91'}
+
+
+def test_anexa_ao_chamado_pelo_id_do_ativo_do_agente(app, sim):
+    s, _p = sim
+    _do_agente(s, 'lmbanexo.reyesholdings.com', id_='747')
+    ok, _r = sd.anexar_ativo_ao_chamado('777001', 'LMBANEXO')
+    assert ok and s.chamados['777001']['assets'] == [{'id': '747'}]
 
 
 def test_inspecionar_diz_o_tipo_pelo_modulo_quando_falta_product_type(app, sim):

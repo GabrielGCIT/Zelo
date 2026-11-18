@@ -57,6 +57,7 @@ def salvar_conf(valores):
     db.session.commit()
     _cache.clear()
     _modulos.clear()          # trocar de Service Desk troca a lista de tipos
+    _degrau_lista['i'] = 0    # e o que a listagem dele aceita
 
 
 def configurado():
@@ -167,24 +168,29 @@ def nota(numero, texto):
                            'add_to_linked_requests': False}})
 
 
-def anexar_ativo_ao_chamado(numero, hostname):
+def anexar_ativo_ao_chamado(numero, hostname, tag=None):
     """Põe o equipamento DENTRO do chamado, não só na nota.
 
     É a resposta ao que a Giselly quer — o ativo aparecendo no chamado do solicitante — sem
     customizar o Service Desk. Lê os ativos que já estão no chamado e acrescenta, em vez de
     mandar só o novo: o PUT substitui a lista inteira, então mandar um apagaria os outros.
     Devolve (ok, recado). Nunca levanta erro: a nota e o termo valem mesmo se isto não passar.
+
+    Anexa pelo id do ativo achado, não pelo nome: o agente batiza a máquina com o domínio
+    ('lmb123.reyesholdings.com'), e o nome curto do Zelo não acharia nada lá.
     """
     host = (hostname or '').strip().upper()
     if not host:
         return False, ''
     try:
+        achado = achar_ativo(host, tag)
         r = _http('GET', f'/api/v3/requests/{numero}', timeout=10).get('request') or {}
         atuais = [a for a in (r.get('assets') or []) if isinstance(a, dict)]
-        if any((a.get('name') or '').strip().upper() == host for a in atuais):
+        if any((achado and a.get('id') and str(a['id']) == str(achado.get('id')))
+               or host_curto(a.get('name')) == host_curto(host) for a in atuais):
             return True, f'{host} já estava no chamado'
         lista = [{'id': a['id']} if a.get('id') else {'name': a.get('name')} for a in atuais]
-        lista.append({'name': host})
+        lista.append({'id': achado['id']} if achado and achado.get('id') else {'name': host})
         _http('PUT', f'/api/v3/requests/{numero}', {'request': {'assets': lista}}, timeout=15)
         return True, f'{host} anexado ao chamado'
     except ErroSD as e:
@@ -216,13 +222,33 @@ def anexar_ativo_ligado():
     return configurado() and conf('sd_anexar_ativo') == 'Sim'
 
 
-def _busca(campo, valor, linhas=5):
-    return {'list_info': {'row_count': linhas, 'search_criteria': {'field': campo, 'condition': 'is', 'value': valor}}}
+def _busca(campo, valor, linhas=5, condicao='is'):
+    return {'list_info': {'row_count': linhas,
+                          'search_criteria': {'field': campo, 'condition': condicao, 'value': valor}}}
+
+
+def host_curto(nome):
+    """O hostname sem domínio, em maiúsculas: 'lmbbfyp9nq3.reyesholdings.com' → 'LMBBFYP9NQ3'.
+
+    O agente do SDP batiza o ativo com o nome COMPLETO da máquina (visto na MB, 13/11), e a
+    planilha guarda só o nome curto: nenhum dos ~1050 hostnames do Zelo tem domínio. Comparar os
+    dois por igualdade faz toda máquina com agente parecer inexistente no Service Desk.
+    Endereço IP passa inteiro: cortar no primeiro ponto o transformaria em lixo.
+    """
+    s = str(nome or '').strip().upper()
+    if not s or re.fullmatch(r'[\d.]+', s):
+        return s
+    return s.split('.')[0]
 
 
 CAMPOS_LISTA = ('id', 'name', 'service_tag', 'serial_number', 'org_serial_number', 'asset_tag',
                 'barcode', 'product', 'product_type', 'state', 'user', 'site', 'vendor',
                 'warranty_expiry', 'module')
+# O que só o agente preenche. Vistos na ficha de um ativo escaneado na MB, mas nunca pedidos na
+# LISTAGEM — e a listagem já se mostrou mais pobre que a ficha. Vão num degrau à parte para que
+# uma recusa deles não derrube junto a service tag, que é o que a conferência precisa para casar.
+CAMPOS_AGENTE = ('last_logged_user', 'last_scan_success_time')
+_degrau_lista = {'i': 0}          # o primeiro degrau que este Service Desk aceitou
 
 
 def listar_ativos(inicio=1, linhas=100):
@@ -231,7 +257,9 @@ def listar_ativos(inicio=1, linhas=100):
     A listagem geral NÃO devolve tudo: sem `fields_required` vem um conjunto mínimo, sem service
     tag e sem plaqueta — e aí a conferência casa só por hostname, sem perceber que está cega. Daí
     pedir os campos. Mas nome de campo varia entre build, e um nome inválido derruba a chamada
-    inteira: se isso acontecer, volta a pedir o mínimo, que é pior mas funciona.
+    inteira. Por isso desce em degraus: com os campos do agente, sem eles, e sem campo nenhum —
+    cada degrau pior que o anterior, mas funcionando. O degrau que deu certo fica lembrado, para
+    não repetir a recusa em cada uma das 60 páginas.
     """
     def _pagina(campos):
         li = {'row_count': linhas, 'start_index': inicio, 'get_total_count': True}
@@ -240,16 +268,77 @@ def listar_ativos(inicio=1, linhas=100):
         j = _http('GET', '/api/v3/asset_assets', {'list_info': li}, timeout=25)
         return (j.get('asset_assets') or []), bool((j.get('list_info') or {}).get('has_more_rows'))
 
-    try:
-        return _pagina(CAMPOS_LISTA)
-    except ErroSD:
-        return _pagina(None)
+    degraus = (CAMPOS_LISTA + CAMPOS_AGENTE, CAMPOS_LISTA, None)
+    for i in range(_degrau_lista['i'], len(degraus)):
+        try:
+            r = _pagina(degraus[i])
+        except ErroSD as e:
+            # só RECUSA desce o degrau: queda de rede desceria e ficaria lembrada, e a conferência
+            # perderia os campos do agente até alguém reiniciar o Zelo
+            if i == len(degraus) - 1 or 'Sem conexão' in str(e):
+                raise
+            continue
+        _degrau_lista['i'] = i
+        return r
 
 
-def achar_ativo(hostname):
-    r = _http('GET', '/api/v3/asset_assets', _busca('name', hostname))
-    lst = r.get('asset_assets') or []
-    return lst[0] if lst else None
+def _campos_tag():
+    """Onde procurar a service tag, do mais provável ao menos: o apelido que o diagnóstico
+    gravou para este build primeiro, depois o campo que o agente preenche."""
+    apelido = dict(_pares(conf('sd_apelidos'))).get('serial_number')
+    return list(dict.fromkeys(c for c in (apelido, 'service_tag', 'serial_number', 'org_serial_number') if c))
+
+
+def _valor_campo(v):
+    return str((v.get('name') or v.get('value') or '') if isinstance(v, dict) else (v or '')).strip()
+
+
+def achar_ativo(hostname, tag=None):
+    """O ativo do Service Desk para este hostname. None se não existir.
+
+    Três tentativas, da mais exata para a mais larga:
+    1. o nome exato, como sempre foi;
+    2. o nome curto seguido de domínio ('LMB123.' no começo): é como o agente batiza a máquina;
+    3. a service tag, que é a identidade da máquina e não muda quando alguém a renomeia.
+
+    A condição 'starts with' está na documentação, mas documentação e este build já divergiram
+    antes: se ele recusar, a busca segue para a service tag em vez de falhar.
+
+    Mais de um candidato numa tentativa larga é erro, não escolha — atualizar o ativo errado
+    poria a máquina no nome de outra pessoa, e criar outro por não achar duplicaria o registro.
+    """
+    host = (hostname or '').strip()
+    if host:
+        lst = _http('GET', '/api/v3/asset_assets', _busca('name', host)).get('asset_assets') or []
+        if lst:
+            return lst[0]
+        curto = host_curto(host)
+        try:
+            lst = _http('GET', '/api/v3/asset_assets',
+                        _busca('name', curto + '.', condicao='starts with')).get('asset_assets') or []
+        except ErroSD:
+            lst = []
+        iguais = [a for a in lst if host_curto(a.get('name')) == curto]
+        if len(iguais) == 1:
+            return iguais[0]
+        if len(iguais) > 1:
+            raise ErroSD(f'Há {len(iguais)} ativos chamados {curto}.<domínio> no Service Desk: '
+                         'resolva a duplicidade lá (Actions → Reconcile)')
+    t = (tag or '').strip()
+    if t:
+        for campo in _campos_tag():
+            try:
+                lst = _http('GET', '/api/v3/asset_assets', _busca(campo, t)).get('asset_assets') or []
+            except ErroSD:
+                continue                  # campo que este build não conhece
+            # confere o valor em vez de confiar no filtro: build que ignora o critério devolve tudo
+            iguais = [a for a in lst if _valor_campo(a.get(campo)).upper() == t.upper()]
+            if len(iguais) == 1:
+                return iguais[0]
+            if len(iguais) > 1:
+                raise ErroSD(f'Há {len(iguais)} ativos com a service tag {t} no Service Desk: '
+                             'resolva a duplicidade lá (Actions → Reconcile)')
+    return None
 
 
 def modulo_do_ativo(a):
@@ -280,11 +369,13 @@ def inspecionar_ativo(hostname):
     Lê pela ficha do módulo, não pela listagem geral: a listagem devolve um conjunto reduzido de
     campos, e foi ela que já fez campo gravado parecer campo perdido antes.
     """
+    from app.models import Item
     host = (hostname or '').strip()
     if not host:
         return [], 'Diga o hostname da máquina.'
+    it = Item.query.filter(Item.hostname.ilike(host_curto(host))).first()
     try:
-        a = achar_ativo(host)
+        a = achar_ativo(host, it.tag if it else None)
     except ErroSD as e:
         return [], str(e)
     if not a:
@@ -1034,7 +1125,7 @@ def enviar_ativo(envio, m):
     if not host:
         raise ErroSD('Item sem hostname no Zelo: não dá para achar o ativo no Service Desk')
     estado = acao_ativo(m, it)
-    a = achar_ativo(host)
+    a = achar_ativo(host, it.tag if it else None)
     nasceu = ''
     if not a:
         if not (it and criar_ativo_ligado()):
@@ -1058,6 +1149,10 @@ def enviar_ativo(envio, m):
     serial = (a.get('serial_number') or a.get('service_tag') or '')
     if it and it.tag and serial and serial.upper() != it.tag.upper():
         aviso = f' (atenção: service tag no SD {serial} ≠ Zelo {it.tag})'
+    nome_sd = (a.get('name') or '').strip()
+    if nome_sd and host_curto(nome_sd) != host_curto(host):
+        # achado pela service tag: a máquina foi renomeada de um lado e não do outro
+        aviso += f' (atenção: no Service Desk ela se chama {nome_sd})'
     return (f'{host}{nasceu} → {estado or "estado inalterado"}'
             + (f' com {quem}' if uid else ' (sem usuário)') + aviso)
 
@@ -1196,7 +1291,7 @@ def enviar(envio):
         nota(envio.chamado, texto_nota(m, it, arquivo))
         recado = None
         if anexar_ativo_ligado() and it and (it.hostname or '').strip():
-            _ok, recado = anexar_ativo_ao_chamado(envio.chamado, it.hostname)
+            _ok, recado = anexar_ativo_ao_chamado(envio.chamado, it.hostname, it.tag)
         envio.status, envio.erro = 'Enviado', recado or None
         envio.enviado = datetime.now().isoformat(timespec='seconds')
     except ErroSD as e:

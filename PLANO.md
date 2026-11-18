@@ -2,9 +2,42 @@
 
 ---
 
-## ONDE PARAMOS — 18/11/2026, v1.30.1
+## ONDE PARAMOS — 18/11/2026, v1.31.0
 
 Leia esta seção primeiro. O resto do arquivo é histórico e decisões; isto é o que está na mesa.
+
+**Foco desde 18/11: desenvolver** (funcionalidade, integração com o SD, bugs). O servidor só entra
+na pauta quando o Gabriel avisar. Fluxo: alteração e commit na máquina dele, `git pull` e teste
+no servidor. A suíte roda local com `ZELO_PLANILHA_TESTE` apontando para a planilha atual.
+
+### O nome que o agente dá à máquina tem domínio (18/11, v1.31.0)
+O ativo que o agente criou na MB chama-se `lmbbfyp9nq3.reyesholdings.com`; nenhum dos 1051
+hostnames do Zelo tem domínio. O Zelo procurava com `name is <hostname>`, então **toda máquina
+com agente parecia inexistente**: a entrega e a devolução dariam "ativo não existe" na fila, e a
+conferência só casava porque caía na service tag. Não houve estrago porque os interruptores de
+escrita estão desligados no servidor.
+
+- `achar_ativo` tenta o nome exato, depois `starts with` `<curto>.`, depois a service tag (no
+  campo do apelido, `service_tag` na MB). Mais de um candidato é erro, não escolha.
+- conferência e "Repetido no Service Desk" comparam pelo nome curto (`host_curto`); o hostname
+  que vem do SD entra curto no Zelo.
+- o ativo vai para dentro do chamado pelo **id**, não pelo nome.
+
+**A provar no laboratório:** se o build aceita a condição `starts with` (se recusar, a busca cai
+para a service tag, mas é bom saber), e se anexar ao chamado por `{'id': ...}` grava.
+
+### Cobertura do agente (18/11, v1.31.0)
+Seção nova em Itens → Conferir com o Service Desk, para notebook, desktop e thin client em uso:
+- **Entregue e sem agente** — não está no SD, ou só como cadastro manual nunca varrido, depois de
+  `dias_sem_agente` (7) da entrega;
+- **Agente parou de ver** — `last_scan_success_time` mais velho que `dias_agente_sumido` (30);
+- **Quem usa difere** — `last_logged_user` sem domínio ≠ login (`Pessoa.user`) de quem o Zelo diz
+  estar com a máquina, ou login recente numa máquina que o Zelo diz estar em estoque.
+
+A listagem passou a pedir os dois campos do agente num degrau à parte: se o build recusar, cai
+para os campos de sempre em vez de perder a service tag. Quando nenhum ativo trouxer os campos, a
+tela diz isso em vez de mostrar grupo vazio. **A provar no laboratório:** se `asset_assets` aceita
+esses campos em `fields_required`. O formato que o agente grava só a MB mostra.
 
 ### Armadilha paga: MATCH exato não casa número com texto (18/11)
 Ele lançou a devolução do notebook 7080 e a Categoria saiu "⚠ item não cadastrado". O Excel guardou

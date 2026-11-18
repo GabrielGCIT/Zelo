@@ -1,4 +1,6 @@
 """Ativos × Service Desk: importar o que falta e enxergar onde os dois discordam."""
+from datetime import date, datetime, timedelta
+
 import pytest
 
 from app import db
@@ -285,3 +287,181 @@ def test_tag_do_sd_tambem_sai_de_org_serial_number(app):
     from app.conferir_sd import do_sd
     assert do_sd({'id': '1', 'name': 'NB-X', 'org_serial_number': 'ABC123'})['tag'] == 'ABC123'
     assert do_sd({'id': '2', 'name': 'NB-Y', 'serial_number': 'DEF456'})['tag'] == 'DEF456'
+
+
+# ------------------------------------------------------------------ hostname com domínio (agente)
+
+def test_casa_o_ativo_do_agente_pelo_nome_curto(app, sdl):
+    """O agente batiza a máquina com o domínio; a planilha guarda o nome curto. Comparados crus,
+    toda máquina com agente virava "Falta no Zelo" e a mesma máquina, "Só no Zelo"."""
+    it = _item_com_host()
+    a = _por(sdl, it.hostname.lower() + '.reyesholdings.com')
+    a['service_tag'] = it.tag or ''
+    linhas, _r = conferir([do_sd(a)])
+    l = linhas[0]
+    assert l['item'] and l['item']['codigo'] == it.codigo
+    assert not any(d[0] == 'hostname' for d in l['difere'])      # o domínio não é divergência
+
+
+def test_hostname_que_falta_entra_curto(app, sdl):
+    """Marcar 'Completa o cadastro' não pode gravar o domínio no Zelo."""
+    it = Item.query.filter(Item.tag.isnot(None), Item.tag != '',
+                           (Item.hostname.is_(None)) | (Item.hostname == '')).first()
+    a = _por(sdl, 'lmbcompleta.reyesholdings.com')
+    a['service_tag'] = it.tag
+    l = conferir([do_sd(a)])[0][0]
+    assert ('hostname', 'LMBCOMPLETA') in l['faltam']
+
+
+def test_duplicado_no_sd_entre_registro_manual_e_agente(app):
+    """'LMB123' criado à mão e 'lmb123.dominio' criado pelo agente são a mesma máquina duas vezes —
+    é justamente o que o teste de fusão do agente quer enxergar."""
+    from app.conferir_sd import duplicados
+    g = duplicados([_a('1', 'LMB123', 'T1'), _a('2', 'lmb123.reyesholdings.com', '')])
+    assert len(g) == 1 and g[0]['por'] == 'hostname'
+
+
+# ------------------------------------------------------------------ cobertura do agente
+
+def _em_uso():
+    """Notebook em uso, com hostname único, matrícula e data de entrega."""
+    from sqlalchemy import func
+    repetidos = [h for h, n in db.session.query(Item.hostname, func.count('*')).group_by(Item.hostname).all()
+                 if n > 1 and h]
+    return (Item.query.filter(Item.hostname.isnot(None), Item.hostname != '', Item.categoria == 'Notebook',
+                              Item.situacao == 'Em uso', Item.desde.isnot(None), Item.desde != '',
+                              Item.matricula.isnot(None), ~Item.hostname.in_(repetidos))
+            .order_by(Item.codigo).first())
+
+
+def _hoje(it, dias):
+    return date.fromisoformat(it.desde[:10]) + timedelta(days=dias)
+
+
+def _varrido(sdl, it, quando, login=''):
+    """Ativo como o agente deixa: nome com domínio, tag em service_tag, varredura em epoch ms."""
+    a = _por(sdl, it.hostname.lower() + '.reyesholdings.com')
+    a['service_tag'] = it.tag or ''
+    ms = int(datetime(quando.year, quando.month, quando.day, 12).timestamp() * 1000)
+    a['last_scan_success_time'] = {'value': str(ms), 'display_value': quando.isoformat()}
+    a['last_logged_user'] = login
+    return a
+
+
+def test_le_os_campos_do_agente():
+    a = do_sd({'name': 'X', 'last_scan_success_time': {'value': '1813046399000'},
+               'last_logged_user': 'REYES\\fulano'})
+    assert a['varredura'] == datetime.fromtimestamp(1813046399).date().isoformat()
+    assert a['logado'] == 'REYES\\fulano' and a['campos_agente']
+    assert not do_sd({'name': 'X'})['campos_agente']
+    assert do_sd({'name': 'X', 'last_scan_success_time': '2026-11-10T08:00:00'})['varredura'] == '2026-11-10'
+    assert do_sd({'name': 'X', 'last_scan_success_time': 'lixo'})['varredura'] == ''
+
+
+def test_login_curto():
+    from app.conferir_sd import login_curto
+    assert login_curto('REYES\\Fulano') == login_curto('fulano@mb.com') == login_curto('FULANO') == 'fulano'
+    assert login_curto(None) == ''
+
+
+def test_entregue_sem_agente_respeita_o_prazo(app, sdl):
+    """Recém-entregue sem agente é normal (o Suporte instala à mão); semanas depois, não."""
+    from app.conferir_sd import cobertura
+    it = _em_uso()
+    c = cobertura([], hoje=_hoje(it, 2))
+    assert it.codigo not in {x['item']['codigo'] for x in c['sem_agente']} and c['aguardando'] >= 1
+    c = cobertura([], hoje=_hoje(it, 30))
+    l = next(x for x in c['sem_agente'] if x['item']['codigo'] == it.codigo)
+    assert l['dias'] == 30 and l['motivo'] == 'não está no SD'
+
+
+def test_em_uso_sai_do_so_no_zelo(app, sdl):
+    """A máquina em uso é assunto da cobertura; listar nas duas seções dobra o trabalho."""
+    it = _em_uso()
+    linhas, _r = conferir([])
+    assert it.codigo not in {x['item']['codigo'] for x in linhas if x['caso'] == 'so_zelo'}
+
+
+def test_cadastro_manual_nunca_varrido_conta_como_sem_agente(app, sdl):
+    from app.conferir_sd import cobertura
+    it = _em_uso()
+    manual = _por(sdl, it.hostname.upper())
+    manual['service_tag'] = it.tag or ''
+    manual['last_scan_success_time'] = None          # o campo veio, vazio: nunca houve varredura
+    c = cobertura([do_sd(manual)], hoje=_hoje(it, 30))
+    l = next(x for x in c['sem_agente'] if x['item']['codigo'] == it.codigo)
+    assert 'nunca varrida' in l['motivo']
+
+
+def test_sem_campos_do_agente_nao_acusa_cadastro_manual(app, sdl):
+    """Se a listagem não trouxe os campos do agente, não dá para dizer que ninguém varreu."""
+    from app.conferir_sd import cobertura
+    it = _em_uso()
+    a = _por(sdl, it.hostname.upper())
+    a['service_tag'] = it.tag or ''
+    c = cobertura([do_sd(a)], hoje=_hoje(it, 30))
+    assert not c['veio_agente']
+    assert it.codigo not in {x['item']['codigo'] for x in c['sem_agente']}
+
+
+def test_agente_parou_de_ver(app, sdl):
+    from app.conferir_sd import cobertura
+    it = _em_uso()
+    hoje = _hoje(it, 100)
+    a = _varrido(sdl, it, hoje - timedelta(days=45))
+    l = next(x for x in cobertura([do_sd(a)], hoje=hoje)['parou'] if x['item']['codigo'] == it.codigo)
+    assert l['dias'] == 45
+    a = _varrido(sdl, it, hoje - timedelta(days=3))
+    assert it.codigo not in {x['item']['codigo'] for x in cobertura([do_sd(a)], hoje=hoje)['parou']}
+
+
+def test_quem_usa_difere_compara_login_sem_dominio(app, sdl):
+    from app.conferir_sd import cobertura
+    it = _em_uso()
+    db.session.get(Pessoa, it.matricula).user = 'dominio\\dono.certo'
+    db.session.commit()
+    hoje = _hoje(it, 100)
+    a = _varrido(sdl, it, hoje - timedelta(days=1), login='REYES\\DONO.CERTO')
+    assert it.codigo not in {x['item']['codigo'] for x in cobertura([do_sd(a)], hoje=hoje)['quem_usa']}
+    a = _varrido(sdl, it, hoje - timedelta(days=1), login='REYES\\outra.pessoa')
+    l = next(x for x in cobertura([do_sd(a)], hoje=hoje)['quem_usa'] if x['item']['codigo'] == it.codigo)
+    assert l['login_zelo'] == 'dono.certo' and l['login_sd'] == 'outra.pessoa'
+
+
+def test_login_de_varredura_velha_nao_conta(app, sdl):
+    """Quem usou a máquina há dois meses não diz quem está com ela hoje."""
+    from app.conferir_sd import cobertura
+    it = _em_uso()
+    db.session.get(Pessoa, it.matricula).user = 'dono.certo'
+    db.session.commit()
+    hoje = _hoje(it, 200)
+    a = _varrido(sdl, it, hoje - timedelta(days=60), login='outra.pessoa')
+    assert it.codigo not in {x['item']['codigo'] for x in cobertura([do_sd(a)], hoje=hoje)['quem_usa']}
+
+
+def test_sem_login_no_zelo_nao_vira_divergencia(app, sdl):
+    from app.conferir_sd import cobertura
+    it = _em_uso()
+    db.session.get(Pessoa, it.matricula).user = None
+    db.session.commit()
+    hoje = _hoje(it, 100)
+    a = _varrido(sdl, it, hoje - timedelta(days=1), login='alguem')
+    c = cobertura([do_sd(a)], hoje=hoje)
+    assert it.codigo not in {x['item']['codigo'] for x in c['quem_usa']} and c['sem_login'] >= 1
+
+
+def test_login_em_maquina_que_o_zelo_diz_estar_em_estoque(app, sdl):
+    from app.conferir_sd import cobertura
+    it = _item_com_host()                                    # Em estoque
+    a = _varrido(sdl, it, date.today() - timedelta(days=1), login='REYES\\alguem')
+    l = next(x for x in cobertura([do_sd(a)])['quem_usa'] if x['item']['codigo'] == it.codigo)
+    assert l['login_zelo'] == '' and l['login_sd'] == 'alguem'
+
+
+def test_tela_mostra_a_cobertura(app, cli, sdl):
+    it = _em_uso()
+    _por(sdl, 'OUTRA-MAQUINA')
+    h = cli.post('/itens/conferir-sd', data={'acao': 'buscar'}).data.decode()
+    assert 'Cobertura do agente' in h and 'Entregue e sem agente' in h
+    assert 'não devolveu data de varredura' in h             # o SD de teste não trouxe os campos
+    assert it.codigo in h

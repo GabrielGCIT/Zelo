@@ -70,6 +70,76 @@
 <p class="small text-muted">Nenhum ativo repetido dentro do Service Desk.</p>
 {% endif %}
 
+{% if cob %}
+{# Cobertura do agente: notebook, desktop e thin client em uso. Só o Zelo sabe o que foi entregue,
+   então só ele consegue dizer onde o agente falta. #}
+<div class="z-card">
+ <div class="d-flex flex-wrap align-items-baseline gap-2 mb-1">
+  <h2 class="h6 m-0">Cobertura do agente</h2>
+  <span class="badge {{ 'text-bg-danger' if cob.sem_agente or cob.parou or cob.quem_usa else 'text-bg-secondary' }}">
+   {{ cob.sem_agente|length + cob.parou|length + cob.quem_usa|length }}</span>
+ </div>
+ <p class="small text-muted">Notebook, desktop e thin client em uso. O agente não vem na imagem do Windows e é
+  instalado à mão: máquina sem ele é invisível para o Service Desk, e só o Zelo sabe que ela foi entregue.
+  {% if cob.aguardando %}{{ cob.aguardando }} entregue(s) há menos de {{ cob.dias_sem }} dias ainda não aparecem
+  aqui: o Suporte pode estar instalando.{% endif %}</p>
+ {% if not cob.veio_agente %}
+ <div class="alert alert-warning py-2 small"><i class="fa fa-circle-info me-1"></i>
+  O Service Desk não devolveu data de varredura nem último usuário em nenhum ativo. Ou não há agente instalado
+  ainda, ou este build não entrega esses campos na listagem. Por isso só a primeira lista abaixo vale; "parou de
+  ver" e "quem usa" precisam desses campos.</div>
+ {% endif %}
+
+ <h3 class="h6 mt-3">Entregue e sem agente <span class="badge text-bg-secondary">{{ cob.sem_agente|length }}</span></h3>
+ {% if cob.sem_agente %}
+ <div class="table-responsive"><table class="table table-sm table-hover align-middle">
+  <thead><tr><th>Item</th><th>Hostname</th><th>Com quem</th><th>Entregue há</th><th>No Service Desk</th></tr></thead>
+  <tbody>{% for l in cob.sem_agente[:400] %}<tr>
+   <td class="z-mono"><a href="{{ url_for('consulta.item', codigo=l.item.codigo) }}">{{ l.item.codigo }}</a>
+    <span class="small text-muted d-block">{{ l.item.categoria }} {{ l.item.modelo }}</span></td>
+   <td class="small">{{ l.item.hostname or l.item.tag or '—' }}</td>
+   <td class="small">{{ l.item.com_quem or '' }}</td>
+   <td class="small">{{ (l.dias ~ ' dias') if l.dias is not none else 'sem data' }}</td>
+   <td class="small z-aviso">{{ l.motivo }}</td>
+  </tr>{% endfor %}</tbody></table></div>
+ {% if cob.sem_agente|length > 400 %}<p class="small text-muted">Mostrando 400 de {{ cob.sem_agente|length }}.</p>{% endif %}
+ {% else %}<p class="small text-muted">Toda máquina em uso entregue há mais de {{ cob.dias_sem }} dias está no Service Desk.</p>{% endif %}
+
+ {% if cob.veio_agente %}
+ <h3 class="h6 mt-3">Agente parou de ver <span class="badge text-bg-secondary">{{ cob.parou|length }}</span></h3>
+ {% if cob.parou %}
+ <p class="small text-muted">Em uso para o Zelo, sem varredura há mais de {{ cob.dias_scan }} dias: formatada,
+  perdida, parada numa gaveta ou fora da rede.</p>
+ <div class="table-responsive"><table class="table table-sm table-hover align-middle">
+  <thead><tr><th>Item</th><th>Hostname</th><th>Com quem</th><th>Última varredura</th></tr></thead>
+  <tbody>{% for l in cob.parou[:400] %}<tr>
+   <td class="z-mono"><a href="{{ url_for('consulta.item', codigo=l.item.codigo) }}">{{ l.item.codigo }}</a></td>
+   <td class="small">{{ l.sd.hostname }}</td><td class="small">{{ l.item.com_quem or '' }}</td>
+   <td class="small z-aviso">{{ l.sd.varredura }} ({{ l.dias }} dias)</td>
+  </tr>{% endfor %}</tbody></table></div>
+ {% else %}<p class="small text-muted">Nenhuma máquina em uso sem varredura há mais de {{ cob.dias_scan }} dias.</p>{% endif %}
+
+ <h3 class="h6 mt-3">Quem usa difere <span class="badge text-bg-secondary">{{ cob.quem_usa|length }}</span></h3>
+ <p class="small text-muted">O último login que o agente viu não é de quem o Zelo diz estar com a máquina. Confira
+  antes de mexer: pode ser um colega que usou uma vez, ou o cadastro errado.
+  {% if cob.sem_login %}{{ cob.sem_login }} máquina(s) não deu para conferir porque a pessoa não tem login no Zelo
+  (<a href="{{ url_for('importar.pessoas') }}">Importar pessoas do Service Desk</a> traz o login).{% endif %}</p>
+ {% if cob.quem_usa %}
+ <div class="table-responsive"><table class="table table-sm table-hover align-middle">
+  <thead><tr><th>Item</th><th>Hostname</th><th>No Zelo</th><th>Último login (agente)</th><th></th></tr></thead>
+  <tbody>{% for l in cob.quem_usa[:400] %}<tr>
+   <td class="z-mono"><a href="{{ url_for('consulta.item', codigo=l.item.codigo) }}">{{ l.item.codigo }}</a></td>
+   <td class="small">{{ l.sd.hostname }}</td>
+   <td class="small">{% if l.login_zelo %}{{ l.item.com_quem }} <span class="text-muted">({{ l.login_zelo }})</span>
+    {% else %}ninguém — {{ l.item.situacao }}{% endif %}</td>
+   <td class="small z-aviso">{{ l.login_sd }}{% if l.sd.varredura %} <span class="text-muted">em {{ l.sd.varredura }}</span>{% endif %}</td>
+   <td><a class="btn btn-sm btn-outline-secondary py-0" href="{{ url_for('lancar.ajuste', item=l.item.codigo) }}">Ajustar cadastro</a></td>
+  </tr>{% endfor %}</tbody></table></div>
+ {% endif %}
+ {% endif %}
+</div>
+{% endif %}
+
 {% for caso, (titulo, porque) in grupos.items() %}{% set grupo = linhas|selectattr('caso', 'equalto', caso)|list %}
 {% if grupo and caso != 'confere' %}
 <div class="z-card">

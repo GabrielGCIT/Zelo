@@ -15,6 +15,8 @@ ROTULOS_CONFIG = {
     'fluxo_preparacao': 'Vazio = devolução volta direto para o estoque. Com uma data (AAAA-MM-DD), '
                         'notebook devolvido a partir dela passa pela preparação antes de voltar',
     'dias_fluxo_parado': 'Dias para considerar o fluxo parado',
+    'dias_sem_agente': 'Dias depois da entrega para cobrar o agente do Service Desk na máquina',
+    'dias_agente_sumido': 'Dias sem varredura do agente para considerar que ele parou de ver a máquina',
     'aviso_contrato_dias': 'Avisar contrato vencendo com quantos dias',
     'equipe': 'Equipe (responsáveis), separados por ;',
     'tecnicos': 'Técnicos, separados por ;',

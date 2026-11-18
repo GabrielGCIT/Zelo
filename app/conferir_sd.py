@@ -16,9 +16,11 @@ Regra de dono acordada com o Gabriel:
 """
 import re
 import unicodedata
+from datetime import date, datetime
 
 from app import db
-from app.models import Item
+from app.models import Item, Pessoa, cfg
+from app.servicedesk import COM_PESSOA, host_curto
 
 MAX_PAGINAS = 60                  # 60 × 100 = 6.000 ativos
 POR_PAGINA = 100
@@ -32,8 +34,15 @@ GRUPOS = {
     'repetido': ('Cadastro repetido no Zelo', 'O mesmo hostname, service tag ou plaqueta está em mais de um item aqui. '
                  'Resolva a duplicidade antes: enquanto houver duas, o Zelo não tem como saber qual é a do Service Desk.'),
     'confere': ('Confere', 'Nada a fazer.'),
-    'so_zelo': ('Só no Zelo', 'Máquina com hostname aqui que o Service Desk não conhece: ou está sem agente, ou falta cadastrar lá. Monitor, celular e acessório não entram nesta conta — nunca estiveram no SD.'),
+    'so_zelo': ('Só no Zelo', 'Máquina com hostname aqui que o Service Desk não conhece: ou está sem agente, ou falta cadastrar lá. Monitor, celular e acessório não entram nesta conta — nunca estiveram no SD. '
+                'Notebook, desktop e thin client em uso ficam na Cobertura do agente, acima.'),
 }
+
+# Cobertura do agente. Só estas categorias recebem o agente do SDP; monitor, celular e o resto
+# nunca vão aparecer lá sozinhos, e cobrar agente deles seria ruído.
+CATEGORIAS_AGENTE = ('Notebook', 'Desktop', 'Thin client')
+# Máquina parada no armazém não é varrida, e isso é normal: só cobra de quem está em uso.
+EM_USO = ('Em uso', 'Emprestado')
 # situação do Zelo → estado equivalente no Service Desk
 # O mapa situação → estado mora em app.servicedesk (ESTADO_PADRAO + sd_estados), não aqui: esta tela
 # tem que acusar exatamente a divergência que a sincronização sabe corrigir.
@@ -59,9 +68,46 @@ def _campo(a, *nomes):
     return ''
 
 
+def _data(v):
+    """Data do SDP → 'AAAA-MM-DD', ou '' se não der para ler.
+
+    O SDP guarda data como epoch em milissegundos (`warranty_expiry: 1813046399000` num ativo real
+    da MB), às vezes embrulhada em {'value': ..., 'display_value': ...}. Aceita também texto já no
+    formato ISO, para o caso de este build entregar diferente na listagem.
+    """
+    if isinstance(v, dict):
+        v = v.get('value') or v.get('display_value')
+    s = str(v or '').strip()
+    if s.isdigit():
+        n = int(s)
+        try:
+            return datetime.fromtimestamp(n / 1000 if n > 10 ** 11 else n).date().isoformat()
+        except (OverflowError, OSError, ValueError):
+            return ''
+    m = re.match(r'(\d{4}-\d{2}-\d{2})', s)
+    return m.group(1) if m else ''
+
+
+def login_curto(v):
+    """'REYES\\gabriel', 'gabriel@mb.com' e 'Gabriel' → 'gabriel'.
+
+    O agente grava o último usuário com o domínio na frente; o login que veio do Service Desk na
+    importação de pessoas pode vir com ou sem. Comparar os dois crus acusaria divergência em todo
+    mundo.
+    """
+    s = str(v or '').strip().lower()
+    return s.rsplit('\\', 1)[-1].split('@', 1)[0].strip()
+
+
 def do_sd(a):
     """O que o Zelo entende de um ativo do Service Desk."""
     return {
+        # Dado do agente. `campos_agente` diz se o Service Desk ENTREGOU esses campos para este
+        # ativo, mesmo vazios: sem isso, "nenhum ativo tem varredura" e "este build não devolve
+        # varredura na listagem" ficariam iguais na tela, e o segundo esconderia o problema todo.
+        'varredura': _data(a.get('last_scan_success_time')),
+        'logado': _campo(a, 'last_logged_user'),
+        'campos_agente': 'last_scan_success_time' in a or 'last_logged_user' in a,
         'id': _campo(a, 'id'),
         'hostname': _campo(a, 'name'),
         # `org_serial_number` entra na lista porque é onde a service tag mora no build da MB
@@ -101,7 +147,7 @@ def _indices():
     por_host, por_tag, por_plaq = {}, {}, {}
     for i in itens:
         if i.hostname:
-            por_host.setdefault(_up(i.hostname), []).append(i)
+            por_host.setdefault(host_curto(i.hostname), []).append(i)
         if i.tag:
             por_tag.setdefault(_up(i.tag), []).append(i)
         if i.plaqueta:
@@ -114,9 +160,12 @@ def _casar(s, por_host, por_tag, por_plaq):
 
     Devolve (item, repetidos). Quando a chave aponta para mais de um item do Zelo, não escolhe:
     isso é cadastro duplicado aqui dentro, e a tela precisa dizer isso em vez de inventar um par.
+
+    O hostname casa pelo nome curto: o agente põe o domínio no nome do ativo, a planilha não.
     """
-    for valor, indice in ((s['hostname'], por_host), (s['tag'], por_tag), (s['plaqueta'], por_plaq)):
-        achados = indice.get(_up(valor)) if valor else None
+    for chave, indice in ((host_curto(s['hostname']), por_host), (_up(s['tag']), por_tag),
+                          (_up(s['plaqueta']), por_plaq)):
+        achados = indice.get(chave) if chave else None
         if not achados:
             continue
         if len(achados) == 1:
@@ -147,9 +196,16 @@ def conferir(ativos):
             linhas.append(dict(sd=s, item=None, caso='novo', faltam=[], difere=[], campos={}))
             continue
         casados.add(it.codigo)
-        faltam = [(campo, s[de]) for campo, de in DO_SD if s[de] and not (getattr(it, campo) or '').strip()]
-        difere = [(campo, (getattr(it, campo) or ''), s[de]) for campo, de in DO_SD
-                  if s[de] and (getattr(it, campo) or '').strip() and _up(getattr(it, campo)) != _up(s[de])]
+        # O hostname vem do SD com domínio; o que entra no Zelo, e o que se compara, é o nome curto.
+        # Comparado cru, toda máquina com agente cairia em "Dado diferente", e marcar a linha
+        # gravaria o domínio no cadastro — que nenhum outro item do Zelo tem.
+        do_lado = {campo: (host_curto(s[de]) if campo == 'hostname' else s[de]) for campo, de in DO_SD}
+        norm = {campo: (host_curto if campo == 'hostname' else _up) for campo, _de in DO_SD}
+        faltam = [(campo, do_lado[campo]) for campo, _de in DO_SD
+                  if do_lado[campo] and not (getattr(it, campo) or '').strip()]
+        difere = [(campo, (getattr(it, campo) or ''), do_lado[campo]) for campo, _de in DO_SD
+                  if do_lado[campo] and (getattr(it, campo) or '').strip()
+                  and norm[campo](getattr(it, campo)) != norm[campo](do_lado[campo])]
         caso = 'confere'
         if _quem_difere(it, s):
             caso = 'quem'
@@ -166,8 +222,11 @@ def conferir(ativos):
                            estado_zelo=(it.situacao or ''), estado_sd=s['estado']))
     # só entra aqui quem tem hostname: é máquina com agente, que o Service Desk deveria conhecer.
     # Monitor, celular e acessório nunca estiveram lá, e listá-los faria a tela virar ruído.
+    # Máquina em uso também fica de fora: ela é o assunto da Cobertura do agente, que diz há quanto
+    # tempo foi entregue — listar as duas vezes só dobraria o trabalho de quem lê.
     for it in itens:
-        if it.codigo not in casados and (it.hostname or '').strip() and it.situacao != 'Baixada':
+        if (it.codigo not in casados and (it.hostname or '').strip() and it.situacao != 'Baixada'
+                and not _espera_agente(it)):
             linhas.append(dict(sd=None, item=_item(it), caso='so_zelo', faltam=[], difere=[], campos={}))
     resumo = {k: sum(1 for x in linhas if x['caso'] == k) for k in GRUPOS}
     resumo['total'] = len(linhas)
@@ -192,7 +251,9 @@ def duplicados(ativos):
     for rotulo, chave in (('service tag', 'tag'), ('hostname', 'hostname')):
         por_chave = {}
         for s in ativos:
-            v = _up(s.get(chave))
+            # pelo nome curto: 'LMB123' criado pelo Zelo e 'lmb123.reyesholdings.com' criado pelo
+            # agente são a mesma máquina duas vezes — exatamente a duplicata que esta lista procura
+            v = host_curto(s.get(chave)) if chave == 'hostname' else _up(s.get(chave))
             if v:
                 por_chave.setdefault(v, []).append(s)
         for v, iguais in sorted(por_chave.items()):
@@ -206,6 +267,106 @@ def duplicados(ativos):
             vistos.add(ids)
             saida.append(g)
     return saida
+
+
+# ------------------------------------------------------------------ cobertura do agente
+def _espera_agente(it):
+    """Máquina que deveria estar no Service Desk pelo agente: categoria que recebe agente, em uso,
+    e com alguma chave para casar (sem hostname nem tag, nenhuma busca acharia)."""
+    return (it.categoria in CATEGORIAS_AGENTE and it.situacao in EM_USO
+            and bool((it.hostname or '').strip() or (it.tag or '').strip()))
+
+
+def _dias_cfg(chave, padrao):
+    try:
+        return max(1, int(cfg(chave)))
+    except (TypeError, ValueError):
+        return padrao
+
+
+def _dias_desde(iso, hoje):
+    try:
+        return (hoje - date.fromisoformat((iso or '')[:10])).days
+    except ValueError:
+        return None
+
+
+def cobertura(ativos, hoje=None):
+    """Onde o agente do SDP não está fazendo o trabalho dele. Três perguntas:
+
+    - **Entregue e sem agente**: máquina em uso que o SD não conhece, ou só conhece por cadastro
+      manual (nunca varrida). O agente não vem na imagem do Windows e é instalado à mão; máquina
+      formatada ou nova sem ele é invisível para o SD, e só o Zelo sabe que ela foi entregue.
+    - **Agente parou de ver**: a última varredura é velha numa máquina que o Zelo diz estar em uso
+      — formatada, perdida, parada numa gaveta ou fora da rede há semanas.
+    - **Quem usa difere**: o último login que o agente viu não é de quem o Zelo diz estar com a
+      máquina. É o sinal mais forte de cadastro errado, e por isso não corrige nada: mostra.
+
+    Login de varredura velha não conta: quem usou a máquina há dois meses não diz quem está com ela.
+    Devolve um dicionário com as três listas e o que a tela precisa para explicar o que faltou.
+    """
+    hoje = hoje or date.today()
+    dias_sem = _dias_cfg('dias_sem_agente', 7)
+    dias_scan = _dias_cfg('dias_agente_sumido', 30)
+    veio_agente = any(s.get('campos_agente') for s in ativos)
+    itens, por_host, por_tag, por_plaq = _indices()
+    casado = {}
+    for s in ativos:
+        if not s['hostname'] and not s['tag']:
+            continue
+        it, _rep = _casar(s, por_host, por_tag, por_plaq)
+        if it:
+            casado.setdefault(it.codigo, s)
+
+    sem_agente, parou, quem_usa, sem_login, aguardando = [], [], [], 0, 0
+    for it in itens:
+        if not _espera_agente(it):
+            continue
+        s = casado.get(it.codigo)
+        dias = _dias_desde(it.desde, hoje)
+        # Cadastro no SD sem nenhuma varredura é registro manual: o agente nunca esteve lá. Só dá
+        # para afirmar isso quando a listagem entrega os campos do agente.
+        nunca_varrida = bool(s) and veio_agente and not s['varredura']
+        if s is None or nunca_varrida:
+            if dias is not None and dias < dias_sem:
+                aguardando += 1          # o Suporte ainda pode estar instalando
+                continue
+            sem_agente.append(dict(item=_item(it), dias=dias, sd=s,
+                                   motivo='só cadastro manual no SD, nunca varrida' if s else 'não está no SD'))
+            continue
+        idade = _dias_desde(s['varredura'], hoje)
+        if idade is not None and idade > dias_scan:
+            parou.append(dict(item=_item(it), sd=s, dias=idade))
+
+    logins = {p.id: login_curto(p.user) for p in Pessoa.query.filter(Pessoa.user.isnot(None), Pessoa.user != '')}
+    por_codigo = {x.codigo: x for x in itens}
+    for codigo, s in casado.items():
+        if not s['logado']:
+            continue
+        idade = _dias_desde(s['varredura'], hoje)
+        if idade is not None and idade > dias_scan:
+            continue
+        it = por_codigo.get(codigo)
+        # em manutenção e em preparação quem faz login é o técnico, e isso é o trabalho dele
+        if not it or it.situacao in ('Baixada', 'Manutenção', 'Em preparação'):
+            continue
+        visto = login_curto(s['logado'])
+        if it.situacao in COM_PESSOA and it.matricula:
+            do_zelo = logins.get(it.matricula, '')
+            if not do_zelo:
+                sem_login += 1           # sem o login da pessoa não há o que comparar
+                continue
+            if do_zelo != visto:
+                quem_usa.append(dict(item=_item(it), sd=s, login_zelo=do_zelo, login_sd=visto))
+        elif it.situacao not in COM_PESSOA:
+            # o Zelo diz que ninguém está com ela, e alguém fez login recente
+            quem_usa.append(dict(item=_item(it), sd=s, login_zelo='', login_sd=visto))
+
+    sem_agente.sort(key=lambda x: (x['dias'] is None, x['dias'] if x['dias'] is not None else 0))
+    parou.sort(key=lambda x: -x['dias'])
+    quem_usa.sort(key=lambda x: x['item']['codigo'])
+    return dict(sem_agente=sem_agente, parou=parou, quem_usa=quem_usa, sem_login=sem_login,
+                aguardando=aguardando, veio_agente=veio_agente, dias_sem=dias_sem, dias_scan=dias_scan)
 
 
 def _item(it):
@@ -239,7 +400,9 @@ def aplicar(escolhas, quem):
     feitos, erros = [], []
     for e in escolhas:
         if e.get('criar'):
-            s = e.get('sd') or {}
+            s = dict(e.get('sd') or {})
+            # o cadastro do Zelo guarda o nome curto, como a planilha sempre guardou
+            s['hostname'] = host_curto(s.get('hostname'))
             codigo = (e.get('codigo') or s.get('plaqueta') or s.get('tag') or s.get('hostname') or '').strip()
             if not codigo:
                 erros.append('Ativo do SD sem hostname nem service tag: não dá para cadastrar')
