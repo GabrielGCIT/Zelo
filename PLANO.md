@@ -2,9 +2,32 @@
 
 ---
 
-## ONDE PARAMOS — 18/11/2026, v1.29.0
+## ONDE PARAMOS — 18/11/2026, v1.30.0
 
 Leia esta seção primeiro. O resto do arquivo é histórico e decisões; isto é o que está na mesa.
+
+### Item cadastrado sem lançamento agora é "Em estoque" (18/11)
+Cadastrar uma máquina na planilha não a punha no Estoque: sem lançamento a situação era
+"Sem movimentação". Máquina cadastrada está no armazém, então a situação passa a ser "Em estoque",
+nos dois lados (`regras.py` e a coluna Situação da aba Itens). A situação
+"Sem movimentação" saiu de `SITUACOES` e de `_POR_SITUACAO`.
+
+O que ela sinalizava não foi perdido: `qualidade.itens_sem_movimentacao` agora procura item sem
+nenhuma `Movimentacao` em vez de item com aquela situação, e diz o que importa — aparece como
+"Em estoque" porque nada foi lançado, não porque alguém o viu lá.
+
+### Nome e centro de custo vêm da matrícula (18/11)
+A coluna Nome do Histórico era digitada: quem preenchia era o Office Script, que saiu com as abas
+"Lançar". Virou fórmula em todas as linhas (as 3040 linhas com matrícula casam todas com o
+cadastro, nenhuma ficou órfã); matrícula fora do cadastro mostra "⚠ pessoa não cadastrada".
+
+Centro de custo recebeu a fórmula **só nas 3535 linhas que estavam vazias**: em 113 lançamentos o
+CC digitado difere do CC atual da pessoa e está certo — é o CC de quando a movimentação aconteceu.
+Sobrescrever seria reescrever o histórico.
+
+Limpados também os 213 nomes marcados com "EX"/"- EX" no cadastro (sobra da planilha antiga), que
+agora ficam como Desligado. Sem isso a fórmula do Nome passaria a mostrar "JOÃO - EX" no histórico
+inteiro dessas pessoas.
 
 ### Devolução volta direto para o estoque (18/11) — simplificação pedida pelo Gabriel
 O fluxo obrigatório de preparação saiu de cena: notebook devolvido ia para "Devolvido" e só voltava

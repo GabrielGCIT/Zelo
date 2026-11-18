@@ -76,8 +76,6 @@ CAMPOS_ACAO = {
 _POR_SITUACAO = {
     'Em estoque': {'Entregar agora', 'Reservar', 'Emprestar', 'Enviar para outro site', 'A localizar', 'Separar para baixa',
                    'Baixar'},
-    'Sem movimentação': {'Entregar agora', 'Reservar', 'Emprestar', 'Entrada no estoque', 'Enviar para outro site',
-                         'A localizar', 'Separar para baixa', 'Baixar'},
     'Em uso': {'Transferir para outra pessoa', 'Pedir devolução', 'Enviado ao EC', 'Devolver', 'A localizar',
                'Separar para baixa', 'Baixar'},
     'Emprestado': {'Renovar empréstimo', 'Devolver', 'Transferir para outra pessoa', 'Pedir devolução', 'Enviado ao EC',
@@ -102,7 +100,7 @@ def acoes_possiveis(it, ln, card):
     aba = CARDS[card][3]
     todas = ABAS[aba][1]
     if it:
-        sit = it.situacao or 'Sem movimentação'
+        sit = it.situacao or 'Em estoque'
         if sit in ('Devolvido', 'Em preparação'):
             return [], 'Notebook devolvido, em preparação: confira a chegada e libere em Acompanhar.'
         if sit == 'Manutenção':
@@ -287,7 +285,7 @@ def conferir_linha(d, aba, hoje=None, contexto=None):
             return erro(f'O item está {sit}: use Entregar agora')
         if pid and pid == it.matricula:
             return erro('O item já está com essa pessoa')
-    if precisa and not transf and it and sit not in ('Em estoque', 'Sem movimentação'):
+    if precisa and not transf and it and sit != 'Em estoque':
         return erro(f'Item está {sit}' + (f' com {it.com_quem}' if it.com_quem else '') + ': use Devolver ou Transferir')
     if precisa and ln and ln.situacao == 'Em uso' and ln.matricula != pid and not (transf and it and ln.aparelho == it.codigo):
         return erro(f'Linha em uso com {ln.com_quem}: devolva antes')
@@ -296,7 +294,7 @@ def conferir_linha(d, aba, hoje=None, contexto=None):
     if tipo == 'Envio ao EC' and (not it or sit not in ('Em uso', 'Emprestado', 'Pendente devolução')):
         return erro(f'Enviado ao EC vale para item em uso ou com devolução pedida (o item está {sit or "sem item"})')
     if tipo == 'Devolução':
-        if it and sit in ('Em estoque', 'Baixada', 'Sem movimentação', 'Aguardando baixa', 'Devolvido', 'Em preparação'):
+        if it and sit in ('Em estoque', 'Baixada', 'Aguardando baixa', 'Devolvido', 'Em preparação'):
             return erro(f'O item já está {sit}: nada a devolver')
         if not it and ln and ln.situacao != 'Em uso':
             return erro('A linha não está em uso: nada a devolver')

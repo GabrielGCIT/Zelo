@@ -74,7 +74,10 @@ def recalcular_item(item, manut_abertas=None, movs=None):
                                          ~Manutencao.status.in_(['Concluída', 'Sem conserto'])).first() is not None
     else:
         aberta = item.codigo in manut_abertas
-    sit_hist = sit or 'Sem movimentação'
+    # Item cadastrado e sem nenhum lançamento conta como estoque: máquina cadastrada está no
+    # armazém, e quem cadastrava não a encontrava no Estoque. Que ela nunca teve lançamento
+    # continua apontado na Qualidade do cadastro, que é onde esse tipo de falha pertence.
+    sit_hist = sit or 'Em estoque'
     item.situacao = 'Manutenção' if aberta else sit_hist
     com = ult is not None and (sit_hist in COM_QUEM_SIT and (not aberta or sit_hist in ('Em uso', 'Emprestado')))
     item.ultima_mov_id = ult.id if ult else None

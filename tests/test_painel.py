@@ -60,3 +60,17 @@ def test_linha_do_tempo(app, cli):
     assert [e['titulo'] for e in ev[:2]] == ['Devolução', 'Entrega']
     assert all('/lancamento/' in e['href'] for e in ev)
     assert 'Linha do tempo' in cli.get(f'/item/{it.codigo}').get_data(as_text=True)
+
+
+def test_item_cadastrado_sem_lancamento_conta_como_estoque(app):
+    """Máquina cadastrada e sem nenhum lançamento está no armazém: a situação é "Em estoque".
+    Que ninguém conferiu continua apontado na Qualidade do cadastro — é lá que isso pertence."""
+    from app.qualidade import itens_sem_movimentacao
+    from app.regras import recalcular_item
+    it = Item(codigo='ZZ-SEM-MOV', categoria='Monitor', modelo='Teste')
+    db.session.add(it)
+    db.session.commit()
+    recalcular_item(it)
+    db.session.commit()
+    assert it.situacao == 'Em estoque' and it.com_quem is None and it.ultima_mov_id is None
+    assert 'ZZ-SEM-MOV' in ' | '.join(l['texto'] for l in itens_sem_movimentacao()['linhas'])

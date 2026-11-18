@@ -42,7 +42,7 @@ STATUS_COMPRA = ['Em cotação', 'Aguardando aprovação', 'Pedido feito', 'Em t
 # Situações que um item pode ter (calculadas, nunca digitadas)
 SITUACOES = ['Em estoque', 'Reservada', 'Em uso', 'Emprestado', 'Pendente devolução', 'Em trânsito para o EC',
              'Devolvido', 'Em preparação', 'Manutenção', 'Em transferência', 'A localizar', 'Aguardando baixa',
-             'Baixada', 'Sem movimentação']
+             'Baixada']
 SITUACOES_LINHA = ['Livre', 'Em uso', 'Cancelada']
 # Situações em que o item está com alguém
 COM_PESSOA = ('Reservada', 'Em uso', 'Emprestado', 'Pendente devolução')
@@ -133,7 +133,7 @@ class Item(db.Model):
     origem = db.Column(db.String(80))
     obs = db.Column(db.Text)
     # cache calculado (app.regras.recalcular_item)
-    situacao = db.Column(db.String(30), index=True, default='Sem movimentação')
+    situacao = db.Column(db.String(30), index=True, default='Em estoque')
     com_quem = db.Column(db.String(150))
     matricula = db.Column(db.String(30), index=True)
     linha_atual = db.Column(db.String(11))

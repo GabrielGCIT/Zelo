@@ -89,10 +89,13 @@ def itens_sem_tag():
 
 
 def itens_sem_movimentacao():
-    its = Item.query.filter(Item.situacao == 'Sem movimentação').order_by(Item.codigo).all()
+    """Itens sem nenhuma movimentação. A situação deles é "Em estoque" por falta de notícia, não
+    porque alguém conferiu — e é essa a diferença que esta tela existe para mostrar."""
+    com_mov = db.session.query(Movimentacao.item).filter(Movimentacao.item.isnot(None)).distinct()
+    its = Item.query.filter(~Item.codigo.in_(com_mov)).order_by(Item.codigo).all()
     return _achado('semmov', 'Itens que nunca tiveram lançamento',
-                   'Vieram da planilha sem histórico: ninguém sabe se estão no estoque, com alguém ou sumidos. '
-                   'Lance a Entrada no estoque ou a entrega que faltou.',
+                   'Aparecem como "Em estoque" porque nada foi lançado, não porque alguém os viu lá. '
+                   'Se já estão com alguém, lance a entrega que faltou.',
                    [dict(texto=f'{it.codigo} · {it.categoria or ""} {it.modelo or ""}'.strip(),
                          href=url_for('lancar.grade', item=it.codigo), botao='Lançar') for it in its])
 
