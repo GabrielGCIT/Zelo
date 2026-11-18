@@ -22,7 +22,7 @@ import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from app import db
 from app.models import Config
@@ -448,6 +448,30 @@ def campos_zelo_ligado():
     return ativos_ligado() and conf('sd_campos_zelo') == 'Sim'
 
 
+def _data_sdp(texto):
+    """'AAAA-MM-DD' (ou 'DD/MM/AAAA') → epoch em milissegundos, como texto. '' se não der.
+
+    O SDP guarda data como número, não como texto: num ativo real da MB a garantia veio como
+    `1813046399000`. Mandar 'AAAA-MM-DD' não grava.
+
+    Meio-dia **UTC**, e não meia-noite: a data é reinterpretada no fuso de quem lê, e meia-noite
+    vira o dia anterior ou o seguinte por poucas horas de diferença. Meio-dia UTC aguenta de -11:59
+    a +11:59 sem mudar de dia — vale para qualquer fuso, sem o Zelo precisar saber em qual deles o
+    servidor do SDP está, e sem banco de fusos (que o Python no Windows não traz).
+    """
+    t = (texto or '').strip()[:10]
+    if not t:
+        return ''
+    for formato in ('%Y-%m-%d', '%d/%m/%Y'):
+        try:
+            d = datetime.strptime(t, formato)
+        except ValueError:
+            continue
+        meio_dia = datetime(d.year, d.month, d.day, 12, tzinfo=timezone.utc)
+        return str(int(meio_dia.timestamp() * 1000))
+    return ''
+
+
 def corpo_do_item(it, estado=None):
     """O que o Zelo manda sobre um ativo — só os campos de que ELE é dono.
 
@@ -470,8 +494,9 @@ def corpo_do_item(it, estado=None):
         c['site'] = {'name': it.site.strip()}
     if (it.fornecedor or '').strip():
         c['vendor'] = {'name': it.fornecedor.strip()}
-    if (it.garantia or '').strip():
-        c['warranty_expiry'] = {'value': it.garantia.strip()}
+    g = _data_sdp(it.garantia)
+    if g:
+        c['warranty_expiry'] = {'value': g}
     tipo = mapa_tipos().get(it.categoria or '')
     if tipo:
         c['product_type'] = {'name': tipo}
@@ -817,7 +842,9 @@ def diagnostico_criacao():
     marca = f'ZELO-TESTE-{uuid.uuid4().hex[:6].upper()}'
     falso = SimpleNamespace(hostname=marca, tag=f'TAG{uuid.uuid4().hex[:7].upper()}',
                             plaqueta='TESTE-ZELO', categoria='Notebook', site='', fornecedor='',
-                            garantia='')
+                            # data no meio do teste: é o campo mais fácil de gravar errado em
+                            # silêncio, porque o SDP guarda número e o Zelo pensa em texto
+                            garantia='2030-06-15')
     enviado = corpo_do_item(falso, 'In Store')
     linhas = [f'Ativo de teste: {marca}']
     # Primeiro o que existe NESTE Service Desk: sem isso, um erro de criação não diz se o problema

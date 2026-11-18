@@ -1146,3 +1146,46 @@ def test_inspecionar_diz_o_tipo_pelo_modulo_quando_falta_product_type(app, sim):
     s.ativos_por_id['720'] = s.ativos['NB-SEMTIPO']
     achados, err = sd.inspecionar_ativo('NB-SEMTIPO')
     assert not err and achados[0]['tipo'] == 'Laptop'
+
+
+# ------------------------------------------------------------------ data no formato do SDP
+
+def test_garantia_vai_como_epoch_em_milissegundos(app, sim):
+    """O SDP guarda data como número; 'AAAA-MM-DD' não grava. Visto num ativo real da MB:
+    warranty_expiry = 1813046399000."""
+    from types import SimpleNamespace
+    it = SimpleNamespace(hostname='NB-DT', tag='', plaqueta='', categoria='Notebook', site='',
+                         fornecedor='', garantia='2027-06-15')
+    v = sd.corpo_do_item(it)['warranty_expiry']['value']
+    assert v.isdigit() and len(v) == 13
+    from datetime import datetime, timezone
+    d = datetime.fromtimestamp(int(v) / 1000, timezone.utc)
+    assert (d.year, d.month, d.day) == (2027, 6, 15)
+
+
+def test_data_ao_meio_dia_nao_vira_o_dia_em_outro_fuso(app, sim):
+    """Meia-noite viraria o dia anterior — ou o seguinte — conforme o fuso de quem lê."""
+    from datetime import datetime, timezone, timedelta
+    v = int(sd._data_sdp('2027-06-15'))
+    for horas in range(-11, 12):
+        d = datetime.fromtimestamp(v / 1000, timezone(timedelta(hours=horas)))
+        assert (d.year, d.month, d.day) == (2027, 6, 15), horas
+
+
+def test_data_aceita_os_dois_formatos_e_ignora_lixo(app, sim):
+    assert sd._data_sdp('15/06/2027') == sd._data_sdp('2027-06-15')
+    for ruim in ('', None, 'nao sei', '2027-13-45', 'Vencida'):
+        assert sd._data_sdp(ruim) == ''
+
+
+def test_garantia_invalida_fica_fora_do_corpo(app, sim):
+    """Campo com lixo não pode virar campo nulo: no SDP nulo apaga o que está lá."""
+    from types import SimpleNamespace
+    it = SimpleNamespace(hostname='NB-DT2', tag='', plaqueta='', categoria='Notebook', site='',
+                         fornecedor='', garantia='Vencida')
+    assert 'warranty_expiry' not in sd.corpo_do_item(it)
+
+
+def test_diagnostico_testa_a_garantia(app, sim):
+    ok, linhas = sd.diagnostico_criacao()
+    assert ok and 'warranty_expiry' in '\n'.join(linhas)
