@@ -4,17 +4,30 @@ import tempfile
 
 import pytest
 
-PLANILHA = os.environ.get('ZELO_PLANILHA_TESTE',
-                          '/tmp/claude-0/-home-claude/362516bd-b636-5afb-874e-23c4b265653a/scratchpad/planilha_0911.xlsx')
+PLANILHA = os.environ.get('ZELO_PLANILHA_TESTE', '')
 _CACHE = os.path.join(tempfile.gettempdir(), 'zelo_teste_base.db')
 
 
-@pytest.fixture()
-def app():
-    """Banco com a planilha real importada (copiado de um cache para cada teste ser isolado)."""
+def _montar_cache():
+    """Importa a planilha num arquivo à parte e só então o põe no lugar do cache.
+
+    O cache só é montado quando não existe. Antes ele era montado direto no
+    nome final: uma importação que falhasse no meio (planilha ausente, por
+    exemplo) deixava um banco sem usuários ali, e TODAS as rodadas seguintes o
+    reaproveitavam. O login falhava, as telas davam 302, e a suíte acusava
+    ~200 erros que não diziam nada sobre a causa.
+    """
     from app import create_app, db
-    if not os.path.exists(_CACHE):
-        a = create_app('sqlite:///' + _CACHE, testing=True)
+    if not PLANILHA or not os.path.exists(PLANILHA):
+        pytest.exit(
+            'Planilha de teste não encontrada. Defina ZELO_PLANILHA_TESTE com o caminho da '
+            '"Gestão de Ativos de TI - Centralizado.xlsx" (fora do repositório). '
+            f'Valor atual: {PLANILHA or "<vazio>"}', returncode=1)
+    montando = _CACHE + '.montando'
+    if os.path.exists(montando):
+        os.remove(montando)
+    a = create_app('sqlite:///' + montando, testing=True)
+    try:
         with a.app_context():
             from app.importar import importar
             importar(PLANILHA, substituir=True, log=lambda *a: None)
@@ -23,7 +36,23 @@ def app():
             criar_usuario('Operador Teste', 'op@teste', 'senha-forte-1', 'Operador')
             criar_usuario('Consulta Teste', 'cons@teste', 'senha-forte-1', 'Consulta')
             db.session.remove()
+            # No Windows o arquivo aberto não pode ser renomeado: soltar a conexão antes.
             db.engine.dispose()
+    except BaseException:
+        with a.app_context():
+            db.engine.dispose()
+        if os.path.exists(montando):
+            os.remove(montando)
+        raise
+    os.replace(montando, _CACHE)
+
+
+@pytest.fixture()
+def app():
+    """Banco com a planilha real importada (copiado de um cache para cada teste ser isolado)."""
+    from app import create_app, db
+    if not os.path.exists(_CACHE):
+        _montar_cache()
     tmp = tempfile.mkdtemp()
     caminho = os.path.join(tmp, 'z.db')
     shutil.copy(_CACHE, caminho)
