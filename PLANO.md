@@ -2,9 +2,22 @@
 
 ---
 
-## ONDE PARAMOS — 18/11/2026, v1.30.0
+## ONDE PARAMOS — 18/11/2026, v1.30.1
 
 Leia esta seção primeiro. O resto do arquivo é histórico e decisões; isto é o que está na mesa.
+
+### Armadilha paga: MATCH exato não casa número com texto (18/11)
+Ele lançou a devolução do notebook 7080 e a Categoria saiu "⚠ item não cadastrado". O Excel guardou
+`7080` como número e `MATCH(7080, tItens[Código], 0)` não acha o código "7080", que é texto. A
+situação até saía certa, porque a coluna Chave item já convertia com `&""` — a planilha dizia que o
+item não existia e ao mesmo tempo mexia nele.
+
+Convertidos 20510 MATCH da planilha para procurar texto (`valor&""`), em todas as colunas-chave
+que alguém digita: código de item, matrícula, número de linha, plaqueta, service tag, hostname,
+IMEI. Formatar a coluna como texto não resolveria: formato não impede o Excel de guardar número.
+
+O Zelo nunca teve esse problema — `importar._valor` converte para string antes de comparar. Quem
+mexer nas fórmulas da planilha tem de manter o `&""`.
 
 ### Item cadastrado sem lançamento agora é "Em estoque" (18/11)
 Cadastrar uma máquina na planilha não a punha no Estoque: sem lançamento a situação era
