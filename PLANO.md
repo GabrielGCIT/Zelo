@@ -2,13 +2,77 @@
 
 ---
 
-## ONDE PARAMOS — 18/11/2026, v1.31.0
+## ONDE PARAMOS — 18/11/2026, v1.32.0
 
 Leia esta seção primeiro. O resto do arquivo é histórico e decisões; isto é o que está na mesa.
 
 **Foco desde 18/11: desenvolver** (funcionalidade, integração com o SD, bugs). O servidor só entra
 na pauta quando o Gabriel avisar. Fluxo: alteração e commit na máquina dele, `git pull` e teste
 no servidor. A suíte roda local com `ZELO_PLANILHA_TESTE` apontando para a planilha atual.
+
+### O agente do SDP ficou incerto — e o Zelo ganhou o próprio (18/11, v1.32.0, protótipo)
+Call com a ACS (consultora do SDP) em 18/11: cada um fala uma coisa sobre as licenças, e o
+cenário "o agente do SDP cria notebook e desktop, o Zelo só enriquece" deixou de ser confiável.
+**Não planejar nada que dependa do agente do SDP.** Sem ele, o Zelo cria todos os ativos no SD
+(inclusive máquina: hoje desligado só por `Notebook=` em Tipos de produto) e precisa de outra fonte
+para o que a máquina diz de si. Pergunta para a ACS: se a licença conta ativo **cadastrado**, o
+cadastro em massa pela API também consome licença.
+
+O protótipo do agente do Zelo:
+- `scripts/agente/zelo-agente.ps1` — PowerShell 5.1, só CIM, nada instalado. Lê service tag da
+  BIOS, fabricante, modelo, tipo de gabinete, SO, usuário da sessão, IPv4 e MAC, e manda num POST.
+  Nunca mostra erro nem trava (é script de logon): Zelo fora do ar, sai calado em ~3 s. Gravado com
+  BOM, senão o PowerShell 5.1 lê como ANSI e estraga os acentos.
+- `POST /api/agente/inventario` — sem login, protegido por `agente_token` (vazio = desligado, o
+  padrão). **A senha não é segredo forte**: o script fica legível onde for distribuído. Por isso o
+  endereço só aceita inventário, corta cada campo no tamanho da coluna, recusa corpo > 16 KB, e o
+  que chega **nunca** muda pessoa nem situação do item.
+- `maquinas_vistas` — uma linha por máquina, achada pela service tag (sobrevive a renomear); sem
+  tag, pelo hostname. Serial de placa genérica (`To be filled by O.E.M.`, `Default string`, VMware)
+  não é tag: juntaria máquinas diferentes. Campo que não veio no envio não apaga o que se sabia.
+- Itens → **Agente do Zelo** — reaproveita a conferência e a cobertura do SD (`como_ativos` devolve
+  o mesmo formato de `do_sd`): máquina que o Zelo não conhece, cadastro a completar (a tag da BIOS),
+  dado diferente, e a cobertura (nunca vista, parou de mandar, quem usa difere). Só completa campo;
+  não cadastra item.
+
+Provado de ponta a ponta na máquina do Gabriel contra um Zelo temporário: senha errada → 403, senha
+certa → gravou, Zelo fora → saiu em 3 s com código 0. A placa dele devolve
+`To be filled by O.E.M.` como serial, e o Zelo guardou "sem tag", como devia.
+
+**Instalável e documentado (18/11, mesma v1.32.0)** — o Gabriel decidiu que o agente do Zelo é a
+**segunda opção** se o do SDP não sair, então ele tem de funcionar de verdade, não só como prova:
+- Itens → Agente do Zelo ganhou a aba **Como instalar**: passo a passo de uma máquina do zero,
+  distribuição em massa (GPO, Intune como Win32 app, SCCM), como conferir numa máquina, tabela de
+  problemas comuns e "o que o agente lê e o que não lê" (a resposta pronta para a Segurança).
+- **Baixar zelo-agente.zip** (só Administrador — leva a senha): os scripts mais um `agente.conf` já
+  com endereço e senha. O endereço sugerido é o do navegador; aberto por `localhost` a tela avisa,
+  porque nas máquinas isso aponta para elas mesmas. Os `.ps1` saem sempre com BOM e CRLF, venha o
+  arquivo de onde vier.
+- `instalar-agente.ps1` (+ `.bat` para clicar): copia para `C:\ProgramData\Zelo\Agente` com ACL só
+  de SYSTEM e Administradores (por SID — o nome do grupo muda com o idioma), cria a tarefa `Zelo -
+  Agente` como SYSTEM (logon +2 min, boot +5 min, diária 10h com até 2 h aleatórias e
+  StartWhenAvailable), roda uma vez e diz se o Zelo recebeu. Rodar de novo atualiza; `-Remover`
+  desfaz; `-Silencioso` para GPO/Intune. A senha vai no `agente.conf`, **não** na linha de comando da
+  tarefa, que qualquer usuário enxerga.
+- O agente grava `ultimo-envio.txt` ao lado de si com o motivo de cada falha (403 senha, 503
+  desligado, 404 endereço, sem resposta = rede). Ele nunca mostra nada; sem isso, máquina que não
+  aparece no Zelo seria um mistério.
+- O empacotador agora leva `scripts/agente/` (e o `atualizar.bat` troca a pasta `scripts`).
+
+Provado na máquina do Gabriel com o ZIP gerado pelo Zelo, extraído e rodado: envio OK, senha errada
+→ `ERRO 403 ...` no arquivo, Zelo fora → 3 s e `ERRO sem resposta`, instalador sem administrador →
+recusa com código 1. Depois, elevado (UAC aceito pelo Gabriel): o instalador criou a pasta só com
+Administradores e SISTEMA, a tarefa como SISTEMA com os três gatilhos certos, e o primeiro envio
+chegou; a tarefa disparada rodou **como SYSTEM** com resultado 0 e gravou o usuário do console
+(`OG4rcia\Biel_`) — o `Win32_ComputerSystem.UserName` funciona onde o `$env:USERNAME` daria a
+própria máquina. As duas execuções caíram na mesma linha de `maquinas_vistas`. `-Remover` apagou
+a tarefa e a pasta. Falta só provar numa máquina do domínio, com GPO/Intune e o EDR da MB.
+
+**O que decide se vira produto não é código:** quem distribui o script nas ~900 máquinas (o domínio
+é `reyesholdings.com`: GPO do time global? Intune, SCCM, Workspace ONE?), se as máquinas dos CDs
+alcançam o servidor na porta do Zelo, e o aval da segurança (PowerShell mandando dado pela rede
+chama atenção do EDR). Falta também: o Zelo ainda não empurra o que o agente viu para o SD, e trocar
+a senha do agente exige reinstalar em todas as máquinas (não há senha anterior aceita por um tempo).
 
 ### O nome que o agente dá à máquina tem domínio (18/11, v1.31.0)
 O ativo que o agente criou na MB chama-se `lmbbfyp9nq3.reyesholdings.com`; nenhum dos 1051

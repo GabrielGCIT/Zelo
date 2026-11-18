@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% block title %}Agente do Zelo — como instalar{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+ <h1 class="z-titulo m-0">Agente do Zelo</h1>
+ <a class="btn btn-sm btn-outline-secondary ms-auto" href="{{ url_for('consulta.itens') }}">Voltar para Itens</a></div>
+<p class="z-sub">Como pôr o agente numa máquina do zero. É a segunda opção ao agente do Service Desk: um script
+ do próprio Windows, sem executável e sem serviço, que diz ao Zelo a service tag da BIOS, o modelo e quem
+ fez login.</p>
+{% set aba = 'instalar' %}{% include '_abas_agente.html' %}
+
+<div class="z-card">
+ <h2 class="h6"><span class="badge text-bg-secondary me-1">1</span>No Zelo, uma vez só</h2>
+ <ul class="small mb-0">
+  <li><b>Ligar o agente:</b> defina a "Senha do agente do Zelo" em
+   {% if pode('admin') %}<a href="{{ url_for('admin.config') }}">Administração → Configurações</a>{% else %}Administração → Configurações{% endif %}.
+   Sem senha o Zelo recusa todo inventário.
+   {% if ligado %}<span class="z-ok"><i class="fa fa-check"></i> já está ligado.</span>
+   {% else %}<span class="z-aviso"><i class="fa fa-triangle-exclamation"></i> ainda está desligado.</span>{% endif %}</li>
+  <li><b>O servidor precisa ser alcançável pelas máquinas:</b> a porta do Zelo liberada no firewall do servidor
+   (o <span class="z-mono">instalar-servico.bat</span> já faz isso) e, nos CDs, a rede chegando até ele.</li>
+  <li>A senha não é segredo forte: ela vai num arquivo em cada máquina. Por isso o endereço do agente só aceita
+   inventário e nunca muda pessoa, situação nem cadastro sozinho.</li>
+ </ul>
+</div>
+
+<div class="z-card">
+ <h2 class="h6"><span class="badge text-bg-secondary me-1">2</span>Baixar o pacote</h2>
+ <p class="small text-muted">Um ZIP com os scripts e um <span class="z-mono">agente.conf</span> já preenchido com o
+  endereço do Zelo e a senha. Use o endereço que <b>as máquinas</b> enxergam — o nome ou o IP do servidor na rede.</p>
+ {% if local %}<div class="alert alert-warning small py-2"><i class="fa fa-triangle-exclamation me-1"></i>
+  Você abriu o Zelo pelo próprio servidor (<span class="z-mono">{{ sugerido }}</span>). Nas outras máquinas
+  "localhost" é a própria máquina: troque pelo nome ou IP do servidor antes de baixar.</div>{% endif %}
+ {% if pode('admin') %}
+ <form method="post" action="{{ url_for('agente.baixar_pacote') }}" class="row g-2 align-items-end">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="col-md-6"><label class="form-label small mb-1" for="endereco">Endereço do Zelo</label>
+   <input class="form-control form-control-sm z-mono" id="endereco" name="endereco" value="{{ sugerido }}"
+          placeholder="http://servidor:5001" required></div>
+  <div class="col-auto"><button class="btn btn-sm btn-primary" {{ 'disabled' if not ligado }}>
+   <i class="fa fa-download me-1"></i>Baixar zelo-agente.zip</button></div>
+ </form>
+ {% else %}
+ <p class="small mb-0"><i class="fa fa-lock me-1"></i>Só o Administrador baixa o pacote, porque ele leva a senha do agente.</p>
+ {% endif %}
+ <div class="small text-muted mt-2">Dentro do ZIP: <span class="z-mono">instalar-agente.bat</span>,
+  <span class="z-mono">desinstalar-agente.bat</span>, <span class="z-mono">instalar-agente.ps1</span>,
+  <span class="z-mono">zelo-agente.ps1</span>, <span class="z-mono">agente.conf</span> e um LEIAME.</div>
+</div>
+
+<div class="z-card">
+ <h2 class="h6"><span class="badge text-bg-secondary me-1">3</span>Instalar numa máquina</h2>
+ <ol class="small">
+  <li>Copie a pasta <span class="z-mono">zelo-agente</span> do ZIP para a máquina (pen drive, compartilhamento, o que for).</li>
+  <li>Botão direito em <span class="z-mono">instalar-agente.bat</span> → <b>Executar como administrador</b>.</li>
+  <li>Espere a mensagem final. Ela diz <b>"Pronto. O Zelo recebeu"</b> ou o motivo da falha.</li>
+  <li>Abra a aba <a href="{{ url_for('agente.tela') }}">Máquinas vistas</a>: a máquina aparece em "Últimas máquinas vistas".</li>
+ </ol>
+ <p class="small mb-1"><b>O que o instalador faz</b> — e nada além disso:</p>
+ <ul class="small mb-0">
+  <li>copia <span class="z-mono">zelo-agente.ps1</span> e <span class="z-mono">agente.conf</span> para
+   <span class="z-mono">C:\ProgramData\Zelo\Agente</span>, numa pasta que só SYSTEM e administradores leem;</li>
+  <li>cria a tarefa agendada <span class="z-mono">Zelo - Agente</span>, como SYSTEM, que roda o script
+   <b>2 min depois de cada logon</b> (é quando se sabe quem usa a máquina), <b>5 min depois de ligar</b> e
+   <b>uma vez por dia</b> entre 10h e 12h (se a máquina estiver desligada, roda quando ligar);</li>
+  <li>manda o primeiro inventário na hora, para você ver se funcionou.</li>
+ </ul>
+ <p class="small text-muted mt-2 mb-0">Rodar o instalador de novo <b>atualiza</b>: sobrescreve o script, o
+  <span class="z-mono">agente.conf</span> e a tarefa. É assim que se troca o endereço ou a senha numa máquina.</p>
+</div>
+
+<div class="z-card">
+ <h2 class="h6"><span class="badge text-bg-secondary me-1">4</span>Em muitas máquinas de uma vez</h2>
+ <p class="small">O mesmo <span class="z-mono">instalar-agente.ps1</span>, rodando como SYSTEM, com
+  <span class="z-mono">-Silencioso</span> (pula o teste de envio, porque no boot a rede pode não estar de pé ainda).
+  Deixe a pasta do pacote inteira junto: o instalador lê o <span class="z-mono">agente.conf</span> e o
+  <span class="z-mono">zelo-agente.ps1</span> da pasta onde ele está.</p>
+ <pre class="z-mono small bg-body-tertiary p-2 rounded mb-2">powershell.exe -NoProfile -ExecutionPolicy Bypass -File "\\servidor\compartilhamento\zelo-agente\instalar-agente.ps1" -Silencioso</pre>
+ <ul class="small mb-0">
+  <li><b>GPO:</b> Configuração do Computador → Políticas → Configurações do Windows → Scripts → Inicialização,
+   aba Scripts do PowerShell. O compartilhamento precisa ser legível pela conta das máquinas (Computadores do Domínio).</li>
+  <li><b>Intune:</b> como Win32 app — empacote a pasta <span class="z-mono">zelo-agente</span> com o
+   IntuneWinAppUtil; instalação = o comando acima com <span class="z-mono">-File instalar-agente.ps1</span>;
+   desinstalação = o mesmo com <span class="z-mono">-Remover</span>; contexto <b>Sistema</b>; regra de detecção =
+   o arquivo <span class="z-mono">C:\ProgramData\Zelo\Agente\zelo-agente.ps1</span>. (O "Scripts" simples do Intune
+   manda um arquivo só, e o instalador precisa da pasta.)</li>
+  <li><b>SCCM / outro distribuidor:</b> o mesmo comando, como sistema. Código de saída 0 = instalado.</li>
+ </ul>
+ <p class="small text-muted mt-2 mb-0">Antes de espalhar, combine com a Segurança: PowerShell mandando dados pela
+  rede chama atenção do antivírus/EDR. A seção "O que o agente lê" abaixo serve de resposta para eles.</p>
+</div>
+
+<div class="z-card">
+ <h2 class="h6"><span class="badge text-bg-secondary me-1">5</span>Conferir numa máquina</h2>
+ <table class="table table-sm small align-middle mb-0">
+  <tbody>
+   <tr><td>Resultado do último envio</td><td class="z-mono">type C:\ProgramData\Zelo\Agente\ultimo-envio.txt</td></tr>
+   <tr><td>A tarefa existe e quando rodou</td><td class="z-mono">schtasks /Query /TN "Zelo - Agente" /V /FO LIST</td></tr>
+   <tr><td>Mandar agora, sem esperar</td><td class="z-mono">schtasks /Run /TN "Zelo - Agente"</td></tr>
+   <tr><td>Rodar à mão vendo tudo</td><td class="z-mono">powershell -ExecutionPolicy Bypass -File C:\ProgramData\Zelo\Agente\zelo-agente.ps1 -Mostrar</td></tr>
+  </tbody></table>
+ <p class="small text-muted mt-2 mb-0">Os comandos precisam de prompt como administrador: a pasta do agente só abre para administradores.</p>
+</div>
+
+<div class="z-card">
+ <h2 class="h6">Problemas comuns</h2>
+ <table class="table table-sm small align-middle mb-0">
+  <thead><tr><th>O <span class="z-mono">ultimo-envio.txt</span> diz</th><th>Causa e o que fazer</th></tr></thead>
+  <tbody>
+   <tr><td class="z-mono">ERRO 403</td><td>A senha do <span class="z-mono">agente.conf</span> não é a do Zelo — a senha mudou em
+    Configurações depois do pacote. Baixe o pacote de novo e reinstale.</td></tr>
+   <tr><td class="z-mono">ERRO 503</td><td>O agente está desligado no Zelo: falta a senha em Configurações.</td></tr>
+   <tr><td class="z-mono">ERRO 404</td><td>O endereço não é de um Zelo com o agente: endereço errado no pacote, ou o servidor está numa versão antiga.</td></tr>
+   <tr><td class="z-mono">ERRO sem resposta</td><td>A máquina não alcança o servidor: rede do CD, VPN, firewall do servidor
+    ou o Zelo fora do ar. Teste no navegador da máquina o endereço que está no <span class="z-mono">agente.conf</span>.</td></tr>
+   <tr><td>(o arquivo não existe)</td><td>A tarefa nunca rodou: confira com <span class="z-mono">schtasks /Query</span>.
+    Se existe e não roda, o antivírus pode estar bloqueando o PowerShell — peça a liberação de
+    <span class="z-mono">C:\ProgramData\Zelo\Agente\zelo-agente.ps1</span>.</td></tr>
+   <tr><td class="z-mono">OK</td><td>Chegou. Se a máquina não aparece em <a href="{{ url_for('agente.tela') }}">Máquinas vistas</a>,
+    o endereço do pacote aponta para outro Zelo (o de teste, por exemplo).</td></tr>
+  </tbody></table>
+</div>
+
+<div class="z-card">
+ <h2 class="h6">O que o agente lê — e o que não lê</h2>
+ <div class="row small">
+  <div class="col-md-6"><b>Lê</b> (do WMI/CIM, só leitura):
+   <ul class="mb-0"><li>hostname, service tag da BIOS, fabricante e modelo;</li>
+    <li>tipo de gabinete (notebook ou desktop);</li><li>versão do Windows;</li>
+    <li>usuário logado no console (<span class="z-mono">DOMINIO\login</span>);</li>
+    <li>IPv4 e MAC das placas de rede ativas.</li></ul></div>
+  <div class="col-md-6"><b>Não lê</b>:
+   <ul class="mb-0"><li>arquivos, documentos, navegação, e-mail;</li><li>programas instalados;</li>
+    <li>senhas ou credenciais;</li><li>nada da sessão do usuário além do nome de login.</li></ul>
+   <div class="mt-1">Não abre porta na máquina, não recebe comando do Zelo e não instala executável: é um script
+    legível de ~130 linhas que manda um JSON de algumas centenas de bytes por HTTP.</div></div>
+ </div>
+</div>
+
+<div class="z-card">
+ <h2 class="h6">Remover</h2>
+ <p class="small mb-0">Botão direito em <span class="z-mono">desinstalar-agente.bat</span> → Executar como administrador
+  (ou <span class="z-mono">instalar-agente.ps1 -Remover</span> pelo distribuidor). Apaga a tarefa e a pasta
+  <span class="z-mono">C:\ProgramData\Zelo\Agente</span>. A máquina continua listada no Zelo com a data em que foi vista
+  pela última vez, e passa a aparecer na cobertura como "parou de mandar".</p>
+</div>
+{% endblock %}

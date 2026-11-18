@@ -17,6 +17,8 @@ ROTULOS_CONFIG = {
     'dias_fluxo_parado': 'Dias para considerar o fluxo parado',
     'dias_sem_agente': 'Dias depois da entrega para cobrar o agente do Service Desk na máquina',
     'dias_agente_sumido': 'Dias sem varredura do agente para considerar que ele parou de ver a máquina',
+    'agente_token': 'Senha do agente do Zelo (a mesma que vai no script das máquinas). Vazio = agente desligado. '
+                    'Não é segredo forte: o script fica legível onde for distribuído',
     'aviso_contrato_dias': 'Avisar contrato vencendo com quantos dias',
     'equipe': 'Equipe (responsáveis), separados por ;',
     'tecnicos': 'Técnicos, separados por ;',

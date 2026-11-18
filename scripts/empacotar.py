@@ -33,7 +33,9 @@ RAIZ = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # O que vai para o pacote. Lista explícita, não "tudo menos": é mais fácil
 # esquecer de EXCLUIR um arquivo novo e vazar algo do que esquecer de incluir —
 # o que falta aparece no primeiro boot, o que vaza não aparece nunca.
-PASTAS = ['app', 'templates', 'static']
+# scripts/agente vai porque o Zelo monta o pacote do agente a partir dele (tela Agente do Zelo →
+# Como instalar); sem a pasta, o botão de baixar quebra só no servidor.
+PASTAS = ['app', 'templates', 'static', os.path.join('scripts', 'agente')]
 ARQUIVOS = ['run.py', 'manage.py', 'requirements.txt', 'VERSAO']
 
 # Nunca entram, mesmo dentro das pastas acima.
@@ -351,7 +353,7 @@ echo Guardando a versao atual para poder voltar atras...
 set "GUARDA=%ALVO%\\versao-anterior"
 if exist "%GUARDA%" rmdir /s /q "%GUARDA%"
 mkdir "%GUARDA%"
-for %%P in (app templates static) do (
+for %%P in (app templates static scripts) do (
     if exist "%ALVO%\\%%P" xcopy /e /i /q /y "%ALVO%\\%%P" "%GUARDA%\\%%P" >nul
 )
 if exist "%ALVO%\\run.py" copy /y "%ALVO%\\run.py" "%GUARDA%\\" >nul
@@ -359,7 +361,7 @@ if exist "%ALVO%\\manage.py" copy /y "%ALVO%\\manage.py" "%GUARDA%\\" >nul
 if exist "%ALVO%\\VERSAO" copy /y "%ALVO%\\VERSAO" "%GUARDA%\\" >nul
 
 echo Aplicando a versao {versao}...
-for %%P in (app templates static) do (
+for %%P in (app templates static scripts) do (
     if exist "%ALVO%\\%%P" rmdir /s /q "%ALVO%\\%%P"
     xcopy /e /i /q /y "%~dp0%%P" "%ALVO%\\%%P" >nul
 )

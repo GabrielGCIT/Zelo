@@ -291,7 +291,7 @@ def _dias_desde(iso, hoje):
         return None
 
 
-def cobertura(ativos, hoje=None):
+def cobertura(ativos, hoje=None, ausente='não está no SD'):
     """Onde o agente do SDP não está fazendo o trabalho dele. Três perguntas:
 
     - **Entregue e sem agente**: máquina em uso que o SD não conhece, ou só conhece por cadastro
@@ -304,6 +304,9 @@ def cobertura(ativos, hoje=None):
 
     Login de varredura velha não conta: quem usou a máquina há dois meses não diz quem está com ela.
     Devolve um dicionário com as três listas e o que a tela precisa para explicar o que faltou.
+
+    Serve às duas fontes — o agente do SDP e o do Zelo (`agente.como_ativos`) —, porque a pergunta
+    é a mesma; só muda o texto de quando a máquina nunca apareceu (`ausente`).
     """
     hoje = hoje or date.today()
     dias_sem = _dias_cfg('dias_sem_agente', 7)
@@ -332,7 +335,7 @@ def cobertura(ativos, hoje=None):
                 aguardando += 1          # o Suporte ainda pode estar instalando
                 continue
             sem_agente.append(dict(item=_item(it), dias=dias, sd=s,
-                                   motivo='só cadastro manual no SD, nunca varrida' if s else 'não está no SD'))
+                                   motivo='só cadastro manual no SD, nunca varrida' if s else ausente))
             continue
         idade = _dias_desde(s['varredura'], hoje)
         if idade is not None and idade > dias_scan:

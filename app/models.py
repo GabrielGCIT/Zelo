@@ -386,6 +386,31 @@ class Assinatura(db.Model):
         return not self.assinado and not self.cancelado
 
 
+class MaquinaVista(db.Model):
+    """O que o agente do Zelo ouviu de uma máquina: uma linha por máquina, atualizada a cada envio.
+
+    Existe porque o agente do SDP ficou incerto (licenças, 18/11) e, sem ele, ninguém diz o que a
+    máquina é de verdade — service tag lida da BIOS, modelo, quem fez login, quando foi vista.
+    É dado DA MÁQUINA, não do processo: nunca muda com quem está o item nem a situação dele. O que
+    divergir do cadastro vira linha na tela para alguém decidir, como toda conferência do Zelo.
+    """
+    __tablename__ = 'maquinas_vistas'
+    id = db.Column(db.Integer, primary_key=True)
+    tag = db.Column(db.String(60), index=True)          # service tag da BIOS; vazia em VM e placa genérica
+    hostname = db.Column(db.String(60), index=True)
+    fabricante = db.Column(db.String(100))
+    modelo = db.Column(db.String(100))
+    chassi = db.Column(db.String(30))                    # Notebook | Desktop | outro (do Win32_SystemEnclosure)
+    so = db.Column(db.String(100))
+    usuario = db.Column(db.String(120))                  # último login, cru (DOMINIO\login)
+    ip = db.Column(db.String(200))
+    mac = db.Column(db.String(200))
+    versao = db.Column(db.String(20))                    # versão do script que mandou
+    primeira_vez = db.Column(db.String(19))
+    visto_em = db.Column(db.String(19), index=True)
+    origem = db.Column(db.String(45))                    # IP de onde veio a chamada
+
+
 class Config(db.Model):
     """Parâmetros (chave/valor): prazo padrão de empréstimo, data do fluxo de preparação etc."""
     __tablename__ = 'config'
@@ -410,6 +435,9 @@ CONFIG_PADRAO = {
     # Suporte, então máquina recém-entregue sem ele é normal por alguns dias, não por semanas.
     'dias_sem_agente': '7',
     'dias_agente_sumido': '30',
+    # Senha que o script do agente do Zelo manda junto com o inventário. Vazio = o Zelo recusa
+    # tudo, que é o padrão: ninguém liga o agente sem querer.
+    'agente_token': '',
     'aviso_contrato_dias': '90',
     'equipe': 'Gabriel;Giselly Oliveira;Adriano Santos;Daniely Reis',
     'tecnicos': 'Diogo Mariano;Adriano Santos;Emilly Cosmo;Edvaldo Filho;Thomaz Jardim;Lucas Rodrigues;Michel Santos;Lara Vitoriano',
