@@ -66,7 +66,7 @@ def test_cancelar_reserva_devolve_kit(app):
         assert saldo(k.consumivel) == antes[k.consumivel] + k.qtd
 
 
-def test_preparacao_parcial_e_liberacao_com_kit(app):
+def test_preparacao_parcial_e_liberacao_com_kit(app, fluxo_preparacao):
     it, p = _nb(), _pessoa()
     fab = it.fabricante or 'Dell'
     _repor(f'Fonte de notebook – {fab}')

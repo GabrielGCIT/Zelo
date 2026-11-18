@@ -393,10 +393,18 @@ class Config(db.Model):
     valor = db.Column(db.String(200))
 
 
+# Dia em que o controle novo (planilha unificada → Zelo) passou a valer. É o corte das telas que
+# só fazem sentido para o fluxo novo: pendência de termo, acompanhamento. Não tem a ver com o
+# fluxo de preparação, que é opcional e vive em `fluxo_preparacao`.
+INICIO_FLUXO = '2026-11-05'
+
 CONFIG_PADRAO = {
     'empresa': 'Martin Brower Brasil',
     'prazo_emprestimo': '30',
-    'fluxo_preparacao': '2026-11-05',     # notebook devolvido a partir daqui passa pela preparação
+    # Vazio = devolução volta direto para o estoque (é o padrão, e é o que a planilha faz).
+    # Com uma data, notebook de uso definitivo devolvido a partir dela fica "Devolvido" e só volta
+    # ao estoque depois de Preparação e Liberação — o quadro da tela Acompanhar.
+    'fluxo_preparacao': '',
     'dias_fluxo_parado': '7',
     'aviso_contrato_dias': '90',
     'equipe': 'Gabriel;Giselly Oliveira;Adriano Santos;Daniely Reis',

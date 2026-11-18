@@ -73,7 +73,7 @@ def test_desfazer_so_o_ultimo(app, cli):
     assert db.session.get(Movimentacao, m2.id) is None and db.session.get(Item, it.codigo).situacao == 'Em uso'
 
 
-def test_liberar_sem_todas_as_marcas(app):
+def test_liberar_sem_todas_as_marcas(app, fluxo_preparacao):
     it, p = _nb(), _p()
     gravar([{'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}], 'entrega', 'T')
     gravar([{'acao': 'Devolver', 'item': it.codigo}], 'entrega', 'T')
@@ -111,7 +111,7 @@ def test_quadro_entregas_arrastar(app, cli):
     assert not cli.post('/api/acompanhar/etapa', json={'id': m.id, 'para': 'Reservado'}).json['ok']
 
 
-def test_quadro_preparacao_salva_a_cada_clique(app, cli):
+def test_quadro_preparacao_salva_a_cada_clique(app, cli, fluxo_preparacao):
     it, p = _nb(), _p()
     gravar([{'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}], 'entrega', 'T')
     gravar([{'acao': 'Devolver', 'item': it.codigo}], 'entrega', 'T')

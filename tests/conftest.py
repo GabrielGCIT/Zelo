@@ -44,3 +44,14 @@ def entrar(client, email='op@teste'):
 @pytest.fixture()
 def cli(app):
     return entrar(app.test_client())
+
+
+@pytest.fixture()
+def fluxo_preparacao(app):
+    """Liga o fluxo de preparação, que vem desligado: sem ele a devolução volta direto ao estoque
+    e nenhum notebook chega ao quadro de preparação."""
+    from app import db
+    from app.models import Config
+    db.session.merge(Config(chave='fluxo_preparacao', valor='2026-01-01'))
+    db.session.commit()
+    return '2026-01-01'

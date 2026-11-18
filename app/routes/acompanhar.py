@@ -3,7 +3,7 @@ from flask import Blueprint, flash, g, jsonify, redirect, render_template, reque
 from app import db
 from app.acompanhar import PASSOS, corrigir, marcas_de, preparar, ultima_preparacao
 from app.auth import exige, registrar_log
-from app.models import ESTADOS_DEV, Item, Movimentacao, cfg, cfg_lista
+from app.models import ESTADOS_DEV, INICIO_FLUXO, Item, Movimentacao, cfg, cfg_lista
 
 acompanhar_bp = Blueprint('acompanhar', __name__)
 
@@ -20,7 +20,7 @@ def _cartao_entrega(m, it):
 @exige('ver')
 def inicio():
     from datetime import date, timedelta
-    fluxo = cfg('fluxo_preparacao') or '2026-11-05'
+    fluxo = INICIO_FLUXO
     semana = (date.today() - timedelta(days=7)).isoformat()
     # 1 · quadro das entregas: reservas em andamento + entregues com termo pendente + entregues na última semana
     vistos, cartoes = set(), []

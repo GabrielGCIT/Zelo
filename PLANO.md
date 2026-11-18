@@ -2,12 +2,41 @@
 
 ---
 
-## ONDE PARAMOS — 18/11/2026, v1.27.0
+## ONDE PARAMOS — 18/11/2026, v1.28.0
 
 Leia esta seção primeiro. O resto do arquivo é histórico e decisões; isto é o que está na mesa.
 
+### Devolução volta direto para o estoque (18/11) — simplificação pedida pelo Gabriel
+O fluxo obrigatório de preparação saiu de cena: notebook devolvido ia para "Devolvido" e só voltava
+ao estoque depois de lançar **Preparação** e **Liberação** — três lançamentos para registrar uma
+máquina que voltou, e a Daniely não achava a máquina no Estoque depois de devolver.
+
+- `fluxo_preparacao` agora vem **vazio** (= desligado) em `CONFIG_PADRAO`. Com uma data, o
+  comportamento antigo volta inteiro: a tela Acompanhar, os lembretes e o quadro continuam no
+  código, só não têm quem os alimente.
+- o corte "quando o controle novo começou" (pendência de termo, acompanhamento) virou a constante
+  `INICIO_FLUXO = '2026-11-05'` em `models.py`. Antes as duas coisas dividiam a mesma chave de
+  configuração, e desligar uma mexia na outra.
+- na planilha, a coluna *Situação do item* do Histórico perdeu o desvio do notebook e a linha
+  "Fluxo de preparação vale a partir de" saiu do Config.
+- `tests/conftest.py` ganhou a fixture `fluxo_preparacao`, que liga o fluxo nos testes que
+  precisam dele. **A planilha e o Zelo seguem batendo: 0 itens e 0 linhas com situação diferente.**
+
+### Cadastro do JDE importado (18/11)
+Extração `Cadastro de usuários` (aba LISTAG, três linhas por cadastro: nome, departamento, R.G.).
+3336 matrículas: 1145 já estavam na planilha e **2191 foram cadastradas**. Pessoas foi de 1798 para
+3989. Terceiro não entra no JDE (não tem matrícula), então ausência no JDE nunca marca desligado.
+
+- 40 nomes corrigidos pelo JDE, 201 "Cadastro JDE" preenchidos, 582 Sites preenchidos.
+- 13 pessoas que a planilha tinha como ativas estão desligadas no JDE → marcadas Desligado.
+  **9 delas têm equipamento no nome** (coluna Alerta), e isso agora é um cartão no Início.
+- 20 divergem ao contrário (planilha diz desligado, JDE diz ativo): ninguém foi "ressuscitado",
+  os casos estão no relatório para ele decidir.
+- o cartão "pessoas sem e-mail" virou **"com ativo e sem e-mail"** (1386): com o quadro inteiro da
+  empresa na base, o número cru não dizia nada — quase nenhum funcionário de CD tem e-mail.
+
 ### Estado
-220 testes verdes. Tudo commitado e empurrado para `github.com/GabrielGCIT/Zelo` (privado).
+221 testes verdes. Tudo commitado e empurrado para `github.com/GabrielGCIT/Zelo` (privado).
 A integração com o Service Desk lê chamado, anexa termo, grava nota, atualiza usuário e estado do
 ativo, e **cria ativo** no SDP com hostname, service tag, plaqueta e estado — tudo provado gravando
 no laboratório pelo botão de diagnóstico.

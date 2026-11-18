@@ -1,7 +1,7 @@
 """Pendências: o que ficou sem preencher num lançamento. Nada disso bloqueia a gravação; o sistema cobra
 depois, na fila de quem lançou, até alguém completar. A lista é calculada na hora (some quando preenche)."""
 from app import db
-from app.models import Item, Movimentacao, cfg
+from app.models import INICIO_FLUXO, Item, Movimentacao, cfg
 
 ROTULO = {'chamado': 'Nº do chamado', 'tecnico': 'Técnico', 'termo': 'Termo assinado', 'receb_por': 'Recebido por',
           'arquivo': 'Arquivo do termo', 'solucao': 'O que foi feito'}
@@ -36,7 +36,7 @@ def texto(m, item=None):
 
 def abertas(resp=None, limite=300):
     """[(mov, [rótulos])] dos lançamentos desde o início do fluxo novo que ainda têm pendência."""
-    desde = cfg('fluxo_preparacao') or '2026-11-05'
+    desde = INICIO_FLUXO
     q = Movimentacao.query.filter(Movimentacao.tipo.in_(('Entrega', 'Empréstimo', 'Devolução')), Movimentacao.data >= desde)
     if resp:
         q = q.filter(Movimentacao.resp == resp)

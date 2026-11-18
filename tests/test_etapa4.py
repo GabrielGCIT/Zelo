@@ -72,7 +72,7 @@ def test_fila_grava_so_o_que_passa(app):
     assert por[nb.codigo]['gravada'] and por[nb.codigo]['nums']
     assert not por[estoque.codigo]['gravada'] and 'já está' in por[estoque.codigo]['msg']
     db.session.refresh(nb)
-    assert nb.situacao == 'Devolvido'
+    assert nb.situacao == 'Em estoque'
     m = db.session.get(Movimentacao, por[nb.codigo]['nums'][-1])
     assert m.tipo == 'Devolução' and m.receb_por == 'Adriano Santos' and m.lote == lote
 
@@ -247,7 +247,7 @@ def test_desligamento_devolve_tudo_de_uma_vez(app):
     db.session.refresh(nb)
     db.session.refresh(ln)
     db.session.refresh(ea)
-    assert nb.situacao == 'Devolvido'                              # notebook vai para a preparação
+    assert nb.situacao == 'Em estoque'                             # devolução volta direto
     assert ln.situacao == 'Livre' and ea.devolvido
     assert not total(o_que_tem(p.id))
     assert p.id not in [f['p'].id for f in pendentes()]
@@ -275,7 +275,7 @@ def test_telas_do_desligamento(app, cli):
                  follow_redirects=True)
     assert r.status_code == 200
     db.session.refresh(nb)
-    assert nb.situacao == 'Devolvido'
+    assert nb.situacao == 'Em estoque'
     assert cli.get('/desligamento/NAO-EXISTE').status_code == 404
 
 

@@ -2,8 +2,10 @@
 
 Situação do item = o que o ÚLTIMO lançamento que o afeta diz, com duas exceções:
 - ocorrência de manutenção aberta → "Manutenção" (por cima de tudo);
-- notebook de uso definitivo devolvido a partir da data do fluxo → "Devolvido"
-  (vai para a preparação antes de voltar ao estoque).
+- com `fluxo_preparacao` configurado (vazio por padrão), notebook de uso definitivo devolvido a
+  partir daquela data → "Devolvido", e só volta ao estoque depois de Preparação e Liberação.
+  Vazio significa devolução direto para o estoque: três lançamentos para registrar uma máquina
+  que voltou era o que mais confundia quem usa a planilha.
 
 O lançamento do tipo "Ajuste" é a correção de cadastro: não conta uma movimentação que
 aconteceu, declara como a coisa REALMENTE está. A situação declarada fica no campo `etapa`

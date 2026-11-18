@@ -12,7 +12,8 @@ admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 ROTULOS_CONFIG = {
     'empresa': 'Empresa (aparece no termo e no cabeçalho)',
     'prazo_emprestimo': 'Prazo padrão de empréstimo (dias)',
-    'fluxo_preparacao': 'Notebook devolvido a partir desta data passa pela preparação (AAAA-MM-DD)',
+    'fluxo_preparacao': 'Vazio = devolução volta direto para o estoque. Com uma data (AAAA-MM-DD), '
+                        'notebook devolvido a partir dela passa pela preparação antes de voltar',
     'dias_fluxo_parado': 'Dias para considerar o fluxo parado',
     'aviso_contrato_dias': 'Avisar contrato vencendo com quantos dias',
     'equipe': 'Equipe (responsáveis), separados por ;',

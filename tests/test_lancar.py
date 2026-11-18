@@ -23,7 +23,7 @@ def test_entregar_e_devolver(app):
     assert conferir([{'acao': 'Devolver', 'item': it.codigo}], 'entrega')[0].status in ('ok', 'aviso')
     gravar([{'acao': 'Devolver', 'item': it.codigo, 'receb_por': 'Adriano Santos'}], 'entrega', 'Teste')
     db.session.refresh(it)
-    assert it.situacao == 'Devolvido'
+    assert it.situacao == 'Em estoque'       # sem fluxo de preparação, devolução volta direto
 
 
 def test_desfazer_apaga_o_lote(app):
@@ -123,3 +123,14 @@ def test_kit_e_flexivel(app, cli):
     assert cli.post(f'/pessoa/{p.id}/kit', data={'mov_id': mid, 'consumivel': cons}).status_code == 302
     assert saldo(cons) == s0 + 1 and not [x for x in kit_da_pessoa(p.id) if x[1] == cons]
     assert cli.get(f'/pessoa/{p.id}').status_code == 200
+
+
+def test_fluxo_de_preparacao_e_opcional(app, fluxo_preparacao):
+    """Com a data configurada, o notebook devolvido para em 'Devolvido'. Sem ela (o padrão, coberto
+    em test_entregar_e_devolver), a devolução volta direto ao estoque."""
+    it = _estoque_nb()
+    p = Pessoa.query.filter_by(situacao='Ativo', tipo='CLT').first()
+    gravar([{'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}], 'entrega', 'T')
+    gravar([{'acao': 'Devolver', 'item': it.codigo, 'receb_por': 'Adriano Santos'}], 'entrega', 'T')
+    db.session.refresh(it)
+    assert it.situacao == 'Devolvido'
