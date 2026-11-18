@@ -23,8 +23,9 @@ escrita estão desligados no servidor.
   que vem do SD entra curto no Zelo.
 - o ativo vai para dentro do chamado pelo **id**, não pelo nome.
 
-**A provar no laboratório:** se o build aceita a condição `starts with` (se recusar, a busca cai
-para a service tag, mas é bom saber), e se anexar ao chamado por `{'id': ...}` grava.
+**Provado no laboratório (18/11):** o build aceita `starts with` (`ZELO-TESTE-x.LAB.LOCAL` achado
+por `ZELO-TESTE-x.`, e `achar_ativo` pelo nome curto); anexar ao chamado por `{'id': ...}` grava
+e preserva o ativo que já estava lá.
 
 ### Cobertura do agente (18/11, v1.31.0)
 Seção nova em Itens → Conferir com o Service Desk, para notebook, desktop e thin client em uso:
@@ -36,8 +37,17 @@ Seção nova em Itens → Conferir com o Service Desk, para notebook, desktop e 
 
 A listagem passou a pedir os dois campos do agente num degrau à parte: se o build recusar, cai
 para os campos de sempre em vez de perder a service tag. Quando nenhum ativo trouxer os campos, a
-tela diz isso em vez de mostrar grupo vazio. **A provar no laboratório:** se `asset_assets` aceita
-esses campos em `fields_required`. O formato que o agente grava só a MB mostra.
+tela diz isso em vez de mostrar grupo vazio.
+
+**Achado no laboratório (18/11): `fields_required` aceita QUALQUER nome**, até um inventado, e a
+resposta traz só os campos pedidos que têm valor. Duas consequências:
+- "aceitou" não prova que `last_logged_user` e `last_scan_success_time` são os nomes certos — o
+  laboratório não tem agente, então **só a MB prova**, pela primeira conferência depois que houver
+  máquina com agente. Se a seção disser "não devolveu data de varredura" com agente instalado,
+  os nomes estão errados: olhar a ficha pelo Inspecionar;
+- a presença da chave é um sinal confiável de que o agente esteve no ativo, que é o que separa
+  "cadastro manual nunca varrido" de "este build não entrega o campo".
+O simulador passou a se comportar assim.
 
 ### Armadilha paga: MATCH exato não casa número com texto (18/11)
 Ele lançou a devolução do notebook 7080 e a Categoria saiu "⚠ item não cadastrado". O Excel guardou

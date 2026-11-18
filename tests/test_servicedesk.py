@@ -61,6 +61,12 @@ class SimuladorSD:
             todos = list(self.ativos.values())                      # listagem paginada
             ini, n = li.get('start_index', 1), li.get('row_count', 100)
             pagina = todos[ini - 1:ini - 1 + n]
+            if pedidos:
+                # Provado no laboratório (18/11): o build ACEITA qualquer nome em fields_required,
+                # até um inventado, e devolve só os pedidos que têm valor — campo vazio ou
+                # desconhecido simplesmente não vem. "Aceitou" não prova que o nome existe.
+                pagina = [{k: v for k, v in a.items() if (k in pedidos or k == 'id') and v not in (None, '')}
+                          for a in pagina]
             return 200, json.dumps({'asset_assets': pagina, 'response_status': [{'status': 'success'}],
                                     'list_info': {'has_more_rows': ini - 1 + n < len(todos),
                                                   'row_count': len(pagina)}})

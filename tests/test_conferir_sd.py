@@ -458,6 +458,23 @@ def test_login_em_maquina_que_o_zelo_diz_estar_em_estoque(app, sdl):
     assert l['login_zelo'] == '' and l['login_sd'] == 'alguem'
 
 
+def test_listagem_so_traz_campo_do_agente_de_quem_tem_agente(app, sdl):
+    """Como o build provado no laboratório: campo pedido e vazio não vem na resposta. É isso que
+    torna a presença da chave um sinal de 'o agente esteve aqui'."""
+    from app.conferir_sd import cobertura
+    it = _em_uso()
+    manual = _por(sdl, it.hostname.upper())
+    manual['last_scan_success_time'] = None
+    com_agente = _varrido(sdl, Item(hostname='LMBOUTRA', tag=''), date.today())
+    lista, _t, _e = baixar()
+    por_host = {x['hostname']: x for x in lista}
+    assert not por_host[it.hostname.upper()]['campos_agente']
+    assert por_host[com_agente['name']]['campos_agente']
+    c = cobertura(lista, hoje=_hoje(it, 30))
+    assert c['veio_agente']
+    assert 'nunca varrida' in next(x for x in c['sem_agente'] if x['item']['codigo'] == it.codigo)['motivo']
+
+
 def test_tela_mostra_a_cobertura(app, cli, sdl):
     it = _em_uso()
     _por(sdl, 'OUTRA-MAQUINA')
