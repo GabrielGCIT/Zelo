@@ -2,15 +2,34 @@
 
 ---
 
-## ONDE PARAMOS — 13/11/2026, v1.26.0
+## ONDE PARAMOS — 18/11/2026, v1.27.0
 
 Leia esta seção primeiro. O resto do arquivo é histórico e decisões; isto é o que está na mesa.
 
 ### Estado
-203 testes verdes. Tudo commitado e empurrado para `github.com/GabrielGCIT/Zelo` (privado).
+220 testes verdes. Tudo commitado e empurrado para `github.com/GabrielGCIT/Zelo` (privado).
 A integração com o Service Desk lê chamado, anexa termo, grava nota, atualiza usuário e estado do
 ativo, e **cria ativo** no SDP com hostname, service tag, plaqueta e estado — tudo provado gravando
 no laboratório pelo botão de diagnóstico.
+
+### O Zelo está instalado no servidor da MB (17–18/11)
+Clonado do GitHub num servidor interno (`brdapp01`), apontando para o **SDP de produção**
+(`https://servicedesk.martinbrower.com.br`) — a MB não tem SDP de teste. Integração ligada;
+**todos os interruptores de escrita de ativo em Não**. Provado lá: conexão, listagem dos 27 tipos
+de produto, e o **Inspecionar** lendo a ficha completa de um ativo.
+
+Falta no servidor, por ordem:
+1. `serial_number=service_tag` em "Nomes de campo próprios", e rodar o **Diagnóstico: criar ativo**
+   para confirmar a criação (1 minuto; cria e apaga um `ZELO-TESTE-…` de verdade).
+2. **Subir como serviço no boot.** Clonado do git não tem `instalar-servico.bat` (ele é gerado pelo
+   empacotador), então hoje o Zelo morre quando a janela fecha.
+3. **Testar a restauração do backup.** O backup diário existe; restaurar nunca foi testado, e
+   backup não testado não é backup.
+4. **Ligar "anexar o equipamento ao chamado"** — com a base de ativos zerada, o histórico por ativo
+   começa agora, e cada mês desligado é um mês perdido para sempre.
+
+Pendências menores do servidor: `url_base` com o endereço real (senão o link de assinatura quebra),
+SSL em **Verificar** (estava em Ignorar) e porta 5001 liberada no firewall.
 
 ### A criação de ativo está fechada (13/11, v1.23.0)
 O que o Zelo descobriu sozinho sobre o build da MB, e que agora está gravado na configuração:
@@ -27,6 +46,12 @@ candidato, e só `org_serial_number` devolveu o valor gravado na leitura de volt
 tivessem gravado, o diagnóstico teria parado e perguntado.
 
 Provado no laboratório: `asset_tag`, `name`, `org_serial_number` e `state` gravam e voltam.
+
+**Garantia (18/11, v1.27.0):** o SDP guarda data como **epoch em milissegundos**; o Zelo mandava
+`AAAA-MM-DD`, então a garantia era recusada ou gravava lixo em silêncio. Agora converte, usando
+**meio-dia UTC** — meia-noite muda de dia conforme o fuso de quem lê, e meio-dia UTC aguenta de
+-11:59 a +11:59 sem precisar de banco de fusos (que o Python no Windows não traz). Data ilegível
+(a planilha tem "Vencida" escrito nesse campo) fica **fora** do corpo em vez de virar nulo.
 
 ### A pergunta da duplicação — RESPONDIDA (13/11, no SDP de produção da MB)
 O agente do SDP grava a service tag no campo **`service_tag`**. Visto num ativo real escaneado
