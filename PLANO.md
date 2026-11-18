@@ -2,7 +2,7 @@
 
 ---
 
-## ONDE PARAMOS — 18/11/2026, v1.28.0
+## ONDE PARAMOS — 18/11/2026, v1.29.0
 
 Leia esta seção primeiro. O resto do arquivo é histórico e decisões; isto é o que está na mesa.
 
