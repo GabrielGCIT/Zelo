@@ -24,8 +24,20 @@ def _u(nome, email='', login='', ativo=True):
 
 
 def _sem_email():
-    return Pessoa.query.filter(Pessoa.situacao == 'Ativo',
-                               (Pessoa.email.is_(None)) | (Pessoa.email == '')).order_by(Pessoa.id).first()
+    """Pessoa ativa sem e-mail cujo nome é único na base inteira.
+
+    Único porque o `conferir` compara com todas as pessoas, desligadas inclusive. Pegar só a
+    primeira por id quebrou quando a planilha mudou: na de 18/11 ela tinha nome repetido em outra
+    matrícula, e o Zelo respondeu 'ambiguo', que é o certo. Os testes não podem depender de
+    qual pessoa a planilha da vez põe em primeiro.
+    """
+    contagem = {}
+    for p in Pessoa.query.all():
+        ch = _chave(p.nome)
+        contagem[ch] = contagem.get(ch, 0) + 1
+    candidatas = Pessoa.query.filter(Pessoa.situacao == 'Ativo',
+                                     (Pessoa.email.is_(None)) | (Pessoa.email == '')).order_by(Pessoa.id)
+    return next(p for p in candidatas if contagem[_chave(p.nome)] == 1)
 
 
 # ------------------------------------------------------------------ comparação de nomes

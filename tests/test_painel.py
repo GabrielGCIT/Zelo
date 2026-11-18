@@ -10,8 +10,11 @@ def test_painel_e_fila_abrem(cli):
         assert cli.get(u).status_code == 200
 
 
-def test_duplicadas_nao_confundem_codigos_numerados(app):
+def test_duplicadas_nao_confundem_codigos_numerados(app, monkeypatch):
     """FTCTRN0001 e FTCTRN0002 são postos diferentes; José da Silva × José da Silva é duplicata."""
+    # A tela mostra só as primeiras LIMITE linhas, em ordem alfabética. Com as duplicatas reais da
+    # planilha de 18/11, o "José" de teste caía depois do corte. O teste confere a regra, não o corte.
+    monkeypatch.setattr('app.qualidade.LIMITE', 10_000)
     db.session.add_all([Pessoa(id='Z1', nome='POSTO TESTE 0001', tipo='Posto', situacao='Ativo'),
                         Pessoa(id='Z2', nome='POSTO TESTE 0002', tipo='Posto', situacao='Ativo'),
                         Pessoa(id='Z3', nome='JOSE DA SILVA TESTE', tipo='CLT', situacao='Ativo'),
