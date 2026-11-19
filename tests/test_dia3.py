@@ -167,3 +167,49 @@ def test_espelho_tempo_real(app, cli):
     assert e['nova'] and any('NOVA' in a for a in e['atencao'])
     r = cli.post('/api/lancar/conferir', json={'aba': 'entrega', 'linhas': [{'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id}, {}]})
     assert r.json[0]['espelho']['pessoa']['id'] == p.id and r.json[1]['espelho'] is None
+
+
+def test_comparacao_de_nome_nao_casa_por_palavra_solta():
+    """Armadilha paga em 19/11: bastava UMA palavra em comum, e o "DE" fazia RICARDO DE JESUS
+    casar com JERONIMO DE LIMA SILVA. Foram 45 linhas marcadas como "mesmo usuário" sem ser."""
+    from app.analise_linhas import mesmo_nome
+    assert not mesmo_nome('RICARDO DE JESUS', 'JERONIMO DE LIMA SILVA')
+    assert not mesmo_nome('PABLO JUNIOR DE ANDRADE SANTOS', 'ROBERTO SOUZA DE JESUS')
+    assert not mesmo_nome('CARLOS HENRIQUE LEME DE SOUSA', 'CARLOS ALBERTO ALVES FLAUZINO')
+    assert not mesmo_nome('MODEM CDNE', 'Modem CDGR - Netpark')
+    assert not mesmo_nome('', 'QUALQUER NOME')
+    # acento, caixa e nome do meio abreviado continuam sendo a mesma pessoa
+    assert mesmo_nome('PLANTÃO ARMAZÉM FT I', 'Plantao Armazem FT I')
+    assert mesmo_nome('PLANTÃO ADM TRANSPORTE CARJ', 'Plantão ADM Transporte')
+    assert mesmo_nome('MARIA SOUZA SILVA', 'MARIA SILVA')
+
+
+def test_relatorio_de_linhas_traz_cargo_site_e_pessoa_desligada(app, tmp_path):
+    """Para quem administra telefonia, a coluna que decide dinheiro é a situação da pessoa: linha
+    ativa no nome de quem já saiu é conta correndo à toa. O contexto é lido na hora do relatório,
+    não guardado na rodada, para refletir um desligamento posterior à conferência."""
+    from app.analise_linhas import exportar, gravar_rodada
+    from app.models import AnaliseLinha, Linha
+    p = Pessoa(id='Z-9001', nome='TESTE DESLIGADO', tipo='CLT', situacao='Desligado',
+               cargo='Motorista', site='GR', cc='999.1', obs='JDE: CD GRU - ARMAZÉM')
+    it = Item(codigo='359999999999991', categoria='Celular', modelo='Moto G35 5G')
+    db.session.add_all([p, it, Linha(numero='11999990001', operadora='Vivo', regional='LINHA REGIONAL SP',
+                                     tipo_chip='eSIM', situacao='Em uso', com_quem=p.nome,
+                                     matricula=p.id, aparelho=it.codigo)])
+    db.session.commit()
+    rodada, _ = gravar_rodada([dict(numero='11999990001', operadora='Vivo', conta='1', usuario_easy='OUTRO NOME',
+                                    cc_easy='999.1', sem_consumo=False, sit_mb='Em uso', com_quem=p.nome,
+                                    easy_x_mb='usuário diferente', aw_visto='Visto 10/11/2026', aw_aparelho='',
+                                    aw_usuario='', aw_modelo='', decisao='OK', motivo='m', acao='a')])
+    arq = tmp_path / 'linhas.xlsx'
+    exportar(rodada, str(arq))
+    ws = openpyxl.load_workbook(arq).active
+    cab = {c.value: c.column for c in ws[1] if c.value}
+    linha = next(r for r in range(2, ws.max_row + 1) if ws.cell(r, cab['Linha']).value == '11999990001')
+    def v(nome):
+        return str(ws.cell(linha, cab[nome]).value or '')
+    assert v('Pessoa (Zelo)') == 'CLT · Desligado' and 'TESTE DESLIGADO' in v('Atenção')
+    assert v('Cargo') == 'Motorista' and v('Site') == 'GR' and v('Área') == 'CD GRU - ARMAZÉM'
+    assert v('Tipo de chip') == 'eSIM' and v('Aparelho (Zelo)').startswith('Moto G35 5G · 359999')
+    AnaliseLinha.query.filter_by(rodada=rodada).delete()
+    db.session.commit()

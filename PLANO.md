@@ -2,7 +2,7 @@
 
 ---
 
-## ONDE PARAMOS — 18/11/2026, v1.32.0
+## ONDE PARAMOS — 19/11/2026, v1.33.0
 
 Leia esta seção primeiro. O resto do arquivo é histórico e decisões; isto é o que está na mesa.
 
@@ -112,6 +112,28 @@ resposta traz só os campos pedidos que têm valor. Duas consequências:
 - a presença da chave é um sinal confiável de que o agente esteve no ativo, que é o que separa
   "cadastro manual nunca varrido" de "este build não entrega o campo".
 O simulador passou a se comportar assim.
+### Conferência de linhas: sem bloqueio, com contexto de pessoa (19/11)
+Decisão do Gabriel: **nenhuma linha é bloqueada antes de alguém ligar**. O que era "Bloquear"
+(sem consumo nos 2 meses E fora do AirWatch) virou "Validar com a Easy (ligar)" com a prioridade
+dentro da ação, então o critério não se perdeu, só deixou de cortar linha sozinho.
+
+Na revisão dele do arquivo de 19/11, três coisas viraram regra no código:
+- **"OK – ajustar cadastro" era dois trabalhos num rótulo.** Virou `Ajustar cadastro na Easy`
+  (linha em uso no aparelho certo, só o nome na Easy está diferente — é da Easy) e
+  `Ajustar cadastro no Zelo` (aparelho/pessoa diferente do cadastro — é dele). Quem recebe a lista
+  não é a mesma pessoa, então não podiam dividir rótulo.
+- **Nome igual a menos de acento é ajuste de grafia, não ligação.** 7 linhas de PLANTÃO estavam
+  indo para ligação porque "PLANTÃO ARMAZÉM FT I" ≠ "Plantao Armazem FT I".
+- **`mesmo_nome` substitui a interseção de palavras.** Era `set(palavras(u)) & set(palavras(q))`:
+  UMA palavra em comum bastava, e o "DE" fazia RICARDO DE JESUS casar com JERONIMO DE LIMA SILVA.
+  Foram **45 linhas** marcadas como "mesmo usuário" sem ser, escondidas atrás de um OK. Agora exige
+  nome inteiro, contenção com 2+ palavras, ou primeiro e último nome iguais. Tem teste.
+
+O relatório (`exportar`) passou a trazer, por linha: **Pessoa (Zelo)** com vínculo e situação,
+cargo, área do JDE, site, CC, regional, tipo de chip, aparelho com modelo, e uma coluna
+**Atenção**. Para quem administra telefonia a coluna que decide dinheiro é a situação da pessoa:
+linha ativa no nome de quem já saiu é conta correndo à toa. Nada disso é guardado em `AnaliseLinha`
+— é lido na hora do relatório, senão um desligamento posterior à rodada não apareceria.
 
 ### Armadilha paga: MATCH exato não casa número com texto (18/11)
 Ele lançou a devolução do notebook 7080 e a Categoria saiu "⚠ item não cadastrado". O Excel guardou
