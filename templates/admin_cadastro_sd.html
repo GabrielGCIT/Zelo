@@ -1,0 +1,101 @@
+{% extends 'base.html' %}{% block title %}Cadastro em massa no Service Desk{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+ <h1 class="z-titulo m-0">Cadastro em massa no Service Desk</h1>
+ <a class="btn btn-sm btn-outline-secondary ms-auto" href="{{ url_for('admin.servicedesk') }}">Voltar para Service Desk</a></div>
+<p class="z-sub">Os itens do Zelo que o Service Desk ainda não tem, por categoria: para qual tipo de produto iriam, e com qual
+ produto (modelo). Abrir esta tela só <b>lê</b> o Service Desk. A criação vai pela fila de sempre, um ativo por vez, e cada envio
+ procura o ativo de novo antes de criar — nada é duplicado porque a análise ficou velha.</p>
+
+{% if a.erro %}
+<div class="alert alert-danger"><i class="fa fa-plug-circle-xmark me-1"></i>{{ a.erro }}</div>
+{% else %}
+
+<div class="z-kpis mb-3">
+ <div class="z-kpi"><div class="r">Ativos no Service Desk</div><div class="v">{{ a.no_sd }}</div></div>
+ <div class="z-kpi"><div class="r">Faltam lá (itens vivos)</div><div class="v">{{ a.categorias|map(attribute='faltam')|map('length')|sum }}</div></div>
+ <div class="z-kpi"><div class="r">Prontos para criar</div><div class="v">{{ a.categorias|selectattr('pronta')|map(attribute='faltam')|map('length')|sum }}</div></div>
+ <div class="z-kpi"><div class="r">Produtos no Service Desk</div><div class="v">{{ a.produtos }}</div></div>
+</div>
+{% if a.truncou %}<div class="alert alert-warning small">A listagem do Service Desk parou no limite de páginas: a conta de "já no SD" pode estar baixa.</div>{% endif %}
+
+{% if fila.Pendente or fila.Erro or fila.Enviado %}
+<div class="z-card"><h2 class="h6">Andamento da fila do cadastro</h2>
+ <div class="d-flex flex-wrap gap-3 small">
+  <span><span class="badge text-bg-secondary">{{ fila.Pendente }}</span> pendentes</span>
+  <span><span class="badge text-bg-success">{{ fila.Enviado }}</span> criados/atualizados</span>
+  <span><span class="badge text-bg-danger">{{ fila.Erro }}</span> com erro</span>
+  <a class="ms-auto" href="{{ url_for('admin.servicedesk') }}">Ver e reenviar na fila</a></div>
+ {% if erros %}<div class="table-responsive mt-2"><table class="table table-sm small mb-0">
+  <thead><tr><th>Item</th><th>Nome no SD</th><th>Motivo</th></tr></thead>
+  <tbody>{% for e in erros %}<tr><td class="z-mono"><a href="{{ url_for('consulta.item', codigo=e.codigo) }}">{{ e.codigo }}</a></td>
+   <td class="z-mono">{{ e.alvo }}</td><td>{{ e.erro }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+</div>
+{% endif %}
+
+{% if not criar_ligado %}
+<div class="alert alert-warning small"><i class="fa fa-lock me-1"></i>Para criar, ligue em <a href="{{ url_for('admin.servicedesk') }}">Service Desk</a>
+ "Atualizar o ativo no Service Desk" e "Cadastrar o ativo no Service Desk quando ele não existir lá". Até lá esta tela só mostra o retrato.</div>
+{% endif %}
+
+<form method="post">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="z-card">
+ <h2 class="h6">Por categoria</h2>
+ <div class="table-responsive"><table class="table table-sm align-middle">
+  <thead><tr><th style="width:2rem"></th><th>Categoria</th><th class="text-end">Itens</th><th class="text-end">Já no SD</th>
+   <th class="text-end">Faltam</th><th>Tipo de produto → endereço</th><th>Produto</th></tr></thead>
+  <tbody>{% for c in a.categorias %}
+  {% set proprios = c.modelos|selectattr('como', 'equalto', 'proprio')|map(attribute='n')|sum %}
+  {% set genericos = c.modelos|selectattr('como', 'equalto', 'generico')|map(attribute='n')|sum %}
+  <tr class="{{ '' if c.pronta else 'text-muted' }}">
+   <td>{% if c.pronta %}<input class="form-check-input" type="checkbox" name="categorias" value="{{ c.categoria }}" {{ 'disabled' if not criar_ligado }}>{% endif %}</td>
+   <td><b>{{ c.categoria }}</b></td>
+   <td class="text-end">{{ c.total }}</td><td class="text-end">{{ c.ja_no_sd }}</td>
+   <td class="text-end"><b>{{ c.faltam|length }}</b>
+    {% if c.sem_dono and not c.so_zelo %}<div class="small z-aviso" title="O Service Desk não aceita In Use sem usuário: ponha a pessoa responsável no cadastro do item">+{{ c.sem_dono|length }} em uso sem pessoa</div>{% endif %}</td>
+   <td class="small">{% if c.tipo %}{{ c.tipo }}{% if c.endereco %} <span class="z-mono text-muted">{{ c.endereco }}</span>{% endif %}{% else %}—{% endif %}
+    {% if c.so_zelo %}<div class="text-muted"><i class="fa fa-house me-1"></i>{{ c.motivo }}</div>
+    {% elif c.motivo %}<div class="z-aviso"><i class="fa fa-triangle-exclamation me-1"></i>{{ c.motivo }}</div>{% endif %}</td>
+   <td class="small">{% if c.so_zelo %}—{% elif c.faltam %}
+    {% if proprios %}<div><span class="z-ok">{{ proprios }}</span> com o produto do próprio modelo</div>{% endif %}
+    {% if genericos %}<div><span class="z-aviso">{{ genericos }}</span> no primeiro produto do tipo</div>{% endif %}
+    {% if c.modelos %}<details><summary class="text-muted">{{ c.modelos|length }} modelo(s)</summary>
+     <table class="table table-sm small mb-0"><tbody>{% for m in c.modelos %}<tr>
+      <td>{{ m.modelo }}</td><td class="text-end">{{ m.n }}</td>
+      <td>{% if m.como == 'proprio' %}<span class="z-ok">{{ m.produto }}</span>{% elif m.como == 'generico' %}<span class="z-aviso">→ {{ m.produto }}</span>{% else %}<span class="text-muted">sem produto</span>{% endif %}</td>
+     </tr>{% endfor %}</tbody></table></details>{% endif %}
+   {% else %}<span class="z-ok">tudo no SD</span>{% endif %}</td>
+  </tr>{% endfor %}</tbody></table></div>
+ <div class="d-flex flex-wrap align-items-end gap-2 mt-2">
+  <div><label class="form-label small mb-0" for="limite">No máximo agora</label>
+   <input class="form-control form-control-sm" style="width:8rem" type="number" min="0" id="limite" name="limite" value="20"></div>
+  <button class="btn btn-sm btn-zelo" {{ 'disabled' if not criar_ligado }}><i class="fa fa-layer-group me-1"></i>Pôr na fila as categorias marcadas</button>
+  <span class="small text-muted">Item "Em uso" sem pessoa no cadastro (máquina de posto) fica fora da fila: o Service
+   Desk não aceita "In Use" sem usuário. Comece por um lote pequeno, confira no Service Desk como os ativos nasceram, e só então
+   mande o resto (0 = sem limite).</span>
+ </div>
+</div>
+</form>
+
+<div class="z-card">
+ <h2 class="h6">Como cada item vai se chamar no Service Desk</h2>
+ <ul class="small mb-2">
+  <li><b>Hostname</b>, se tiver — é como o agente acha a máquina;</li>
+  <li>senão a <b>service tag</b> — monitor, dock e coletor;</li>
+  <li>senão o <b>código do Zelo</b> — no celular sem tag é o IMEI; no resto, o código da planilha (ex.: <span class="z-mono">W-127</span>).</li>
+ </ul>
+ <p class="small text-muted mb-0">O SDP exige nome e não aceita dois ativos com o mesmo: item cujo nome repete outro do Zelo (a mesma
+  service tag em dois cadastros) fica de fora da fila — corrija o cadastro repetido antes. A service tag, a plaqueta, o site, o fornecedor, a garantia e o
+  estado vão junto; quem está com o item vai logo depois da criação, como numa entrega.</p>
+</div>
+
+<div class="z-card">
+ <h2 class="h6">Produto: um por modelo ou genérico por tipo</h2>
+ <p class="small mb-0">O Service Desk exige um produto que já exista lá, e o Zelo não cria produto. Modelo com produto de mesmo nome vai
+  com ele (<span class="z-ok">verde</span>). Os outros vão no primeiro produto do tipo (<span class="z-aviso">laranja</span>) — e o modelo
+  no SD fica errado até alguém corrigir, para sempre nos itens sem agente. Para evitar, cadastre no SD um produto com o
+  <b>nome exato</b> do modelo do Zelo antes de pôr a categoria na fila; esta tela recalcula ao recarregar.</p>
+</div>
+{% endif %}
+{% endblock %}

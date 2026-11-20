@@ -11,6 +11,9 @@ from app.lancamento import gravar
 from app.models import EnvioSD, Item, Movimentacao, Pessoa
 
 
+SERIAIS = ('serial_number', 'org_serial_number', 'service_tag')
+
+
 class SimuladorSD:
     """Responde como o ServiceDesk Plus: GET requests/{id}, PUT requests/{id}/upload, POST requests/{id}/notes."""
 
@@ -52,8 +55,15 @@ class SimuladorSD:
                     return str((x.get('name') or x.get('value') or '') if isinstance(x, dict) else (x or '')).upper()
                 # o SDP não diferencia maiúscula de minúscula na busca
                 bate = (lambda t: t.startswith(v)) if cond == 'starts with' else (lambda t: t == v)
-                return 200, json.dumps({'asset_assets': [a for a in self.ativos.values() if bate(_txt(a.get(campo)))],
-                                        'response_status': [{'status': 'success'}]})
+                achados = [a for a in self.ativos.values() if bate(_txt(a.get(campo)))]
+                # Como o build (laboratório, 18/11): a busca ACHA pela tag, mas a listagem geral não
+                # devolve os campos de série — só vêm se pedidos em fields_required.
+                pedidos = set(li.get('fields_required') or ())
+                if pedidos & self.recusa_campos_lista:
+                    return 400, json.dumps({'response_status': {'status': 'failed', 'messages': [
+                        {'message': 'Invalid field: ' + sorted(pedidos & self.recusa_campos_lista)[0]}]}})
+                achados = [{k: x for k, x in a.items() if k not in SERIAIS or k in pedidos} for a in achados]
+                return 200, json.dumps({'asset_assets': achados, 'response_status': [{'status': 'success'}]})
             pedidos = set(li.get('fields_required') or ())
             if pedidos & self.recusa_campos_lista:                  # um nome inválido derruba tudo
                 return 400, json.dumps({'response_status': {'status': 'failed', 'messages': [
@@ -113,6 +123,10 @@ class SimuladorSD:
             if self.recusa_post:
                 return 400, json.dumps({'response_status': {'status': 'failed',
                                                             'messages': [{'message': self.recusa_post}]}})
+            # laboratório (18/11): nascer "In Use" exige o usuário na mesma chamada
+            if (novo.get('state') or {}).get('name') == 'In Use' and not novo.get('user'):
+                return 400, json.dumps({'response_status': {'status': 'failed', 'messages': [{'message':
+                    'Please provide atleast one of these values: used_by_asset OR user and/or department.'}]}})
             if self.recusa_campo and self.recusa_campo in novo:   # como o SDP: não diz qual campo
                 return 400, json.dumps({'response_status': {'status': 'failed',
                                                             'messages': [{'message': 'Invalid Input'}]}})
@@ -544,10 +558,10 @@ def test_criar_ativo_leva_hostname_tag_e_plaqueta(app, cli, sim):
 def test_campo_vazio_nao_entra_no_corpo(app, sim):
     """No SDP mandar nulo apaga o que está lá; não mandar o campo deixa como está."""
     from types import SimpleNamespace
-    it = SimpleNamespace(hostname='NB-X', tag='', plaqueta='', categoria='Monitor', site='',
+    it = SimpleNamespace(hostname='NB-X', tag='', plaqueta='', categoria='Notebook', site='',
                          fornecedor='', garantia='')
     c = sd.corpo_do_item(it)
-    assert c == {'name': 'NB-X', 'product_type': {'name': 'Monitor'}}
+    assert c == {'name': 'NB-X', 'product_type': {'name': 'Laptop'}}
 
 
 def test_categoria_sem_tipo_cria_sem_product_type(app, sim):
@@ -567,13 +581,12 @@ def test_sd_tipos_sobrepoe_o_padrao(app, sim):
         hostname='MON-1', tag='', plaqueta='', categoria='Monitor', site='', fornecedor='', garantia=''))
 
 
-def test_item_sem_hostname_nao_tenta_criar(app, sim):
+def test_item_sem_hostname_cria_pela_service_tag(app, sim):
+    """Desde o cadastro em massa (v1.34.0), item sem hostname nasce no SD com a service tag como
+    nome — a regra está em test_cadastro_sd.py."""
     from types import SimpleNamespace
-    sd.salvar_conf({'sd_ativos': 'Sim', 'sd_criar_ativo': 'Sim'})
-    it = SimpleNamespace(hostname='', tag='ABC', plaqueta='', categoria='Celular', site='',
-                         fornecedor='', garantia='')
-    with pytest.raises(sd.ErroSD, match='sem hostname'):
-        sd.criar_ativo(it)
+    assert sd.corpo_do_item(SimpleNamespace(hostname='', tag='ABC', plaqueta='', categoria='Celular', site='',
+                                            fornecedor='', garantia=''))['name'] == 'ABC'
 
 
 def test_diagnostico_cria_confere_e_apaga(app, sim):
@@ -1305,3 +1318,48 @@ def test_garantia_invalida_fica_fora_do_corpo(app, sim):
 def test_diagnostico_testa_a_garantia(app, sim):
     ok, linhas = sd.diagnostico_criacao()
     assert ok and 'warranty_expiry' in '\n'.join(linhas)
+
+
+def test_busca_pede_a_tag_e_le_a_tag_de_volta(app, sim):
+    """Laboratório (18/11): a listagem geral acha pela service tag mas só devolve a tag se ela for
+    pedida em fields_required. Sem pedir, achar pela tag nunca funcionou fora do simulador."""
+    s, _p = sim
+    a = {'id': '880', 'name': 'NOME-NOVO', 'serial_number': 'TAGBUSCA1'}
+    s.ativos['NOME-NOVO'], s.ativos_por_id['880'] = a, a
+    achado = sd.achar_ativo('NOME-VELHO', 'TAGBUSCA1')
+    assert achado and achado['id'] == '880'
+    assert sd._tag_do_ativo(sd.achar_ativo('NOME-NOVO')) == 'TAGBUSCA1'
+
+
+def test_build_que_recusa_os_campos_pedidos_ainda_acha_pelo_nome(app, sim):
+    s, _p = sim
+    a = {'id': '881', 'name': 'MAQ-RECUSA', 'serial_number': 'TAGX'}
+    s.ativos['MAQ-RECUSA'], s.ativos_por_id['881'] = a, a
+    s.recusa_campos_lista = {'org_serial_number'}
+    assert sd.achar_ativo('MAQ-RECUSA')['id'] == '881'
+
+
+def test_entrega_cria_ja_em_uso_com_o_usuario(app, cli, sim):
+    """Laboratório (18/11): o SDP recusa nascer "In Use" sem usuário na mesma chamada. Criar e
+    depois pôr o usuário fazia todo item em uso falhar no cadastro em massa."""
+    s, p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim', 'sd_criar_ativo': 'Sim'})
+    it = _com_host()
+    s.usuarios.append({'id': '41', 'name': p.nome, 'email_id': ''})
+    cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}]})
+    e = EnvioSD.query.filter_by(tipo='ativo').one()
+    a = s.ativos[it.hostname.upper()]
+    assert e.status == 'Enviado', e.erro
+    assert a['user'] == {'id': '41'} and a['state']['name'] == 'In Use'
+
+
+def test_pessoa_nao_achada_nao_deixa_ativo_pela_metade(app, cli, sim):
+    s, p = sim
+    sd.salvar_conf({'sd_ativos': 'Sim', 'sd_criar_ativo': 'Sim'})
+    it = _com_host()
+    cli.post('/api/lancar/gravar', json={'aba': 'entrega', 'linhas': [
+        {'acao': 'Entregar agora', 'item': it.codigo, 'para': p.id, 'acess': 'Nenhum'}]})
+    e = EnvioSD.query.filter_by(tipo='ativo').one()
+    assert e.status == 'Erro' and 'não encontrado' in e.erro
+    assert it.hostname.upper() not in s.ativos          # nada criado: o reenvio cria inteiro

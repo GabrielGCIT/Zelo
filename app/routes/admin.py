@@ -128,8 +128,44 @@ def servicedesk():
                            criar_ativo=sd.conf('sd_criar_ativo') or 'Não', tipos=sd.conf('sd_tipos') or '',
                            campos_zelo=sd.conf('sd_campos_zelo') or 'Não', apelidos=sd.conf('sd_apelidos') or '',
                            padrao_estados='; '.join(f'{k} = {v}' for k, v in sd.ESTADO_PADRAO.items()),
-                           padrao_tipos='; '.join(f'{k} = {v}' for k, v in sd.TIPO_PADRAO.items()),
+                           padrao_tipos='; '.join(f'{k} = {v or "(só no Zelo)"}' for k, v in sd.TIPO_PADRAO.items()),
                            pendentes=sum(1 for e in envios if e.status != 'Enviado'))
+
+
+LOTE_SINCRONO = 20
+
+
+@admin_bp.route('/servicedesk/cadastro', methods=['GET', 'POST'])
+@exige('admin')
+def cadastro_sd():
+    """Cadastro em massa no Service Desk: primeiro o retrato (o que falta, para onde iria, com
+    qual produto), depois a fila. Nada é escrito no GET."""
+    from app import cadastro_sd as cad
+    from app import servicedesk as sd
+    from app.models import EnvioSD
+    if request.method == 'POST':
+        cats = request.form.getlist('categorias')
+        try:
+            limite = max(0, int(request.form.get('limite') or 0)) or None
+        except ValueError:
+            limite = None
+        if not cats:
+            flash('Marque ao menos uma categoria.', 'warning')
+            return redirect(url_for('admin.cadastro_sd'))
+        ids, recado = cad.enfileirar(cats, limite)
+        registrar_log('service desk', f'cadastro em massa: {recado} Categorias: {", ".join(cats)}'
+                      + (f'; limite {limite}' if limite else ''))
+        if ids:
+            sd.processar(current_app._get_current_object(), ids)
+        flash(recado + (' Seguindo em segundo plano.' if ids else ''), 'success' if ids else 'warning')
+        return redirect(url_for('admin.cadastro_sd'))
+    a = cad.analisar()
+    fila = {s: EnvioSD.query.filter(EnvioSD.tipo == 'ativo', EnvioSD.codigo.isnot(None), EnvioSD.mov_id.is_(None),
+                                    EnvioSD.status == s).count() for s in ('Pendente', 'Erro', 'Enviado')}
+    erros = (EnvioSD.query.filter(EnvioSD.tipo == 'ativo', EnvioSD.mov_id.is_(None), EnvioSD.status == 'Erro')
+             .order_by(EnvioSD.id.desc()).limit(30).all())
+    return render_template('admin_cadastro_sd.html', a=a, fila=fila, erros=erros,
+                           criar_ligado=sd.criar_ativo_ligado())
 
 
 def _servicedesk_post(sd, EnvioSD, acao):
@@ -188,6 +224,13 @@ def _servicedesk_post(sd, EnvioSD, acao):
     elif acao == 'reenviar':
         ids = [int(i) for i in request.form.getlist('ids') if i.isdigit()] or \
               [e.id for e in EnvioSD.query.filter(EnvioSD.status != 'Enviado')]
+        if len(ids) > LOTE_SINCRONO:
+            # Com o cadastro em massa a fila pode ter milhares: mandar tudo dentro do clique
+            # derrubaria a requisição por tempo, no meio, sem dizer até onde foi.
+            sd.processar(current_app._get_current_object(), ids)
+            registrar_log('service desk', f'reenvio de {len(ids)} em segundo plano')
+            flash(f'{len(ids)} envio(s) seguindo em segundo plano. Recarregue esta tela para acompanhar.', 'success')
+            return redirect(url_for('admin.servicedesk'))
         ok = sum(sd.enviar(e) for e in EnvioSD.query.filter(EnvioSD.id.in_(ids)))
         registrar_log('service desk', f'reenvio: {ok} de {len(ids)} enviado(s)')
         flash(f'{ok} de {len(ids)} envio(s) concluído(s).', 'success' if ok == len(ids) else 'warning')

@@ -34,6 +34,8 @@ TIPOS_ENVIO = ('Entrega', 'Empréstimo', 'Devolução')
 NOMES_TIPO = {'chamado': 'Termo + nota', 'ativo': 'Ativo', 'termo': 'Termo assinado'}
 _cache = {}            # chamado → (quando, dados)
 _modulos = {}          # tipos de produto do SD: {'quando', 'lista'}
+_produtos = {}         # produtos do SD: {'quando', 'lista'} — o cadastro em massa cria milhares
+_campos_mod = {}       # plural do módulo → (quando, campos que o _metainfo dele lista)
 CACHE_SEG = 300
 
 # Transporte trocável nos testes: f(metodo, url, headers, corpo_bytes) → (status, texto)
@@ -57,6 +59,8 @@ def salvar_conf(valores):
     db.session.commit()
     _cache.clear()
     _modulos.clear()          # trocar de Service Desk troca a lista de tipos
+    _produtos.clear()
+    _campos_mod.clear()
     _degrau_lista['i'] = 0    # e o que a listagem dele aceita
 
 
@@ -222,9 +226,11 @@ def anexar_ativo_ligado():
     return configurado() and conf('sd_anexar_ativo') == 'Sim'
 
 
-def _busca(campo, valor, linhas=5, condicao='is'):
-    return {'list_info': {'row_count': linhas,
-                          'search_criteria': {'field': campo, 'condition': condicao, 'value': valor}}}
+def _busca(campo, valor, linhas=5, condicao='is', campos=None):
+    li = {'row_count': linhas, 'search_criteria': {'field': campo, 'condition': condicao, 'value': valor}}
+    if campos:
+        li['fields_required'] = list(campos)
+    return {'list_info': li}
 
 
 def host_curto(nome):
@@ -293,6 +299,32 @@ def _valor_campo(v):
     return str((v.get('name') or v.get('value') or '') if isinstance(v, dict) else (v or '')).strip()
 
 
+def _procurar(campo, valor, condicao='is'):
+    """Busca na listagem geral pedindo os campos que o Zelo lê do achado.
+
+    Sem `fields_required`, a busca ACHA pela service tag mas não a devolve, nem devolve a tag de
+    quem foi achado pelo nome (laboratório, 18/11): a conferência da tag descartava todo achado, e
+    o aviso "service tag no SD ≠ Zelo" nunca disparou fora do simulador. Se um build recusar os
+    campos pedidos, repete sem eles — achar continua valendo mais que ler a tag.
+    """
+    campos = tuple(dict.fromkeys(CAMPOS_LISTA + tuple(_campos_tag())))
+    try:
+        return _http('GET', '/api/v3/asset_assets', _busca(campo, valor, condicao=condicao, campos=campos)
+                     ).get('asset_assets') or []
+    except ErroSD as e:
+        if 'Sem conexão' in str(e):
+            raise
+        return _http('GET', '/api/v3/asset_assets', _busca(campo, valor, condicao=condicao)).get('asset_assets') or []
+
+
+def _tag_do_ativo(a):
+    for campo in _campos_tag():
+        v = _valor_campo(a.get(campo))
+        if v:
+            return v
+    return ''
+
+
 def achar_ativo(hostname, tag=None):
     """O ativo do Service Desk para este hostname. None se não existir.
 
@@ -309,13 +341,12 @@ def achar_ativo(hostname, tag=None):
     """
     host = (hostname or '').strip()
     if host:
-        lst = _http('GET', '/api/v3/asset_assets', _busca('name', host)).get('asset_assets') or []
+        lst = _procurar('name', host)
         if lst:
             return lst[0]
         curto = host_curto(host)
         try:
-            lst = _http('GET', '/api/v3/asset_assets',
-                        _busca('name', curto + '.', condicao='starts with')).get('asset_assets') or []
+            lst = _procurar('name', curto + '.', condicao='starts with')
         except ErroSD:
             lst = []
         iguais = [a for a in lst if host_curto(a.get('name')) == curto]
@@ -328,7 +359,7 @@ def achar_ativo(hostname, tag=None):
     if t:
         for campo in _campos_tag():
             try:
-                lst = _http('GET', '/api/v3/asset_assets', _busca(campo, t)).get('asset_assets') or []
+                lst = _procurar(campo, t)
             except ErroSD:
                 continue                  # campo que este build não conhece
             # confere o valor em vez de confiar no filtro: build que ignora o critério devolve tudo
@@ -507,16 +538,28 @@ def acao_ativo(m, it=None):
 # Categoria no Zelo → tipo de produto no Service Desk. Só o que existe de fábrica no SDP; o que
 # não está aqui vai sem tipo, e o SDP resolve (ou recusa, e o erro aparece na fila). Editável em
 # `sd_tipos` para quem renomeou os tipos.
+#
+# Os nomes são os tipos de fábrica que o laboratório lista (27; a MB lista 27 também). 'Mobile' e
+# 'Handheld', que estavam aqui, não existem em nenhum dos dois: celular e coletor iam para um tipo
+# inexistente. Monitor e dock não têm tipo de fábrica no SDP — ficam com o nome óbvio para a tela de
+# cadastro em massa apontar "esse tipo não existe no seu SD: crie lá ou mapeie para outro".
+#
+# Monitor, dock e base de coletor ficam SÓ NO ZELO (decisão do Gabriel, 18/11): no SD vale ter o que
+# o usuário consegue apontar ao abrir chamado — o que está vinculado a ele, o notebook de
+# empréstimo. Ninguém lê o S/N de um monitor ou de um dock para abrir chamado; cadastrá-los lá seria
+# ~900 ativos que só envelhecem. O controle deles (com quem está, termo, histórico) é do Zelo.
+# Quem quiser mandar mesmo assim, mapeia em "Tipos de produto próprios" (ex.: Monitor=Monitor).
+SO_NO_ZELO = ('Monitor', 'Dock station', 'Base de coletor')
 TIPO_PADRAO = {
-    'Notebook': 'Laptop', 'Desktop': 'Desktop', 'Thin client': 'Computer',
-    'Monitor': 'Monitor', 'Dock station': 'Docking Station', 'Celular': 'Mobile',
-    'Tablet': 'Tablet', 'Coletor': 'Handheld', 'Telefone IP': 'IP Phone', 'Impressora': 'Printer',
+    'Notebook': 'Laptop', 'Desktop': 'Desktop', 'Thin client': 'Computer', 'Celular': 'Smart Phone',
+    'Tablet': 'Tablet', 'Coletor': 'Mobile Device', 'Telefone IP': 'IP Phone', 'Impressora': 'Printer',
+    **{c: '' for c in SO_NO_ZELO},
 }
 
 
 def mapa_tipos():
     """O mapa em vigor. `sd_tipos` sobrepõe o padrão: 'Categoria=Tipo;Categoria=Tipo'."""
-    mapa = dict(TIPO_PADRAO)
+    mapa = {k: (v or None) for k, v in TIPO_PADRAO.items()}
     for par in (conf('sd_tipos') or '').split(';'):
         cat, _s, tp = par.partition('=')
         cat, tp = cat.strip(), tp.strip()
@@ -563,6 +606,33 @@ def _data_sdp(texto):
     return ''
 
 
+def nome_no_sd(it):
+    """Como o item se chama no Service Desk: hostname, senão service tag, senão o código do Zelo.
+
+    O SDP exige nome e não aceita dois ativos com o mesmo. Máquina se chama pelo hostname, porque é
+    assim que o agente a encontra. Monitor, celular, dock e coletor não têm hostname (são ~2300 dos
+    3300 itens): vão pela service tag, que é única e está etiquetada no aparelho; sem ela, pelo
+    código do Zelo — que no celular é o IMEI e no resto é o código da planilha. Regra fixa e
+    previsível, e não "o melhor nome que der": quem procura o ativo no SD precisa saber por onde.
+    """
+    for v in (getattr(it, 'hostname', ''), getattr(it, 'tag', ''), getattr(it, 'codigo', '')):
+        if (v or '').strip():
+            return v.strip().upper()
+    return ''
+
+
+def sincroniza(it):
+    """Se o estado deste item vai para o Service Desk. Máquina (com hostname), sempre. O resto, só
+    quando o Zelo cria ativo e a categoria tem tipo de produto: aí é o Zelo quem põe esses itens lá,
+    e a entrega de um monitor tem de chegar como chega a de um notebook. Sem essa condição a fila
+    encheria de "não existe no SD" para item que nunca vai existir lá."""
+    if not it:
+        return False
+    if (it.hostname or '').strip():
+        return True
+    return criar_ativo_ligado() and bool(mapa_tipos().get(it.categoria or '')) and bool(nome_no_sd(it))
+
+
 def corpo_do_item(it, estado=None):
     """O que o Zelo manda sobre um ativo — só os campos de que ELE é dono.
 
@@ -575,8 +645,8 @@ def corpo_do_item(it, estado=None):
     e o primeiro apaga o que estiver lá.
     """
     c = {}
-    if (it.hostname or '').strip():
-        c['name'] = it.hostname.strip().upper()
+    if nome_no_sd(it):
+        c['name'] = nome_no_sd(it)
     if (it.tag or '').strip():
         c['serial_number'] = it.tag.strip()
     if (it.plaqueta or '').strip():
@@ -678,12 +748,18 @@ def obrigatorios(plural):
     return sorted(_varrer(j.get('metainfo') or j, set()))
 
 
-def listar_produtos(limite_paginas=20):
+def listar_produtos(limite_paginas=20, recarregar=False):
     """Todos os produtos do Service Desk. Levanta ErroSD — quem chama decide o que fazer.
 
     Sem `search_criteria` de propósito: o filtro por tipo nem sempre existe, e um filtro que o
     build não entende derruba a chamada. Vêm todos e o Zelo peneira aqui.
+
+    Guardado por alguns minutos: cada criação precisa da lista, e o cadastro em massa cria milhares
+    seguidos — sem isso seriam milhares de varreduras do catálogo inteiro para a mesma resposta.
     """
+    agora = time.time()
+    if not recarregar and _produtos.get('quando', 0) + CACHE_SEG > agora:
+        return _produtos['lista']
     saida, inicio = [], 1
     for _p in range(limite_paginas):
         j = _http('GET', '/api/v3/products',
@@ -693,6 +769,7 @@ def listar_produtos(limite_paginas=20):
         if not pagina or not (j.get('list_info') or {}).get('has_more_rows'):
             break
         inicio += 100
+    _produtos.update(quando=agora, lista=saida)
     return saida
 
 
@@ -721,6 +798,17 @@ def campos_metainfo(plural):
                 _varrer(v)
     _varrer(j.get('metainfo') or j)
     return sorted(achados)
+
+
+def campos_do_modulo(plural):
+    """`campos_metainfo` guardado por alguns minutos: a criação pergunta por módulo, e o cadastro em
+    massa cria centenas no mesmo módulo seguidos."""
+    agora = time.time()
+    quando, campos = _campos_mod.get(plural, (0, None))
+    if campos is None or quando + CACHE_SEG < agora:
+        campos = set(campos_metainfo(plural))
+        _campos_mod[plural] = (agora, campos)
+    return campos
 
 
 def achar_produto(modelo=None, tipo=None):
@@ -755,7 +843,7 @@ def achar_produto(modelo=None, tipo=None):
     return None, f'há {len(todos)} produto(s), mas sem tipo de produto não dá para escolher'
 
 
-def criar_ativo(it, estado=None, relato=None):
+def criar_ativo(it, estado=None, relato=None, usuario_id=None):
     """Cria o ativo no Service Desk a partir do cadastro do Zelo. Devolve o ativo criado.
 
     Um por chamada, como toda escrita neste build. O `product` entra porque o SDP exige um, mas só
@@ -763,8 +851,10 @@ def criar_ativo(it, estado=None, relato=None):
     porque inventar cadastro no SDP é a sujeira que esta integração existe para evitar.
     """
     corpo = corpo_do_item(it, estado)
+    if usuario_id:
+        corpo['user'] = {'id': str(usuario_id)}
     if not corpo.get('name'):
-        raise ErroSD('Item sem hostname no Zelo: o ativo no Service Desk é identificado pelo nome')
+        raise ErroSD('Item sem hostname, service tag nem código no Zelo: o ativo no Service Desk precisa de um nome')
     tipo = (corpo.get('product_type') or {}).get('name')
     if not tipo:
         raise ErroSD(f'Categoria "{it.categoria}" sem tipo de produto: a criação precisa de um '
@@ -783,6 +873,12 @@ def criar_ativo(it, estado=None, relato=None):
         corpo['product'] = {'id': prod['id']} if prod.get('id') else {'name': prod.get('name')}
     elif 'product' in obrigatorios(plural):
         raise ErroSD(f'O Service Desk exige um produto para criar o ativo, e {recado}')
+    # IMEI só onde o módulo tem o campo (celular, tablet, mobile device): no laboratório (18/11) ele
+    # gravou na criação de Smart Phone e derrubou a de Laptop com "Invalid Input". Perguntar ao
+    # _metainfo do módulo é o que separa os dois sem lista fixa de tipos.
+    imei = (getattr(it, 'imei1', '') or '').strip()
+    if imei and 'imei' in campos_do_modulo(plural):
+        corpo['imei'] = imei
     # O tipo de produto já cumpriu o papel dele, que era escolher o endereço; o endereço e o
     # produto dizem o tipo ao SDP. Mandá-lo no corpo é redundante e o SDP recusa — então sai daqui
     # em vez de virar "campo recusado" no diagnóstico a cada rodada.
@@ -1118,24 +1214,24 @@ def enviar_ativo(envio, m):
     """Atualiza usuário e estado do ativo. Funciona sem lançamento: manutenção e ajuste de cadastro
     mudam a situação do item sem gerar movimentação, e o estado no Service Desk tem que acompanhar."""
     from app.models import Item, Pessoa
-    it = db.session.get(Item, m.item) if (m is not None and m.item) else None
+    it = db.session.get(Item, envio.codigo) if envio.codigo else None
+    if not it and m is not None and m.item:
+        it = db.session.get(Item, m.item)
     if not it and envio.alvo:
         it = Item.query.filter(Item.hostname.ilike(envio.alvo)).first()
-    host = (envio.alvo or (it.hostname if it else '') or '').strip().upper()
+    host = (envio.alvo or (nome_no_sd(it) if it else '') or '').strip().upper()
     if not host:
         raise ErroSD('Item sem hostname no Zelo: não dá para achar o ativo no Service Desk')
     estado = acao_ativo(m, it)
     a = achar_ativo(host, it.tag if it else None)
-    nasceu = ''
-    if not a:
-        if not (it and criar_ativo_ligado()):
-            raise ErroSD(f'Ativo {host} não existe no Service Desk')
-        a = criar_ativo(it, estado)
-        nasceu = ' (cadastrado agora)'
-    extra = {k: v for k, v in corpo_do_item(it).items() if k in CAMPOS_ZELO} \
-        if (it and not nasceu and campos_zelo_ligado()) else None
-    # quem está com o ativo sai do CADASTRO do item, não do lançamento: assim uma correção pelo
+    if not a and not (it and criar_ativo_ligado()):
+        raise ErroSD(f'Ativo {host} não existe no Service Desk')
+    # Quem está com o ativo sai do CADASTRO do item, não do lançamento: assim uma correção pelo
     # Ajustar cadastro chega ao Service Desk igual a uma entrega.
+    # E é resolvido ANTES de criar: o SDP recusa nascer "In Use" sem usuário na mesma chamada
+    # ("provide atleast one of these values: used_by_asset OR user", laboratório 18/11) — criar e
+    # depois pôr o usuário fazia todo item em uso falhar no cadastro em massa. Procurar antes
+    # também evita deixar no SD um ativo nascido pela metade quando a pessoa não é achada.
     uid, quem = None, ''
     if it and it.situacao in COM_PESSOA and it.matricula:
         p = db.session.get(Pessoa, it.matricula)
@@ -1144,9 +1240,21 @@ def enviar_ativo(envio, m):
         if not u:
             raise ErroSD(f'{quem or it.matricula} não encontrado(a) como usuário no Service Desk')
         uid = u.get('id')
-    atualizar_ativo(a['id'], uid, estado, extra)
+    elif it and it.situacao in COM_PESSOA and estado == 'In Use':
+        # Máquina de posto no CD: "Em uso" sem ninguém no cadastro. O SDP não aceita In Use sem
+        # usuário (nem criar, nem atualizar), e mandar outro estado seria mentir sobre ela.
+        raise ErroSD(f'{host} está "{it.situacao}" sem pessoa no Zelo, e o Service Desk não aceita '
+                     '"In Use" sem usuário: ponha a pessoa responsável no cadastro do item')
+    nasceu = ''
+    if not a:
+        a = criar_ativo(it, estado, usuario_id=uid)
+        nasceu = ' (cadastrado agora)'
+    extra = {k: v for k, v in corpo_do_item(it).items() if k in CAMPOS_ZELO} \
+        if (it and not nasceu and campos_zelo_ligado()) else None
+    if not nasceu:
+        atualizar_ativo(a['id'], uid, estado, extra)
     aviso = ''
-    serial = (a.get('serial_number') or a.get('service_tag') or '')
+    serial = _tag_do_ativo(a)
     if it and it.tag and serial and serial.upper() != it.tag.upper():
         aviso = f' (atenção: service tag no SD {serial} ≠ Zelo {it.tag})'
     nome_sd = (a.get('name') or '').strip()
@@ -1203,13 +1311,13 @@ def enfileirar_ativos(movs):
                                                       EnvioSD.status == 'Pendente').all()}
     for m in movs:
         it = db.session.get(Item, m.item) if m.item else None
-        if not (it and (it.hostname or '').strip()):
+        if not sincroniza(it):
             continue
-        host = it.hostname.strip().upper()
+        host = nome_no_sd(it)
         if host in vistos or host in pendentes:
             continue
         vistos.add(host)
-        e = EnvioSD(mov_id=m.id, tipo='ativo', alvo=host, status='Pendente',
+        e = EnvioSD(mov_id=m.id, tipo='ativo', alvo=host, codigo=it.codigo, status='Pendente',
                     criado=datetime.now().isoformat(timespec='seconds'), tentativas=0)
         db.session.add(e)
         novos.append(e)
@@ -1228,12 +1336,12 @@ def enfileirar_item(app_, codigo):
     if not ativos_ligado():
         return 0
     it = db.session.get(Item, codigo) if isinstance(codigo, str) else codigo
-    if not (it and (it.hostname or '').strip()):
+    if not sincroniza(it):
         return 0
-    host = it.hostname.strip().upper()
+    host = nome_no_sd(it)
     if EnvioSD.query.filter(EnvioSD.tipo == 'ativo', EnvioSD.status == 'Pendente', EnvioSD.alvo == host).first():
         return 0
-    e = EnvioSD(mov_id=None, tipo='ativo', alvo=host, status='Pendente',
+    e = EnvioSD(mov_id=None, tipo='ativo', alvo=host, codigo=it.codigo, status='Pendente',
                 criado=datetime.now().isoformat(timespec='seconds'), tentativas=0)
     db.session.add(e)
     db.session.commit()

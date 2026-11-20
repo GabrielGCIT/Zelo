@@ -1,6 +1,7 @@
 {% extends 'base.html' %}{% block title %}Service Desk{% endblock %}
 {% block content %}
-<h1 class="z-titulo">Integração com o Service Desk</h1>
+<div class="d-flex flex-wrap align-items-center gap-2"><h1 class="z-titulo m-0">Integração com o Service Desk</h1>
+ <a class="btn btn-sm btn-outline-secondary ms-auto" href="{{ url_for('admin.cadastro_sd') }}"><i class="fa fa-layer-group me-1"></i>Cadastro em massa</a></div>
 <p class="z-sub">Lançamento com Nº de chamado: o Zelo anexa o PDF do termo ao chamado e grava uma nota (visível só para técnicos). Na conferência em tempo real, o chamado mostra o solicitante. Se o Service Desk estiver fora, o lançamento grava normal e o envio fica aqui para reenviar.</p>
 <div class="row g-3"><div class="col-lg-6"><div class="z-card"><h2>Conexão</h2>
 {# O botão de testar mora DENTRO desta ficha de propósito: fora dela ele testava o que estava
@@ -22,7 +23,8 @@
  <div class="col-12"><label class="form-label mb-0">Atualizar o ativo no Service Desk (usuário e estado)</label><select class="form-select form-select-sm" name="sd_ativos">{% for o in ['Não','Sim'] %}<option {{ 'selected' if ativos==o }}>{{ o }}</option>{% endfor %}</select>
   <div class="form-text">O estado sai da <b>situação atual do item</b>, então o ciclo inteiro acompanha: entrega e empréstimo viram
    "In Use" com a pessoa, devolução volta para "In Store" sem usuário, manutenção vira "In Repair" e baixa vira "Expired".
-   O ativo é achado pelo hostname, e item sem hostname no Zelo não sincroniza.</div></div>
+   O ativo é achado pelo hostname. Item sem hostname (monitor, celular, dock…) só sincroniza com o cadastro ligado,
+   e aí pelo nome que o Zelo deu a ele no SD: a service tag, ou o código.</div></div>
  <div class="col-12"><label class="form-label mb-0">Anexar o equipamento ao chamado</label><select class="form-select form-select-sm" name="sd_anexar_ativo">{% for o in ['Não','Sim'] %}<option {{ 'selected' if anexar_ativo==o }}>{{ o }}</option>{% endfor %}</select>
   <div class="form-text">Além da nota, põe o equipamento <b>dentro</b> do chamado, na lista de ativos. Ele lê os que já estão lá e
    acrescenta, sem apagar os outros. Se não passar, a nota e o termo valem do mesmo jeito.</div></div>
@@ -80,7 +82,7 @@
 <form method="post" class="ms-auto"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acao" value="reenviar"><button class="btn btn-sm btn-outline-secondary"><i class="fa fa-rotate me-1"></i>Reenviar pendentes</button></form>{% endif %}</div>
 {% if not envios %}<p class="text-muted mt-2">Nenhum envio ainda.</p>{% else %}
 <div class="table-responsive mt-2"><table class="table table-sm z-tab small"><thead><tr><th>Quando</th><th>Lançamento</th><th>O quê</th><th>Chamado / ativo</th><th>Status</th><th>Tentativas</th><th>Detalhe</th></tr></thead><tbody>
-{% for e in envios %}<tr><td>{{ e.criado|replace('T',' ') }}</td><td><a href="{{ url_for('termo.inicio', n=e.mov_id) }}">Nº {{ e.mov_id }}</a></td><td>{{ {'ativo': 'Ativo', 'termo': 'Termo assinado'}.get(e.tipo, 'Termo + nota') }}</td><td class="z-mono">{{ e.alvo if e.tipo=='ativo' else e.chamado }}</td>
+{% for e in envios %}<tr><td>{{ e.criado|replace('T',' ') }}</td><td>{% if e.mov_id %}<a href="{{ url_for('termo.inicio', n=e.mov_id) }}">Nº {{ e.mov_id }}</a>{% elif e.codigo %}<a href="{{ url_for('consulta.item', codigo=e.codigo) }}">{{ e.codigo }}</a>{% else %}—{% endif %}</td><td>{{ {'ativo': 'Ativo', 'termo': 'Termo assinado'}.get(e.tipo, 'Termo + nota') }}</td><td class="z-mono">{{ e.alvo if e.tipo=='ativo' else e.chamado }}</td>
 <td><span class="badge text-bg-{{ 'success' if e.status=='Enviado' else ('danger' if e.status=='Erro' else 'secondary') }}">{{ e.status }}</span></td><td>{{ e.tentativas }}</td><td>{{ e.erro or (e.enviado|replace('T',' ') if e.enviado else '') }}</td></tr>{% endfor %}
 </tbody></table></div>{% endif %}</div>
 {% endblock %}

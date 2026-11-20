@@ -344,7 +344,10 @@ class EnvioSD(db.Model):
     mov_id = db.Column(db.Integer, index=True)
     tipo = db.Column(db.String(10), default='chamado')  # chamado (termo + nota) | ativo (usuário/estado do ativo)
     chamado = db.Column(db.String(30), index=True)
-    alvo = db.Column(db.String(60))                     # tipo ativo: hostname procurado no Service Desk
+    alvo = db.Column(db.String(60))                     # tipo ativo: nome procurado no Service Desk
+    # tipo ativo: o item do Zelo. O alvo sozinho não basta desde que monitor e celular entraram
+    # (nome = service tag ou código, não hostname): achar o item pelo nome seria adivinhar.
+    codigo = db.Column(db.String(60))
     status = db.Column(db.String(15), index=True)      # Pendente | Enviado | Erro
     anexo_ok = db.Column(db.Boolean, default=False)
     tentativas = db.Column(db.Integer, default=0)

@@ -2,13 +2,101 @@
 
 ---
 
-## ONDE PARAMOS — 19/11/2026, v1.33.0
+## ONDE PARAMOS — 20/11/2026, v1.34.0
 
 Leia esta seção primeiro. O resto do arquivo é histórico e decisões; isto é o que está na mesa.
 
 **Foco desde 18/11: desenvolver** (funcionalidade, integração com o SD, bugs). O servidor só entra
 na pauta quando o Gabriel avisar. Fluxo: alteração e commit na máquina dele, `git pull` e teste
 no servidor. A suíte roda local com `ZELO_PLANILHA_TESTE` apontando para a planilha atual.
+
+**Próximo, já combinado: G — abrir chamado pelo Zelo**, com permissão para testar no laboratório.
+
+### Cadastro em massa no Service Desk (18–20/11, v1.34.0)
+Sem o agente do SDP garantido, o Zelo cria todos os ativos — deixou de ser opcional.
+Administração → Service Desk → **Cadastro em massa**:
+- **retrato antes de escrever** (o GET só lê): por categoria, quantos itens vivos, quantos o SD já
+  tem (pelo nome curto ou pela service tag), para qual tipo de produto/endereço iriam, e por modelo
+  se há **produto próprio** (mesmo nome) ou se cai no **primeiro produto do tipo**. É a decisão
+  "produto por modelo × genérico" com número: cadastrar no SD um produto com o nome exato do
+  modelo e recarregar a tela muda a conta;
+- categoria **bloqueada, com o motivo**, quando: não tem tipo no mapa, está desligada (`Monitor=`),
+  o tipo não existe no SD, ou não há nenhum produto daquele tipo. O Zelo não cria tipo nem produto;
+- a escrita é a **fila de sempre** (`EnvioSD` tipo ativo, agora com `codigo` do item), em segundo
+  plano, com "no máximo N agora" para começar por um lote pequeno. Cada envio procura o ativo de
+  novo antes de criar; a segunda rodada não reenfileira o que está na fila ou já está lá. Item
+  Baixado não entra. "Reenviar pendentes" com mais de 20 também vai para segundo plano.
+
+**Nome no SD** (`nome_no_sd`): hostname → service tag → código do Zelo (no celular sem tag, o
+IMEI). Antes, item sem hostname não podia ser criado — e são ~2300 dos 3300. Depois de criados,
+monitor/celular/dock passam a sincronizar entrega e devolução **se** a criação estiver ligada e a
+categoria tiver tipo (`sincroniza`); sem isso a fila encheria de "não existe no SD".
+
+**Mapa padrão corrigido:** Celular → `Smart Phone` e Coletor → `Mobile Device`. `Mobile` e
+`Handheld` não existem no lab nem na MB (27 tipos de fábrica).
+
+**Monitor, dock e base de coletor ficam só no Zelo** (decisão do Gabriel, 18/11): no SD vale ter o
+que o usuário consegue apontar ao abrir chamado — o que está vinculado a ele, o notebook de
+empréstimo. Ninguém lê o S/N de um monitor ou dock para isso; seriam ~900 ativos lá que só
+envelhecem. A tela mostra essas categorias como "fica só no Zelo" (decisão, não pendência), e elas
+não entram na sincronização. Para mandar mesmo assim: `Monitor=<tipo>` em Tipos de produto próprios.
+Coletor e tablet seguem indo para o SD — a confirmar com o Gabriel se o usuário abre chamado por eles.
+
+Provado no laboratório com itens **inventados** (nada da MB foi para lá): Notebook com modelo que
+existe como produto → `asset_laptops` com o produto dele; modelo sem produto → primeiro do tipo;
+Thin client **sem hostname** → nasceu com a service tag como nome, em `asset_computers`; service tag
+em `org_serial_number`, plaqueta e estado voltaram na leitura pelo módulo; segunda rodada: 0 na
+fila. **Achado**: em Smart Phone (tipo existe, sem produto) o `_metainfo` não marca `product` como
+obrigatório, a tela dizia "pronta" e a criação voltava `400 Value not provided` — agora tipo sem
+produto bloqueia sem perguntar ao `_metainfo`. Ativos de teste apagados pelo id.
+
+**Celular, tablet e coletor no laboratório (18/11)** — produtos de teste criados por tipo (com o
+aval do Gabriel, só no lab) e apagados no fim, com os ativos:
+- Smart Phone, Tablet e Mobile Device **criam** pelo endereço do módulo com produto, service tag
+  (`org_serial_number`), garantia e estado — iguais a Laptop/Computer;
+- **IMEI grava**, mas só pelo endereço do módulo (o geral recusa) e só onde o módulo tem o campo:
+  na criação de Laptop ele derruba a chamada. O Zelo agora manda `imei` quando o `_metainfo` do
+  módulo lista o campo. Celular e tablet têm IMEI em 100% dos itens;
+- `phone_number` existe na ficha mas é recusado ("Extra key found") — o número da linha não vai;
+- usuário + In Use e a devolução (usuário nulo + In Store) funcionam nos três;
+- **ativo "emprestável" (`is_loanable`) não aceita usuário** — o notebook de empréstimo no SD tem
+  de ir por `loan_start`/`loan_end`, não por usuário. Fica para quando o empréstimo for sincronizado;
+- **In Use com departamento (sem usuário) funciona** — é o caminho possível para máquina de posto.
+
+Dois bugs que só o laboratório mostrou, e que valiam também para notebook:
+1. **Achar pela service tag nunca funcionou fora do simulador.** A listagem geral acha pela tag
+   mas não devolve a tag, e a conferência do valor descartava o achado. O mesmo escondia a tag do
+   ativo achado pelo nome — o aviso "service tag no SD ≠ Zelo" nunca disparou. Agora toda busca
+   pede os campos em `fields_required` (e repete sem eles se um build recusar). O simulador
+   passou a omitir os campos de série quando não pedidos, e os testes de tag falham sem a correção.
+2. **O SDP recusa nascer "In Use" sem usuário na mesma chamada.** O Zelo criava e depois punha o
+   usuário: todo item em uso falharia no cadastro em massa. Agora acha a pessoa antes e cria com
+   ela; pessoa não achada não deixa ativo pela metade.
+
+**Máquina "Em uso" sem pessoa** (posto no CD: 74 desktops, 73 thin clients, 3 notebooks na
+importação de 18/11) fica fora da fila, contada no retrato, porque In Use sem usuário é recusado.
+Decisão em aberto do Gabriel: pôr um responsável no cadastro, ou o Zelo mandar **departamento**
+(provado no lab) a partir do site/área — o que exige um mapa site → departamento do SD.
+
+**O cenário real** (planilha de 18/11, itens vivos) do que é palpável de sincronizar:
+
+| Categoria | Vivos | Vai já | Fica de fora | Modelos |
+|---|---|---|---|---|
+| Celular | 867 | 866 (848 com pessoa, IMEI em todos) | — | 12 |
+| Notebook | 733 | 663 | 67 "A localizar", 3 sem pessoa | 25 |
+| Desktop | 185 | 110 | 74 sem pessoa | 7 |
+| Thin client | 155 | 80 | 73 sem pessoa, 4 nomes repetidos | 21 |
+| Tablet | 148 | 147 (146 com pessoa, nome = IMEI) | — | 10 (11 grafias) |
+| Coletor | 204 | 204, mas **todos em estoque, nenhum com pessoa** | — | 2 |
+
+~1.870 itens palpáveis (sem coletor), ~75 produtos para cadastrar se for um por modelo. "A
+localizar" e "Em transferência" não têm estado no SD: criar sem estado ou deixar de fora é decisão.
+O gargalo de verdade continua o **usuário**: 1.386 pessoas donas, e o casamento no SD é por e-mail
+ou nome exato e único. E a **licença**: ~1.870 ativos a mais é a pergunta para a ACS.
+
+Na MB, antes de pôr na fila: rodar o Diagnóstico (falta `serial_number=service_tag`), abrir a tela
+e ver o retrato; cadastrar os produtos dos modelos que importam; começar por um lote de 20 de uma
+categoria e conferir no SD.
 
 ### O agente do SDP ficou incerto — e o Zelo ganhou o próprio (18/11, v1.32.0, protótipo)
 Call com a ACS (consultora do SDP) em 18/11: cada um fala uma coisa sobre as licenças, e o
