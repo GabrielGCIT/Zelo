@@ -108,8 +108,11 @@ def importar(caminho, substituir=False, log=print):
     wb = load_workbook(caminho, data_only=True, read_only=False)
     if Movimentacao.query.count() and not substituir:
         raise SystemExit('O banco já tem dados. Use --substituir para apagar e importar de novo.')
+    # Solicitação vai junto: ela aponta para a OS pelo número, e os números de OS recomeçam do 1
+    # aqui — a solicitação antiga passaria a valer para uma OS nova sem relação (revisão de 20/11).
+    from app.models import Solicitacao
     for M in (MovConsumivel, EmprestimoAcessorio, Movimentacao, Manutencao, Item, Linha, Pessoa, Consumivel,
-              Compra, Contrato):
+              Compra, Contrato, Solicitacao):
         M.query.delete()
     db.session.commit()
 

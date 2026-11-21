@@ -389,6 +389,34 @@ class Assinatura(db.Model):
         return not self.assinado and not self.cancelado
 
 
+class Solicitacao(db.Model):
+    """Um pedido de trabalho do Zelo — recolher o que um desligado tem, consertar uma máquina,
+    cobrar uma devolução. É do Zelo, com prazo próprio; o chamado no Service Desk é o espelho.
+
+    Princípio de 17/11: a espinha do processo mora no Zelo. Se a integração for desligada, a
+    solicitação continua aqui, com prazo e lembrete. Por isso "resolvida" não é coluna: sai do que
+    aconteceu no Zelo (a pessoa não tem mais nada, a OS fechou, o item voltou) — status digitado à
+    mão diverge do Histórico, e o Histórico é a fonte da verdade. Só o cancelamento é um ato.
+    """
+    __tablename__ = 'solicitacoes'
+    id = db.Column(db.Integer, primary_key=True)
+    tipo = db.Column(db.String(20), index=True)          # recolhimento | manutencao | devolucao
+    pessoa = db.Column(db.String(30), index=True)
+    item = db.Column(db.String(60), index=True)
+    os_id = db.Column(db.Integer, index=True)
+    itens = db.Column(db.Text)                           # JSON: códigos dos itens na abertura
+    assunto = db.Column(db.String(200))
+    descricao = db.Column(db.Text)
+    prazo = db.Column(db.String(10))
+    criado_em = db.Column(db.String(19))
+    criado_por = db.Column(db.String(100))
+    chamado = db.Column(db.String(30), index=True)       # Nº no Service Desk, quando aberto lá
+    nota_resolvida = db.Column(db.Boolean, default=False)
+    cancelada_em = db.Column(db.String(19))
+    cancelada_por = db.Column(db.String(100))
+    motivo_cancel = db.Column(db.String(200))
+
+
 class MaquinaVista(db.Model):
     """O que o agente do Zelo ouviu de uma máquina: uma linha por máquina, atualizada a cada envio.
 

@@ -1,0 +1,26 @@
+{# Bloco "solicitação" das telas de desligamento, manutenção e item.
+   Recebe: tipo, rotulo (texto do botão), e uma das chaves pessoa / item / os_id. #}
+{% set s = solicitacao_de(tipo, pessoa=pessoa, item=item, os_id=os_id) %}
+{% if s %}
+ <div class="small"><i class="fa fa-list-check me-1 text-secondary"></i>
+  <a href="{{ url_for('solicitacoes.lista') }}#s-{{ s.id }}">S-{{ s.id }}</a> aberta em {{ s.criado_em[:10]|data }}
+  · prazo {{ s.prazo|data }}
+  {% if s.chamado %}· chamado <b>{{ s.chamado }}</b>
+  {% elif pode('lancar') %}
+   <form method="post" action="{{ url_for('solicitacoes.nova') }}" class="d-inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="tipo" value="{{ tipo }}"><input type="hidden" name="pessoa" value="{{ pessoa or '' }}">
+    <input type="hidden" name="item" value="{{ item or '' }}"><input type="hidden" name="os_id" value="{{ os_id or '' }}">
+    <input type="hidden" name="chamado" value="Sim"><input type="hidden" name="volta" value="{{ request.full_path }}">
+    · <button class="btn btn-link btn-sm p-0 align-baseline">abrir o chamado no Service Desk</button></form>
+  {% endif %}</div>
+{% elif pode('lancar') %}
+ <form method="post" action="{{ url_for('solicitacoes.nova') }}" class="d-flex flex-wrap gap-2 align-items-center">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="tipo" value="{{ tipo }}"><input type="hidden" name="pessoa" value="{{ pessoa or '' }}">
+  <input type="hidden" name="item" value="{{ item or '' }}"><input type="hidden" name="os_id" value="{{ os_id or '' }}">
+  <input type="hidden" name="volta" value="{{ request.full_path }}">
+  <button class="btn btn-sm btn-outline-secondary" name="chamado" value="Sim"><i class="fa fa-headset me-1"></i>{{ rotulo }}</button>
+  <button class="btn btn-sm btn-link p-0" name="chamado" value="Não" title="Só no Zelo, com prazo e lembrete, sem chamado">só registrar no Zelo</button>
+ </form>
+{% endif %}

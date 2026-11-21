@@ -118,6 +118,13 @@ def tudo():
         'OS que não anda costuma estar esperando resposta do fornecedor — cobre o caso.',
         url_for('manutencao.inicio'), 'Abrir manutenção', 'media')
 
+    # --- solicitações
+    from app.solicitacoes import atrasadas
+    add('solicitacao_atrasada', 'Solicitação passou do prazo', atrasadas(),
+        'Recolhimento, conserto ou devolução pedido e não resolvido no prazo combinado. O chamado no SD é só o espelho: '
+        'quem resolve é o lançamento no Zelo.',
+        url_for('solicitacoes.lista'), 'Ver solicitações', 'media')
+
     # --- integração
     add('sd_erro', 'Envio ao Service Desk com erro',
         EnvioSD.query.filter(EnvioSD.status == 'Erro').count(),

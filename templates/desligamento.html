@@ -9,6 +9,13 @@
   <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('consulta.pessoa', pid=p.id) }}"><i class="fa fa-id-card me-1"></i>Ficha</a>
   <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('desligar.lista') }}">Todos os desligamentos</a></div></div>
 
+{% if n %}
+<div class="z-card mb-3"><div class="d-flex flex-wrap align-items-center gap-3">
+ <div class="small text-muted"><b class="text-body">Chamado de recolhimento</b> — um pedido com a lista abaixo, com prazo no Zelo e,
+  se quiser, um chamado no Service Desk para quem vai buscar.</div>
+ <div class="ms-auto">{% with tipo='recolhimento', pessoa=p.id, item=none, os_id=none, rotulo='Abrir chamado de recolhimento' %}{% include '_solicitacao.html' %}{% endwith %}</div>
+</div></div>
+{% endif %}
 {% if not n %}
 <div class="z-card"><div class="z-vazio"><i class="fa fa-circle-check text-success"></i>
  <div>Nada consta com {{ p.nome.split(' ')[0] }}</div>

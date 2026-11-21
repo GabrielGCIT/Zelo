@@ -37,7 +37,9 @@
    <div class="z-kc-pe"><span class="z-dias {{ 'velho' if d is not none and d > 15 }}">{% if d is none %}sem data{% else %}{{ d }} dia{{ 's' if d != 1 }}{% endif %}</span>
     {% if m.fornecedor %}<span class="z-dias">{{ m.fornecedor }}{{ ' ' ~ m.caso if m.caso }}</span>{% endif %}
     {% if m.substituto %}<span class="z-dias" title="Backup emprestado"><i class="fa fa-rotate me-1"></i>{{ m.substituto }}</span>{% endif %}
-    {% if m.visita %}<span class="z-dias"><i class="fa fa-calendar me-1"></i>{{ m.visita }}</span>{% endif %}</div>
+    {% if m.visita %}<span class="z-dias"><i class="fa fa-calendar me-1"></i>{{ m.visita }}</span>{% endif %}
+    {% if m.chamado %}<span class="z-dias" title="Chamado no Service Desk"><i class="fa fa-headset me-1"></i>{{ m.chamado }}</span>{% endif %}</div>
+   {% if not m.chamado %}<div class="mt-1">{% with tipo='manutencao', pessoa=none, item=none, os_id=m.id, rotulo='Abrir chamado' %}{% include '_solicitacao.html' %}{% endwith %}</div>{% endif %}
   </div>{% endfor %}
   <div class="z-col-vazio" hidden>Solte aqui</div></div></div>{% endfor %}
  {% for st in ['Concluída', 'Sem conserto'] %}<div class="z-col {{ 'z-perigo' if st == 'Sem conserto' }}" data-col="{{ st }}"><div class="z-col-topo"><span class="z-pt" style="background:{{ '#7AC143' if st == 'Concluída' else '#dc3545' }}"></span>{{ st }}</div><div class="z-col-corpo"><div class="z-col-vazio">Solte aqui para fechar</div></div></div>{% endfor %}

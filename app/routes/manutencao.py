@@ -16,6 +16,8 @@ def _avisar_sd(codigo):
     it = achar_item(codigo)
     if it:
         sd.enfileirar_item(current_app._get_current_object(), it)
+    # fechar a OS resolve a solicitação de manutenção: o chamado dela ganha a nota
+    sd.avisar_resolvidas(current_app._get_current_object())
 CAMPOS = ('acao', 'item', 'defeito', 'fornecedor', 'caso', 'status', 'visita', 'tecnico', 'chamado', 'backup', 'peca', 'qtd',
           'feito', 'backup_volta', 'obs')
 

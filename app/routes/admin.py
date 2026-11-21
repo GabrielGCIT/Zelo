@@ -127,6 +127,8 @@ def servicedesk():
                            anexar_ativo=sd.conf('sd_anexar_ativo') or 'Não', estados=sd.conf('sd_estados') or '',
                            criar_ativo=sd.conf('sd_criar_ativo') or 'Não', tipos=sd.conf('sd_tipos') or '',
                            campos_zelo=sd.conf('sd_campos_zelo') or 'Não', apelidos=sd.conf('sd_apelidos') or '',
+                           abrir=sd.conf('sd_abrir_chamado') or 'Não',
+                           casos={t: sd.conf(f'sd_chamado_{t}') for t in ('recolhimento', 'manutencao', 'devolucao')},
                            padrao_estados='; '.join(f'{k} = {v}' for k, v in sd.ESTADO_PADRAO.items()),
                            padrao_tipos='; '.join(f'{k} = {v or "(só no Zelo)"}' for k, v in sd.TIPO_PADRAO.items()),
                            pendentes=sum(1 for e in envios if e.status != 'Enviado'))
@@ -170,16 +172,17 @@ def cadastro_sd():
 
 def _servicedesk_post(sd, EnvioSD, acao):
     """O POST desta tela, isolado para quem chama poder tratar o imprevisto num lugar só."""
-    if acao in ('salvar', 'testar'):
+    if acao in ('salvar', 'testar', 'diag_chamado'):
         # Testar salva antes: o botão fica dentro da ficha, e testar o que está salvo enquanto a
         # tela mostra outra coisa só produz erro sobre endereço vazio.
         # São duas fichas na tela (conexão e ativo). Só entra o que veio NESTE envio: gravar a
         # chave inteira faria salvar uma ficha zerar os campos da outra.
         v = {}
-        for k in ('sd_ativos', 'sd_anexar_ativo', 'sd_criar_ativo', 'sd_campos_zelo'):
+        for k in ('sd_ativos', 'sd_anexar_ativo', 'sd_criar_ativo', 'sd_campos_zelo', 'sd_abrir_chamado'):
             if k in request.form:
                 v[k] = request.form.get(k) or 'Não'
-        for k in ('sd_estados', 'sd_tipos', 'sd_apelidos'):
+        for k in ('sd_estados', 'sd_tipos', 'sd_apelidos', 'sd_chamado_recolhimento', 'sd_chamado_manutencao',
+                  'sd_chamado_devolucao'):
             if k in request.form:
                 v[k] = (request.form.get(k) or '').strip()
         if 'sd_url' in request.form:
@@ -221,6 +224,15 @@ def _servicedesk_post(sd, EnvioSD, acao):
             ok, linhas = False, [str(e)]
         registrar_log('service desk', 'diagnóstico de criação de ativo: ' + ('OK' if ok else 'falhou'))
         flash('Diagnóstico de criação de ativo:\n' + '\n'.join(linhas), 'success' if ok else 'danger')
+    elif acao == 'diag_chamado':
+        # Como o de ativo: cria um chamado de teste por caso configurado, confere o que voltou e apaga.
+        # O SDP já mentiu no _metainfo (diz que só o assunto é obrigatório; o solicitante também é).
+        try:
+            ok, linhas = sd.diagnostico_chamado()
+        except sd.ErroSD as e:
+            ok, linhas = False, [str(e)]
+        registrar_log('service desk', 'diagnóstico de abrir chamado: ' + ('OK' if ok else 'falhou'))
+        flash('Diagnóstico: abrir chamado\n' + '\n'.join(linhas), 'success' if ok else 'danger')
     elif acao == 'reenviar':
         ids = [int(i) for i in request.form.getlist('ids') if i.isdigit()] or \
               [e.id for e in EnvioSD.query.filter(EnvioSD.status != 'Enviado')]

@@ -12,6 +12,8 @@ from app.models import EnvioSD, Item, Movimentacao, Pessoa
 
 
 SERIAIS = ('serial_number', 'org_serial_number', 'service_tag')
+# o que o Zelo manda ao abrir chamado; chave fora disto o build recusa com "Extra key found in JSON"
+CAMPOS_CHAMADO = {'subject', 'description', 'requester', 'template', 'category', 'group', 'assets', 'status'}
 
 
 class SimuladorSD:
@@ -23,6 +25,7 @@ class SimuladorSD:
         self.ativos, self.ativos_por_id, self.usuarios = {}, {}, []
         self.apagados, self.seq, self.recusa_post, self.recusa_campo = [], 500, '', ''
         self.ignora_campo = ''
+        self.abertos, self.apagados_chamados, self.perde_resposta, self.lixeira = [], [], False, set()
         # o que este build não conhece: condições de busca e campos pedidos na listagem
         self.recusa_condicao, self.recusa_campos_lista = set(), set()
         # como o build de verdade: um endereço por tipo de produto, e asset_assets não cria
@@ -166,8 +169,56 @@ class SimuladorSD:
                                     'list_info': {'has_more_rows': ini - 1 + n < len(self.usuarios),
                                                   'row_count': len(pagina)}})
         m = re.match(r'^/api/v3/requests/(\d+)(/upload|/notes)?$', cam)
+        catalogo = {'/api/v3/request_templates': ('request_templates', ['Default Request']),
+                    '/api/v3/categories': ('categories', ['General', 'Desktop Hardware']),
+                    '/api/v3/support_groups': ('support_groups', ['Hardware Problems'])}
+        if cam in catalogo:
+            k, nomes = catalogo[cam]
+            return 200, json.dumps({k: [{'id': str(i), 'name': x} for i, x in enumerate(nomes, 1)],
+                                    'response_status': [{'status': 'success'}]})
+        if cam == '/api/v3/groups':                     # não existe neste build (lab, 20/11)
+            return 404, json.dumps({'response_status': {'status': 'failed', 'messages': [{'message': 'Invalid URL'}]}})
+        if cam == '/api/v3/requests' and metodo == 'POST':
+            novo = dict(dados['request'])
+            if set(novo) - CAMPOS_CHAMADO:
+                return 400, json.dumps({'response_status': {'status': 'failed', 'messages': [
+                    {'message': 'Extra key found in JSON'}]}})
+            # o _metainfo diz que só o assunto é obrigatório; o build exige o solicitante também
+            nomes_ok = {'group': {'Hardware Problems'}, 'category': {'General', 'Desktop Hardware'},
+                        'template': {'Default Request'}}
+            if any((novo.get(k) or {}).get('name') not in v for k, v in nomes_ok.items() if k in novo):
+                return 400, json.dumps({'response_status': {'status': 'failed', 'messages': [
+                    {'message': 'Invalid Input'}]}})         # não diz qual campo (lab, 20/11)
+            if not novo.get('subject') or not novo.get('requester'):
+                return 400, json.dumps({'response_status': {'status': 'failed', 'messages': [
+                    {'message': 'Please fill the mandatory fields'}]}})
+            self.seq += 1
+            n = str(self.seq)
+            novo.setdefault('status', {'name': 'Open'})
+            novo.setdefault('template', {'name': 'Default Request'})
+            self.chamados[n] = novo
+            self.abertos.append(n)
+            if self.perde_resposta:            # criou, mas a resposta não chegou (timeout)
+                self.perde_resposta = False
+                raise sd.ErroSD('Sem conexão com o Service Desk: timed out')
+            return 201, json.dumps({'request': dict(novo, id=n), 'response_status': {'status': 'success'}})
         if cam == '/api/v3/requests':
+            sc = ((dados.get('list_info') or {}).get('search_criteria') or {})
+            if sc.get('field') == 'subject' and sc.get('condition') == 'contains':
+                achados = [dict(r, id=k) for k, r in self.chamados.items() if sc['value'] in (r.get('subject') or '')]
+                return 200, json.dumps({'requests': achados, 'response_status': [{'status': 'success'}]})
             return 200, json.dumps({'requests': [{'id': '1'}], 'response_status': [{'status': 'success'}]})
+        lx = re.match(r'^/api/v3/requests/(\d+)/move_to_trash$', cam)
+        if lx and metodo == 'DELETE' and lx.group(1) in self.chamados:
+            self.lixeira.add(lx.group(1))
+            return 200, json.dumps({'response_status': {'status': 'success'}})
+        if m and metodo == 'DELETE' and m.group(1) in self.chamados:
+            if m.group(1) not in self.lixeira:          # como o build: só apaga o que está na lixeira
+                return 400, json.dumps({'response_status': {'status': 'failed', 'messages': [
+                    {'message': 'Not in trash'}]}})
+            self.chamados.pop(m.group(1))
+            self.apagados_chamados.append(m.group(1))
+            return 200, json.dumps({'response_status': {'status': 'success'}})
         if not m or m.group(1) not in self.chamados:
             return 404, json.dumps({'response_status': {'status': 'failed', 'messages': [{'message': 'Request not found'}]}})
         n, sub = m.group(1), m.group(2)

@@ -106,9 +106,10 @@ def create_app(database_url=None, testing=False):
     from app.routes.assinar import assinar_bp
     from app.routes.importar import importar_bp
     from app.routes.agente import agente_bp
+    from app.routes.solicitacoes import solicitacoes_bp
     for bp in (auth_bp, painel_bp, consulta_bp, lancar_bp, acompanhar_bp, manutencao_bp, estoque_bp,
                linhas_bp, termo_bp, admin_bp, bipar_bp, busca_bp, desligar_bp, assinar_bp, importar_bp,
-               agente_bp):
+               agente_bp, solicitacoes_bp):
         app.register_blueprint(bp)
     registrar_hooks(app)
 

@@ -1,0 +1,42 @@
+{% extends 'base.html' %}{% from '_macros.html' import item_link %}
+{% block title %}Solicitações{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+ <h1 class="z-titulo m-0">Solicitações</h1>
+ <div class="ms-auto btn-group btn-group-sm">
+  <a class="btn btn-outline-secondary {{ 'active' if filtro == 'abertas' }}" href="{{ url_for('solicitacoes.lista') }}">Em aberto</a>
+  <a class="btn btn-outline-secondary {{ 'active' if filtro != 'abertas' }}" href="{{ url_for('solicitacoes.lista', ver='todas') }}">Todas</a></div></div>
+<p class="z-sub">O que o Zelo pediu a alguém, com prazo: recolher o que um desligado tem, consertar uma máquina, cobrar uma
+ devolução. Elas nascem nas telas de Desligamentos, Manutenção e na ficha do item. <b>Resolvida</b> não é marcada à mão: sai
+ do que aconteceu no Zelo (a pessoa devolveu tudo, a OS fechou, o item voltou). O chamado no Service Desk é o espelho — quando
+ o Zelo resolve, ele ganha uma nota.{% if not abrir_ligado %} <span class="text-muted">(Abrir chamado pelo Zelo está desligado:
+ elas valem só aqui.)</span>{% endif %}</p>
+
+{% if not linhas %}
+<div class="z-card"><div class="z-vazio"><i class="fa fa-list-check"></i>
+ <div>{{ 'Nenhuma solicitação em aberto' if filtro == 'abertas' else 'Nenhuma solicitação ainda' }}</div>
+ <small>Abra pelo desligamento de alguém, por uma ocorrência de manutenção ou por um item com devolução pendente.</small></div></div>
+{% else %}
+<div class="z-card"><div class="table-responsive"><table class="table table-sm align-middle">
+ <thead><tr><th>Nº</th><th>Situação</th><th>O quê</th><th>Prazo</th><th>Chamado</th><th>Aberta por</th><th></th></tr></thead>
+ <tbody>{% for s, st in linhas %}{% set e = envios.get('S-' ~ s.id) %}
+ <tr id="s-{{ s.id }}">
+  <td class="z-mono text-nowrap">S-{{ s.id }}</td>
+  <td><span class="badge text-bg-{{ {'Aberta': 'secondary', 'Atrasada': 'danger', 'Resolvida': 'success', 'Cancelada': 'light'}[st] }}">{{ st }}</span></td>
+  <td class="small"><b>{{ tipos[s.tipo] }}</b> — {{ s.assunto }}
+   {% if s.item %}<div>{{ item_link(s.item) }}</div>{% elif s.pessoa %}<div><a href="{{ url_for('desligar.ficha', pid=s.pessoa) }}">{{ s.pessoa }}</a></div>{% endif %}
+   {% if s.cancelada_em %}<div class="text-muted">cancelada por {{ s.cancelada_por }}: {{ s.motivo_cancel }}</div>{% endif %}</td>
+  <td class="small">{{ s.prazo|data }}</td>
+  <td class="small">{% if s.chamado %}<b class="z-mono">{{ s.chamado }}</b>{% if s.nota_resolvida %} <span class="text-muted">· nota de resolução</span>{% endif %}
+   {% elif e and e.status == 'Erro' %}<span class="z-aviso" title="{{ e.erro }}"><i class="fa fa-triangle-exclamation me-1"></i>não abriu</span>
+    <div class="text-muted">{{ e.erro }}</div>
+   {% elif e %}<span class="text-muted">na fila</span>{% else %}—{% endif %}</td>
+  <td class="small">{{ s.criado_por }}<div class="text-muted">{{ s.criado_em[:10]|data }}</div></td>
+  <td>{% if pode('lancar') and st in ('Aberta', 'Atrasada') %}
+   <form method="post" action="{{ url_for('solicitacoes.cancelar', sid=s.id) }}" class="d-flex gap-1">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="volta" value="{{ request.full_path }}">
+    <input class="form-control form-control-sm" name="motivo" placeholder="motivo" required style="width:9rem">
+    <button class="btn btn-sm btn-outline-secondary">Cancelar</button></form>{% endif %}</td>
+ </tr>{% endfor %}</tbody></table></div></div>
+{% endif %}
+{% endblock %}

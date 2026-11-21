@@ -71,6 +71,25 @@
  chamado <code>ZELO-TESTE-…</code>, mostra campo por campo o que ele guardou, e apaga em seguida. Se não conseguir apagar, ele avisa
  o nome para você tirar à mão.</p>
 </div>
+<div class="z-card"><h2>Abrir chamado pelo Zelo</h2>
+<form method="post" class="row g-2 small"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="sd_url" value="{{ url }}"><input type="hidden" name="sd_ssl" value="{{ ssl }}"><input type="hidden" name="sd_ativo" value="{{ ativo }}">
+ <div class="col-12"><label class="form-label mb-0">Abrir chamado no Service Desk a partir das Solicitações</label>
+  <select class="form-select form-select-sm" name="sd_abrir_chamado">{% for o in ['Não','Sim'] %}<option {{ 'selected' if abrir==o }}>{{ o }}</option>{% endfor %}</select>
+  <div class="form-text">Recolhimento no desligamento, manutenção com o ativo anexado e cobrança de devolução. Sempre um clique de alguém,
+   nunca automático: o Service Desk manda e-mail a cada chamado novo. Desligado, as solicitações valem só no Zelo, com prazo e lembrete.</div></div>
+ {% for t, rot in [('recolhimento', 'Recolhimento no desligamento'), ('manutencao', 'Manutenção'), ('devolucao', 'Cobrança de devolução')] %}
+ <div class="col-12"><label class="form-label mb-0">{{ rot }}</label>
+  <input class="form-control form-control-sm z-mono" name="sd_chamado_{{ t }}" value="{{ casos[t] }}" placeholder="solicitante=ti@empresa.com.br; template=Default Request; categoria=Desktop Hardware; grupo=Hardware Problems; prazo=5"></div>
+ {% endfor %}
+ <div class="form-text col-12"><code>solicitante</code> é obrigatório (o SD recusa sem): e-mail, nome ou id de um usuário do SD, ou
+  <code>pessoa</code> para usar a própria pessoa — nunca no recolhimento, porque ela já saiu. <code>template</code>, <code>categoria</code>
+  e <code>grupo</code> com o nome exato do SD (o diagnóstico lista os que existem). <code>prazo</code> em dias, só no Zelo: o SD ignora prazo
+  mandado pela API e usa o SLA dele.</div>
+ <div class="col-12 d-flex gap-2 mt-1"><button class="btn btn-sm btn-zelo" name="acao" value="salvar">Salvar</button>
+  <button class="btn btn-sm btn-outline-secondary" name="acao" value="diag_chamado"><i class="fa fa-vial me-1"></i>Diagnóstico: abrir chamado</button></div>
+</form>
+<p class="small text-muted mt-2 mb-0">O diagnóstico lista templates, categorias e grupos do seu Service Desk, abre um chamado <code>[ZELO-TESTE]</code>
+ por caso configurado, confere o que voltou e apaga.</p></div>
 <div class="z-card"><h2>O que vai para o chamado</h2><ul class="small mb-0">
  <li>Entrega, empréstimo ou devolução com Nº de chamado → anexo <code>Termo_Zelo_&lt;Nº&gt;.pdf</code> + nota com o item, a pessoa, o CC e o Nº do lançamento.</li>
  <li>Reserva que vira Entregue no Acompanhar → novo termo (agora assinado) + nota.</li>

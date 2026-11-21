@@ -29,9 +29,11 @@ from app.models import Config
 
 ACCEPT = 'application/vnd.manageengine.sdp.v3+json'
 CHAVES = ('sd_url', 'sd_chave', 'sd_ssl', 'sd_ativo', 'sd_ativos', 'sd_estados', 'sd_anexar_ativo',
-          'sd_criar_ativo', 'sd_tipos', 'sd_campos_zelo', 'sd_criar_fora', 'sd_apelidos')
+          'sd_criar_ativo', 'sd_tipos', 'sd_campos_zelo', 'sd_criar_fora', 'sd_apelidos',
+          'sd_abrir_chamado', 'sd_chamado_recolhimento', 'sd_chamado_manutencao', 'sd_chamado_devolucao')
 TIPOS_ENVIO = ('Entrega', 'Empréstimo', 'Devolução')
-NOMES_TIPO = {'chamado': 'Termo + nota', 'ativo': 'Ativo', 'termo': 'Termo assinado'}
+NOMES_TIPO = {'chamado': 'Termo + nota', 'ativo': 'Ativo', 'termo': 'Termo assinado', 'abrir': 'Abrir chamado',
+              'resolvida': 'Nota de resolução'}
 _cache = {}            # chamado → (quando, dados)
 _modulos = {}          # tipos de produto do SD: {'quando', 'lista'}
 _produtos = {}         # produtos do SD: {'quando', 'lista'} — o cadastro em massa cria milhares
@@ -1363,6 +1365,242 @@ def enfileirar(movs):
     return [e.id for e in novos]
 
 
+# ------------------------------------------------------------------ abrir chamado (etapa G)
+def abrir_ligado():
+    return configurado() and conf('sd_abrir_chamado') == 'Sim'
+
+
+def _solicitante(valor, s):
+    """O `requester` do chamado. Obrigatório neste build, apesar de o _metainfo dizer que não
+    (laboratório, 20/11: sem ele, "Please fill the mandatory fields").
+
+    'pessoa' usa a própria pessoa da solicitação — nunca no recolhimento, porque ela já saiu e o
+    SD mandaria o e-mail do chamado para quem não está mais na empresa."""
+    from app.models import Pessoa
+    v = (valor or '').strip()
+    if not v:
+        raise ErroSD(f'Falta o solicitante do chamado de {s.tipo} em Administração → Service Desk')
+    if v.lower() == 'pessoa':
+        if s.tipo == 'recolhimento':
+            raise ErroSD('No recolhimento o solicitante não pode ser a pessoa desligada: configure uma conta')
+        p = db.session.get(Pessoa, s.pessoa) if s.pessoa else None
+        u = achar_usuario(p.email if p else None, p.nome if p else None) if p else None
+        if not u:
+            raise ErroSD(f'{p.nome if p else "A pessoa"} não encontrado(a) como usuário no Service Desk')
+        return {'id': str(u['id'])}
+    if '@' in v:
+        return {'email_id': v}
+    if v.isdigit():
+        return {'id': v}
+    return {'name': v}
+
+
+def _html(texto):
+    """A descrição do chamado é HTML no SDP: quebra de linha simples sumiria."""
+    import html
+    return html.escape(texto or '').replace('\n', '<br>')
+
+
+def instancia():
+    """Identificador desta instalação do Zelo, gerado uma vez e guardado em Config.
+
+    Existe porque o número da solicitação só é único dentro de um banco: um Zelo de teste
+    apontado para o SD de produção (a MB não tem SD de teste) e o banco definitivo da virada geram
+    os dois uma S-1, e a busca pela marca adotaria o chamado da outra (revisão de 20/11)."""
+    import secrets
+    from app.models import Config
+    c = db.session.get(Config, 'zelo_instancia')
+    if not (c and c.valor):
+        c = c or Config(chave='zelo_instancia')
+        c.valor = secrets.token_hex(3).upper()
+        db.session.merge(c)
+        db.session.commit()
+    return c.valor
+
+
+def marca_solicitacao(s):
+    return f'[Zelo S-{s.id}/{instancia()}]'
+
+
+def _ja_aberto(s):
+    """O chamado desta solicitação, se já existir no SD. É o que impede o chamado em dobro: se a
+    criação deu certo e a resposta se perdeu (timeout), o reenvio acha pela marca no assunto em vez
+    de abrir outro. `contains` provado no laboratório (20/11)."""
+    marca = marca_solicitacao(s)
+    j = _http('GET', '/api/v3/requests', {'list_info': {
+        'row_count': 5, 'search_criteria': {'field': 'subject', 'condition': 'contains', 'value': marca}}})
+    achados = [r for r in (j.get('requests') or []) if marca in (r.get('subject') or '')]
+    return str(achados[0]['id']) if achados else None
+
+
+def abrir_chamado(envio):
+    from app.models import Item, Manutencao, Solicitacao
+    from app.solicitacoes import conf_caso, itens_de
+    s = db.session.get(Solicitacao, int(envio.alvo[2:])) if (envio.alvo or '').startswith('S-') else None
+    if not s:
+        raise ErroSD('A solicitação não existe mais')
+    if s.cancelada_em:
+        raise ErroSD(f'S-{s.id} foi cancelada: o chamado não foi aberto')
+    if not s.chamado:
+        s.chamado = _ja_aberto(s)
+        adotado = bool(s.chamado)
+    else:
+        adotado = True
+    if not s.chamado:
+        c = conf_caso(s.tipo)
+        corpo = {'subject': f'{marca_solicitacao(s)} {s.assunto}'[:250], 'description': _html(s.descricao),
+                 'requester': _solicitante(c.get('solicitante'), s)}
+        for chave, campo in (('template', 'template'), ('categoria', 'category'), ('grupo', 'group')):
+            if c.get(chave):
+                corpo[campo] = {'name': c[chave]}
+        # o equipamento vai DENTRO do chamado já na criação (provado no lab, 20/11), pelo id do ativo
+        ativos = []
+        for codigo in itens_de(s):
+            it = db.session.get(Item, codigo)
+            if not it:
+                continue
+            try:
+                a = achar_ativo(nome_no_sd(it), it.tag)
+            except ErroSD:
+                a = None
+            if a and a.get('id'):
+                ativos.append({'id': str(a['id'])})
+        if ativos:
+            corpo['assets'] = ativos
+        j = _http('POST', '/api/v3/requests', {'request': corpo}, timeout=20)
+        s.chamado = str((j.get('request') or {}).get('id') or '') or None
+        if not s.chamado:
+            raise ErroSD('O Service Desk aceitou a chamada mas não devolveu o número do chamado')
+    if s.tipo == 'manutencao' and s.os_id:
+        os_ = db.session.get(Manutencao, s.os_id)
+        if os_ and not os_.chamado:
+            os_.chamado = s.chamado
+    envio.chamado = s.chamado
+    db.session.commit()
+    return f'S-{s.id} → chamado {s.chamado}' + (' (já existia no SD, adotado)' if adotado else ' aberto')
+
+
+def nota_de_resolucao(envio):
+    from app.models import Solicitacao
+    s = db.session.get(Solicitacao, int(envio.alvo[2:])) if (envio.alvo or '').startswith('S-') else None
+    if not s or not s.chamado:
+        raise ErroSD('Solicitação sem chamado')
+    db.session.refresh(s)
+    if s.nota_resolvida:
+        # dois lançamentos ao mesmo tempo podem ter enfileirado a mesma nota
+        return f'nota de resolução já estava no chamado {s.chamado}'
+    import html
+    nota(s.chamado, f'[Zelo] Resolvido no Zelo: {html.escape(s.assunto or "")}. Nada mais pendente para S-{s.id}.')
+    s.nota_resolvida = True
+    db.session.commit()
+    return f'nota de resolução no chamado {s.chamado}'
+
+
+def enfileirar_solicitacao(app_, s, tipo='abrir'):
+    """Põe a abertura (ou a nota de resolução) de uma solicitação na fila e manda."""
+    from app.models import EnvioSD
+    alvo = f'S-{s.id}'
+    ja = EnvioSD.query.filter(EnvioSD.tipo == tipo, EnvioSD.alvo == alvo, EnvioSD.status != 'Enviado').first()
+    if ja and ja.status == 'Erro':
+        # pedir de novo é a forma natural de tentar outra vez depois de corrigir a configuração;
+        # ignorar o clique porque já houve uma tentativa deixava o chamado preso no erro
+        processar(app_, [ja.id])
+        return 1
+    if ja:
+        return 0
+    e = EnvioSD(mov_id=None, tipo=tipo, alvo=alvo, chamado=s.chamado, status='Pendente',
+                criado=datetime.now().isoformat(timespec='seconds'), tentativas=0)
+    db.session.add(e)
+    db.session.commit()
+    processar(app_, [e.id])
+    return 1
+
+
+def avisar_resolvidas(app_):
+    """Nota no chamado das solicitações que o Zelo resolveu. Não fecha o chamado: fechar mexe
+    no fluxo do SD (pesquisa de satisfação, SLA), e isso é decisão de quem administra o SD."""
+    if not configurado():
+        return 0
+    from app.solicitacoes import a_avisar
+    return sum(enfileirar_solicitacao(app_, s, 'resolvida') for s in a_avisar())
+
+
+def apagar_chamado(numero):
+    """Só para o chamado de teste do diagnóstico. O SDP não apaga direto ("Not in trash"): vai
+    para a lixeira e depois sai dela (laboratório, 20/11)."""
+    _http('DELETE', f'/api/v3/requests/{numero}/move_to_trash')
+    _http('DELETE', f'/api/v3/requests/{numero}')
+
+
+def diagnostico_chamado():
+    """Prova no SD de verdade se o Zelo consegue abrir chamado com a configuração de cada caso:
+    cria um chamado de teste, confere campo por campo o que voltou, e apaga. Devolve (ok, linhas)."""
+    from types import SimpleNamespace
+    from app.solicitacoes import TIPOS, conf_caso
+    linhas = []
+
+    def _lista(cam, chave):
+        try:
+            return [x.get('name') for x in (_http('GET', cam, {'list_info': {'row_count': 100}}).get(chave) or [])]
+        except ErroSD as e:
+            return [f'(não deu para listar: {e})']
+    linhas.append('Templates: ' + ', '.join(_lista('/api/v3/request_templates', 'request_templates')))
+    linhas.append('Categorias: ' + ', '.join(_lista('/api/v3/categories', 'categories')))
+    # /api/v3/groups não existe neste build; os grupos moram em support_groups (lab, 20/11)
+    linhas.append('Grupos: ' + ', '.join(_lista('/api/v3/support_groups', 'support_groups')))
+    ok_geral = True
+    for tipo, nome in TIPOS.items():
+        c = conf_caso(tipo)
+        if not c.get('solicitante'):
+            linhas.append(f'{nome}: sem configuração — não testado')
+            continue
+        falso = SimpleNamespace(id=0, tipo=tipo, pessoa=None)
+        try:
+            if c['solicitante'].strip().lower() == 'pessoa' and tipo != 'recolhimento':
+                # no uso real vai a pessoa de cada caso; aqui serve qualquer usuário do SD, só para
+                # provar o resto da configuração
+                us = [u for u in listar_usuarios(1, 20)[0] if u.get('id') and u.get('name')]
+                if not us:
+                    raise ErroSD('não há usuário no Service Desk para testar o solicitante "pessoa"')
+                requester = {'id': str(us[0]['id'])}
+                linhas.append(f'{nome}: solicitante "pessoa" testado com {us[0]["name"]}')
+            else:
+                requester = _solicitante(c['solicitante'], falso)
+            corpo = {'subject': f'[ZELO-TESTE] diagnóstico de {nome} — pode apagar',
+                     'description': 'Chamado de teste do Zelo. É apagado em seguida.',
+                     'requester': requester}
+            for chave, campo in (('template', 'template'), ('categoria', 'category'), ('grupo', 'group')):
+                if c.get(chave):
+                    corpo[campo] = {'name': c[chave]}
+            r = _http('POST', '/api/v3/requests', {'request': corpo}, timeout=20).get('request') or {}
+            lido = _http('GET', f"/api/v3/requests/{r.get('id')}").get('request') or {}
+            def _n(v):
+                return (v or {}).get('name') if isinstance(v, dict) else v
+            confere = []
+            for chave, campo in (('template', 'template'), ('categoria', 'category'), ('grupo', 'group')):
+                if c.get(chave):
+                    voltou = _n(lido.get(campo))
+                    marca = 'ok' if _nome(voltou) == _nome(c[chave]) else f'VOLTOU "{voltou}"'
+                    confere.append(f'{chave} {marca}')
+            linhas.append(f'{nome}: chamado {r.get("id")} criado (solicitante {_n(lido.get("requester"))}; '
+                          + '; '.join(confere) + ')')
+            ok_geral &= all(x.endswith('ok') for x in confere)
+            try:
+                apagar_chamado(r.get('id'))
+                linhas.append('  apagado.')
+            except ErroSD as e:
+                linhas.append(f'  ATENÇÃO: não apagou ({e}). Apague o chamado {r.get("id")} à mão.')
+        except ErroSD as e:
+            ok_geral = False
+            # nome de grupo, categoria ou template que não existe volta só "Invalid Input", sem
+            # dizer qual (laboratório, 20/11) — as listas acima são onde conferir
+            dica = ''
+            if 'Invalid Input' in str(e) and any(c.get(k) for k in ('template', 'categoria', 'grupo')):
+                dica = ' — confira o nome exato de template, categoria e grupo nas listas acima'
+            linhas.append(f'{nome}: RECUSADO — {e}{dica}')
+    return ok_geral, linhas
+
+
 def enviar(envio):
     """Anexa o termo e grava a nota de UM envio. Atualiza o status; não levanta exceção."""
     from app.models import Item, Movimentacao
@@ -1373,6 +1611,13 @@ def enviar(envio):
     try:
         if not configurado():
             raise ErroSD('Integração com o Service Desk desligada ou sem chave')
+        if envio.tipo in ('abrir', 'resolvida'):
+            if envio.tipo == 'abrir' and not abrir_ligado():
+                raise ErroSD('Abrir chamado pelo Zelo está desligado')
+            envio.erro = abrir_chamado(envio) if envio.tipo == 'abrir' else nota_de_resolucao(envio)
+            envio.status, envio.enviado = 'Enviado', datetime.now().isoformat(timespec='seconds')
+            db.session.commit()
+            return True
         if not m and envio.tipo != 'ativo':
             raise ErroSD('Lançamento não existe mais (foi desfeito)')
         if envio.tipo == 'termo':
@@ -1440,4 +1685,6 @@ def enfileirar_tudo(app, movs):
         ids += enfileirar_ativos(movs)
     if ids:
         processar(app, ids)
-    return len(ids)
+    # o lançamento pode ter resolvido uma solicitação (a devolução cobrada chegou, o desligado
+    # devolveu a última coisa): o chamado dela ganha a nota
+    return len(ids) + avisar_resolvidas(app)

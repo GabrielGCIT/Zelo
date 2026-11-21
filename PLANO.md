@@ -2,7 +2,7 @@
 
 ---
 
-## ONDE PARAMOS — 20/11/2026, v1.34.0
+## ONDE PARAMOS — 20/11/2026, v1.35.0
 
 Leia esta seção primeiro. O resto do arquivo é histórico e decisões; isto é o que está na mesa.
 
@@ -10,7 +10,135 @@ Leia esta seção primeiro. O resto do arquivo é histórico e decisões; isto �
 na pauta quando o Gabriel avisar. Fluxo: alteração e commit na máquina dele, `git pull` e teste
 no servidor. A suíte roda local com `ZELO_PLANILHA_TESTE` apontando para a planilha atual.
 
-**Próximo, já combinado: G — abrir chamado pelo Zelo**, com permissão para testar no laboratório.
+**Etapa 1 do roteiro (G) feita na v1.35.0. Próxima: Etapa 2 — fechar o cadastro em massa para a MB.**
+
+### Etapa 1 — G: Solicitações e abrir chamado pelo Zelo (20/11, v1.35.0)
+**Solicitação é entidade do Zelo** (`solicitacoes`): recolhimento no desligamento, manutenção
+(OS) e cobrança de devolução, com prazo próprio, lembrete "passou do prazo" e a tela
+**Lançar → Solicitações**. "Resolvida" não é coluna: sai do estado do Zelo (a pessoa não tem
+mais nada, a OS fechou, o item saiu de Pendente devolução). Só cancelar é um ato, com motivo.
+Pedir de novo o mesmo assunto devolve a que está aberta. Funciona com a integração desligada.
+
+O **chamado é o espelho**, sempre por um clique e pela fila (`EnvioSD` tipo `abrir`), com
+`sd_abrir_chamado` desligado de fábrica. Configuração por caso em Administração → Service Desk
+(`sd_chamado_<caso>` = `solicitante=..; template=..; categoria=..; grupo=..; prazo=..`), e o
+**Diagnóstico: abrir chamado** lista templates/categorias/grupos do SD, abre um chamado de teste
+por caso, confere o que voltou e apaga. Quando o Zelo resolve, o chamado ganha **uma nota**; não
+é fechado (fechar mexe no SLA e na pesquisa do SD — decisão de quem administra o SD).
+
+Achados do laboratório (todos viraram comportamento no simulador e teste):
+- **o solicitante é obrigatório**, apesar de o `_metainfo` dizer que só o assunto é; por id, nome
+  ou e-mail. `pessoa` usa a própria pessoa — proibido no recolhimento (ela já saiu, e o SD manda
+  e-mail ao solicitante);
+- grupos ficam em `/api/v3/support_groups` (`/groups` não existe); nome errado de grupo,
+  categoria ou template volta só "Invalid Input" — o diagnóstico aponta onde conferir;
+- **o ativo vai anexado já na criação**, pelo id; campo desconhecido derruba a chamada ("Extra key");
+- `due_by_time` é aceito e ignorado: o prazo é do Zelo, o SD usa o SLA dele;
+- a busca `subject contains` funciona — é o que impede **chamado em dobro**: o reenvio procura a
+  marca `[Zelo S-<n>/<instância>]` e adota o que já existe. A instância (`zelo_instancia`, em
+  Config) entrou na revisão: sem ela, um Zelo de teste contra o SD de produção e o banco da virada
+  gerariam os dois uma S-1, e o reenvio adotaria o chamado do outro;
+- chamado só se apaga indo para a lixeira antes (`move_to_trash`), senão "Not in trash".
+
+Revisão do diff (8 achados, todos corrigidos com teste): redirecionamento aberto pelo `volta` com
+barra invertida, a marca sem instância, `--substituir` deixando solicitação apontando para OS de
+número reciclado (agora apaga junto), pedir de novo depois de erro não reenviava, diagnóstico
+falhando com `solicitante=pessoa`, assunto sem escape na nota HTML, nota em dobro por corrida,
+lista calculando situação de canceladas.
+
+*Decisões dele em aberto*: solicitante, template, categoria e grupo de cada caso na MB.
+
+### ROTEIRO de features (acordado em 20/11)
+Tudo que estava espalhado no PLANO, em etapas na ordem em que rendem e destravam. Cada item diz se
+dá para fazer já, se espera **decisão do Gabriel**, ou se espera **algo de fora** (aí não entra em
+etapa: fica em "Bloqueado", com o que destrava).
+
+**O rito de toda feature** — vale para cada item, não só para a etapa:
+1. *Antes*: ler inteiros os arquivos que a feature toca e os que chamam por eles; reler as decisões
+   do PLANO sobre o assunto (o que já foi descartado não volta); se toca SD, sondar o build do
+   laboratório antes de escrever (perguntar ao build, não à documentação); escrever o desenho e os
+   riscos antes do código. Mudança grande (tabela nova, regra de situação, API) só depois do aval.
+2. *Durante*: toda descoberta sobre o SDP vira comportamento no `SimuladorSD` **e** teste.
+3. *Depois — caça de bug*: suíte inteira; testes negativos e de borda (vazio, repetido, permissão
+   errada, SD fora do ar, SD recusando); prova no laboratório com itens **inventados** e limpeza
+   pelo id; a tela exercitada no Zelo local com a planilha real importada; se tocou `regras.py`,
+   reimportar e conferir **0 diferenças** com a planilha; revisão do diff inteiro (`/code-review`)
+   antes de pedir o commit. Só então PLANO, VERSAO e commit — com o aval dele.
+
+**Etapa 1 — G: abrir chamado pelo Zelo** (já dá; lab)
+- Sondar no lab `POST /api/v3/requests`: template, categoria, grupo, solicitante, ativo anexado — o
+  que é obrigatório neste build e o que é ignorado em silêncio. Vira um diagnóstico como o de ativo.
+- **Solicitação é entidade do Zelo** (princípio de 17/11): tabela própria com status e prazo; o
+  chamado é o espelho. Desligar a integração não pode apagar o processo.
+- Três casos, nesta ordem: recolhimento no desligamento (um chamado com a lista do que a pessoa
+  tem), abertura de manutenção com o ativo anexado, devolução pendente que ninguém atende.
+- Abrir é sempre um clique de alguém (nunca automático) e vai pela fila, como todo envio.
+- *Decisão dele*: template, categoria e grupo de cada caso, e quem aparece como solicitante.
+
+**Etapa 2 — Fechar o cadastro em massa para a MB** (decisões dele; código pequeno)
+- Máquina de posto (74 desktops + 73 thin clients "Em uso" sem pessoa): *decidir* entre pôr um
+  responsável no cadastro ou o Zelo mandar **departamento** (provado no lab) por um mapa site →
+  departamento do SD.
+- "A localizar" (67) e "Em transferência" (11): *decidir* criar sem estado ou deixar de fora.
+- Coletor: *confirmar* só no Zelo (204, nenhum com pessoa).
+- **Grafias de modelo**: achado na Qualidade do cadastro para o mesmo modelo escrito de jeitos
+  diferentes (`SM-X306B` em 3 grafias), com o botão que padroniza — é o que faz "um produto por
+  modelo" caber em ~75 produtos.
+- Roteiro de pré-voo na MB escrito na própria tela (Diagnóstico, importar pessoas do SD antes,
+  lote de 20, conferir no SD).
+
+**Etapa 3 — Empréstimo no Service Desk** (já dá; lab)
+- O pool de empréstimo no SD como ativo emprestável (`is_loanable`), com `loan_start`/`loan_end` em
+  vez de usuário — o SDP recusa usuário em ativo emprestável (lab, 18/11). Sondar o formato no lab.
+
+**Etapa 4 — Agente do Zelo, de protótipo a ferramenta** (já dá; vira prioridade se o do SDP cair)
+- Empurrar ao SD o que o agente viu (SO, IP, MAC, último login), só nos campos sem dono no Zelo e
+  com prova de ida e volta no lab.
+- Troca de senha sem derrubar o parque: senha anterior aceita por N dias.
+- Limite de envios por máquina/IP (hoje não há).
+
+**Etapa 5 — Pessoas** (parte já dá; parte decisão)
+- Terceiros: empresa e **fim de contrato** no cadastro, com lembrete de contrato acabando e de
+  terceiro com equipamento depois do fim.
+- CPF: atributo da pessoa, **mascarado nas telas de consulta e restrito por perfil** (decisão de
+  17/11); nunca vai ao SD.
+- Admissões: *definir com ele* o que é — provavelmente "pessoa nova chega dia X → kit reservado e
+  termo pronto", aproveitando a reserva que já existe.
+
+**Etapa 6 — Linhas** (espera insumo dele)
+- Base de centro de custo da telefonia (ele traz o arquivo) e o que fazer com ela no relatório.
+- Pedido de bloqueio de linha registrado no Zelo — e, com a Etapa 1 pronta, aberto como chamado.
+
+**Etapa 7 — Higiene** (já dá)
+- Apagar no lab o produto e o tipo `TESTE-ZELO-01` (só com o aval dele: é o SD dele).
+- H e I do levantamento perderam o sentido com o Zelo criando ativo: H vira o "Corrigir os campos
+  que são do Zelo" que já existe; I se inverteu (a garantia nasce no Zelo). Fechar no PLANO.
+
+**Etapa final — Teste de vulnerabilidade (red team)**, depois de todas as etapas
+- Modelo de ameaça primeiro: quem ataca (Consulta curioso, operador mal-intencionado, alguém com o
+  script do agente na mão, alguém na rede interna, quem recebeu um link de assinatura) e o que vale
+  roubar ou estragar (termo assinado, CPF, chave do SD, o próprio histórico).
+- Superfícies: login e sessão (força bruta, fixação, cookie), CSRF, autorização por rota (perfil e
+  IDOR — trocar o código na URL), links de assinatura (token, expiração, reuso), endpoint do agente
+  (senha vazada, flood, payload), upload do termo (tipo, tamanho, nome do arquivo), exportações
+  (**injeção de fórmula** no Excel), importação da planilha (arquivo malicioso), XSS (todo `|safe`
+  e todo `innerHTML`), SQL cru, SSRF pelo `sd_url`, segredos em repouso (chave do SD no banco,
+  `secret_key`, backups), cabeçalhos (CSP, clickjacking), dependências com CVE.
+- Método: revisão estática + ataques reais contra o Zelo local (com a planilha importada) +
+  scripts de prova. Nada contra a MB, nada contra o SD de produção.
+- Entrega: relatório com cada achado (severidade, prova reproduzível, impacto real na MB,
+  correção), e as correções numa etapa separada, com o aval dele.
+
+**Bloqueado — não entra em etapa até destravar**
+| Item | Destrava quando |
+|---|---|
+| Login com a conta Microsoft | o servidor alcançar `login.microsoftonline.com` (o OIDC precisa das chaves da Microsoft para validar o token) e a TI global registrar o app no Entra |
+| JDE como fonte de colaboradores | ele conseguir a API (hoje é importação do relatório) |
+| Jira (chave do card na compra e no rollout) | houver uso do Jira |
+| Validação da Easy nas contas Claro | é conversa com a Easy, não código |
+| Agente do Zelo em produção | canal de distribuição (GPO/Intune) e aval da Segurança |
+| Volume no SD (~1.870 ativos) | ACS responder se a licença conta ativo cadastrado |
+| J — ordens de compra | decisão de 11/11: compra vai para o Jira |
 
 ### Cadastro em massa no Service Desk (18–20/11, v1.34.0)
 Sem o agente do SDP garantido, o Zelo cria todos os ativos — deixou de ser opcional.
